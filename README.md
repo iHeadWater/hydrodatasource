@@ -1,15 +1,30 @@
 <!--
  * @Author: Wenyu Ouyang
  * @Date: 2023-10-24 21:30:40
- * @LastEditTime: 2023-10-25 14:43:06
+ * @LastEditTime: 2023-10-25 15:21:15
  * @LastEditors: Wenyu Ouyang
  * @Description: Readme for 
- * @FilePath: \hydro_privatedata\README.md
+ * @FilePath: /hydro_privatedata/README.md
  * Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 -->
 # hydro_privatedata
 
+
+[![image](https://img.shields.io/pypi/v/hydro_privatedata.svg)](https://pypi.python.org/pypi/hydro_privatedata)
+[![image](https://img.shields.io/conda/vn/conda-forge/hydro_privatedata.svg)](https://anaconda.org/conda-forge/hydro_privatedata)
+
+[![image](https://pyup.io/repos/github/WenyuOuyang/hydro_privatedata/shield.svg)](https://pyup.io/repos/github/WenyuOuyang/hydro_privatedata)
+
+
+**A python project to deal with internal datasources**
+
+
+-   Free software: BSD license
+-   Documentation: https://WenyuOuyang.github.io/hydro_privatedata
+
 📜 [中文文档](README.zh.md)
+
+## Introduction
 
 Data processing for various databases, sheet files, etc. in our own servers
 
@@ -40,3 +55,12 @@ Typically, it has a same structure as a database table. The difference is that t
 ## Databases
 
 Each project has its own database, and we have a central database to connect all databases. The central database is used to extract/transform/load data from various databases.
+
+## Env settings
+
+```bash
+# Create a virtual environment
+conda env create -f env-dev.yml
+# Activate the virtual environment
+conda activate privatedata
+```
