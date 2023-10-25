@@ -1,13 +1,15 @@
 <!--
  * @Author: Wenyu Ouyang
  * @Date: 2023-10-24 21:30:40
- * @LastEditTime: 2023-10-25 08:47:36
+ * @LastEditTime: 2023-10-25 14:43:06
  * @LastEditors: Wenyu Ouyang
  * @Description: Readme for 
  * @FilePath: \hydro_privatedata\README.md
  * Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 -->
 # hydro_privatedata
+
+📜 [中文文档](README.zh.md)
 
 Data processing for various databases, sheet files, etc. in our own servers
 
