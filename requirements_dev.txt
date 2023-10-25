@@ -1,3 +1,12 @@
+geopandas
+openpyxl==3.1
+requests
+tqdm
+# for minio
+boto3
+minio
+s3fs
+
 black
 black[jupyter]
 pip

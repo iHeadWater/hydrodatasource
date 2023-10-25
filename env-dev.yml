@@ -1,13 +1,20 @@
 name: privatedata
 channels:
   - conda-forge
+  - anaconda
   - defaults
 dependencies:
   - python=3.10
   - geopandas
-  - openpyxl=3.1
   - requests
   - tqdm
+  # for excel
+  - openpyxl=3.1
+  - xlrd
+  # for minio
+  - boto3
+  - minio
+  - s3fs
   # for development
   - pytest
   - black

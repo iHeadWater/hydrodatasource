@@ -1,24 +1,15 @@
 #!/usr/bin/env python
-
-"""Tests for `hydroprivatedata` package."""
-
-import pytest
-
-
-from hydroprivatedata import hydroprivatedata
-
-
-@pytest.fixture
-def response():
-    """Sample pytest fixture.
-
-    See more at: http://doc.pytest.org/en/latest/fixture.html
-    """
-    # import requests
-    # return requests.get('https://github.com/audreyr/cookiecutter-pypackage')
+"""
+Author: Wenyu Ouyang
+Date: 2023-10-25 15:16:21
+LastEditTime: 2023-10-25 22:08:38
+LastEditors: Wenyu Ouyang
+Description: Tests for preprocess
+FilePath: /hydro_privatedata/tests/test_hydroprivatedata.py
+Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
+"""
+from hydroprivatedata import preprocess
 
 
-def test_content(response):
-    """Sample pytest test function with the pytest fixture as an argument."""
-    # from bs4 import BeautifulSoup
-    # assert 'GitHub' in BeautifulSoup(response.content).title.string
+def test_content():
+    preprocess.huanren_preprocess()

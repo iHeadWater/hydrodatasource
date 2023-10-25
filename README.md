@@ -1,9 +1,9 @@
 <!--
  * @Author: Wenyu Ouyang
  * @Date: 2023-10-24 21:30:40
- * @LastEditTime: 2023-10-25 15:21:15
+ * @LastEditTime: 2023-10-25 17:12:06
  * @LastEditors: Wenyu Ouyang
- * @Description: Readme for 
+ * @Description: Readme for hydro_privatedata
  * @FilePath: /hydro_privatedata/README.md
  * Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 -->
@@ -39,6 +39,8 @@ To process these data, we have the following steps:
 2. For sheet files, we save all original files in one folder, then we transform them to tidy data format. All files are saved in one directory in our central server, and some of them are saved in the central database if necessary.
 
 ## Sheet files
+
+For some files, we need a manual pre-process, such as deleting some rows, adding some columns, etc. otherwise, it may be very difficult to transform them to tidy data format as there may be some strange formats we cannot even recognize it by coding. We will record the pre-process steps in the docs in the future.
 
 ### Data format
 
