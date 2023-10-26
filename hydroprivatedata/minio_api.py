@@ -1,4 +1,9 @@
 """Main module."""
+import os.path
+
+from minio import Minio
+
+from hydroprivatedata import config
 
 
 def minio_upload_csv(client, bucket_name, object_name, file_path):
@@ -26,6 +31,17 @@ def minio_upload_csv(client, bucket_name, object_name, file_path):
     return [obj.object_name for obj in objects]
 
 
+def minio_download_csv(client: Minio, bucket_name, object_name, file_path: str, version_id=None):
+    try:
+        response = client.get_object(bucket_name, object_name, version_id)
+        res_csv: str = response.data.decode('utf8')
+        with open(os.path.join(config.LOCAL_DATA_PATH, file_path+'.csv'), 'w+') as fp:
+            fp.write(res_csv)
+    finally:
+        response.close()
+        response.release_conn()
+
+
 def boto3_upload_csv(client, bucket_name, object_name, file_path):
     """upload csv to minio
 
@@ -49,3 +65,7 @@ def boto3_upload_csv(client, bucket_name, object_name, file_path):
     # List objects
     objects = [dic['Key'] for dic in client.list_objects(Bucket=bucket_name)['Contents']]
     return objects
+
+
+def boto3_download_csv(client, bucket_name, object_name, file_path: str):
+    client.download_file(bucket_name, object_name, file_path)
