@@ -7,9 +7,10 @@ Description: Preprocess data source, maybe we need to process manually
 FilePath: \hydro_privatedata\hydroprivatedata\preprocess.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
+import logging
 import os
 import pandas as pd
-from hydroutils import hydro_logger
+# from hydroutils import hydro_logger
 from hydroprivatedata.config import (
     LOCAL_DATA_PATH,
     s3,
@@ -37,8 +38,5 @@ def huanren_preprocess():
         minio_upload_csv(mc, site_bucket, site_object, local_save_path)
     except Exception as e:
         preview = str(e)
-        hydro_logger.error(preview)
-
-
-if __name__ == "__main__":
-    huanren_preprocess()
+        # hydro_logger.error(preview)
+        logging.error(preview)

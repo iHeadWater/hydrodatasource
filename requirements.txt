@@ -6,3 +6,4 @@ tqdm
 boto3
 minio
 s3fs
+hydroutils
