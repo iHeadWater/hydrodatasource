@@ -52,30 +52,6 @@ def Distribution_Data(csv_read1 = 'st_rain_c.csv',csv_read2 = 'st_stbprp_b.csv',
     # 保存新表为CSV文件
     new_table.to_csv(csv_write, index=False,encoding =encoding)
 
-# 这个函数不用了，没有效果
-def STNM_to_STCD(csv_read = 'Rainfall_Distribution_Data_2009_2022.csv',csv_write='new_data.csv',encoding = 'gbk'):
-    # 你的字典
-    STNM_to_STCD = {
-    }
-
-    # 读取CSV文件
-    table2 = pd.read_csv(csv_read ,encoding = encoding)
-
-    # 新建一个空的 DataFrame 来保存修改后的数据
-    new_table = pd.DataFrame()
-    # 遍历每一行，如果 'STNM' 在字典中，则替换 'STCD' 列的值，否则设置为 '0'
-    for index, row in table2.iterrows():
-        if row['STNM'] in STNM_to_STCD:
-            row['STCD'] = STNM_to_STCD[row['STNM']]
-        else:
-            row['STCD'] = '0'
-
-    new_table = table2  # 将修改后的DataFrame赋值给new_table变量
-
-    # 将修改后的 DataFrame 保存为新的 CSV 文件（请根据实际情况修改文件路径和文件名）
-    new_table.to_csv(csv_write, index=False,encoding=encoding)
-    #print(new_table)
-
 def SubsetTable(csv = 'Rainfall_Distribution_Data_2009_2022.csv',encoding = 'gbk'):
     # 读取大表
     main_table = pd.read_csv(csv,encoding=encoding)
@@ -88,9 +64,6 @@ def SubsetTable(csv = 'Rainfall_Distribution_Data_2009_2022.csv',encoding = 'gbk
         subset_table = main_table[main_table['STNM'] == stnm]
         # 保存为csv，文件名包含STID
         subset_table.to_csv(f'{stnm}_subset.csv', index=False,encoding = encoding)
-
-
-
 
 
 #ExcelFile_to_csv()
