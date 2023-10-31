@@ -1,9 +1,6 @@
 """Main module."""
-import os.path
 
 from minio import Minio
-
-from hydroprivatedata import config
 
 
 def minio_upload_csv(client, bucket_name, object_name, file_path):
@@ -35,7 +32,7 @@ def minio_download_csv(client: Minio, bucket_name, object_name, file_path: str, 
     try:
         response = client.get_object(bucket_name, object_name, version_id)
         res_csv: str = response.data.decode('utf8')
-        with open(os.path.join(config.LOCAL_DATA_PATH, file_path+'.csv'), 'w+') as fp:
+        with open(file_path, 'w+') as fp:
             fp.write(res_csv)
     finally:
         response.close()

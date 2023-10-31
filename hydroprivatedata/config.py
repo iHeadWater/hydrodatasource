@@ -75,7 +75,7 @@ mc = Minio(
     secret_key=minio_paras["secret_key"],
     secure=False,
 )
-site_bucket = "sites"
+site_bucket = "stations"
 site_object = "sites.csv"
 
 fs = s3fs.S3FileSystem(

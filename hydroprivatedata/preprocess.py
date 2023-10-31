@@ -13,12 +13,11 @@ import pandas as pd
 # from hydroutils import hydro_logger
 from hydroprivatedata.config import (
     LOCAL_DATA_PATH,
-    s3,
     mc,
     site_bucket,
     site_object,
 )
-from hydroprivatedata.minio_api import boto3_upload_csv, minio_upload_csv
+from hydroprivatedata.minio_api import minio_upload_csv
 from hydroprivatedata.source_data_dict import convert_to_tidy
 
 
@@ -40,3 +39,17 @@ def huanren_preprocess():
         preview = str(e)
         # hydro_logger.error(preview)
         logging.error(preview)
+
+
+def biliu_stbprp_decode():
+    biliu_stbprp_path = os.path.join(LOCAL_DATA_PATH, "biliu", "st_stbprp_b.xls")
+    biliu_df = pd.read_excel(biliu_stbprp_path, sheet_name='st_stbprp_b')
+    new_stids = []
+    for stid in biliu_df['stid']:
+        new_stid = '2145'+str(stid).rjust(3, '0')+'X'
+        new_stids.append(new_stid)
+    biliu_df['stid'] = new_stids
+    minio_upload_csv(mc, site_bucket, 'test_stations/st_stbprp_b.xls', file_path=biliu_stbprp_path)
+
+
+

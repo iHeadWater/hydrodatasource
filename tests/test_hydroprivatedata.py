@@ -10,12 +10,14 @@ Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 import os.path
 import pathlib
+import urllib3 as ur
 
 from hydroprivatedata import preprocess, minio_api, config
 
 
 def test_content():
-    preprocess.huanren_preprocess()
+    # preprocess.huanren_preprocess()
+    preprocess.biliu_stbprp_decode()
 
 
 def test_upload_csv():
@@ -31,3 +33,4 @@ def test_download_csv_minio():
     bucket_name = config.minio_paras['bucket_path']
     # minio_api.minio_download_csv(client, bucket_name, 'nyc_taxi', file_path='test_dload')
     minio_api.boto3_download_csv(client, bucket_name, 'driver_data_site24', 'driver_data_site24.csv')
+    ur.request(method='GET')
