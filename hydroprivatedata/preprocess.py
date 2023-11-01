@@ -1,9 +1,9 @@
 """
 Author: Wenyu Ouyang
 Date: 2023-10-25 17:12:30
-LastEditTime: 2023-10-26 09:19:22
+LastEditTime: 2023-10-31 21:42:58
 LastEditors: Wenyu Ouyang
-Description: Preprocess data source, maybe we need to process manually
+Description: Preprocess data source -- transform its format to tidy format
 FilePath: \hydro_privatedata\hydroprivatedata\preprocess.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
@@ -50,6 +50,3 @@ def biliu_stbprp_decode():
         new_stids.append(new_stid)
     biliu_df['stid'] = new_stids
     minio_upload_csv(mc, site_bucket, 'test_stations/st_stbprp_b.xls', file_path=biliu_stbprp_path)
-
-
-
