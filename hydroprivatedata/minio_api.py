@@ -69,11 +69,12 @@ def boto3_download_csv(client, bucket_name, object_name, file_path: str):
     client.download_file(bucket_name, object_name, file_path)
 
 
-def boto3_sync_files(client, bucket_name, local_path):
+def boto3_sync_files(client, bucket_name, local_path, bucket_path=None):
     """
     :param client: the boto3 client
     :param bucket_name: the bucket name which you want to sync your data
     :param local_path: the path on your local machine
+    :param bucket_path: the path under your bucket which you want to sync
     :return:
     """
     remote_objects = [dic['Key'] for dic in client.list_objects(Bucket=bucket_name)['Contents']]
@@ -88,11 +89,12 @@ def boto3_sync_files(client, bucket_name, local_path):
         client.upload_file(obj, bucket_name, remote_obj)
 
 
-def minio_sync_files(client: Minio, bucket_name, local_path):
+def minio_sync_files(client: Minio, bucket_name, local_path, bucket_path=None):
     """
     :param client: the minio client
     :param bucket_name: the bucket name which you want to sync your data
     :param local_path: the path on your local machine
+    :param bucket_path: the path under your bucket which you want to sync
     :return:
     """
     # 考虑根据不同情况设置recursive=True
