@@ -1,6 +1,7 @@
 """Main module."""
 import asyncio
 import os
+import pathlib
 
 from minio import Minio
 import chardet
@@ -33,19 +34,15 @@ async def minio_upload_csv(client, bucket_name, object_name, file_path):
 
 async def minio_download_csv(client: Minio, bucket_name, object_name: str, file_path: str, version_id=None):
     try:
-        # 似乎不能直接下载文件夹, 而文件夹后面应有/
-        if object_name.endswith('/'):
-            if not os.path.exists(file_path):
-                os.makedirs(file_path)
-            objs = [obj.object_name for obj in client.list_objects(bucket_name, prefix=object_name)]
-            for obj in objs:
-                await minio_download_csv(client, bucket_name, obj, os.path.join(file_path, obj), version_id)
-        else:
-            response = client.get_object(bucket_name, object_name, version_id)
-            encoding = chardet.detect(response.data)['encoding']
-            res_csv: str = response.data.decode(encoding)
-            with open(file_path, 'w+', encoding=encoding) as fp:
-                fp.write(res_csv)
+        response = client.get_object(bucket_name, object_name, version_id)
+        encoding = chardet.detect(response.data)['encoding']
+        res_csv: str = response.data.decode(encoding)
+        object_path = os.path.join(file_path, object_name)
+        object_parent = pathlib.Path(object_path).parent
+        if not object_parent.exists():
+            object_parent.mkdir(parents=True)
+        with open(object_path, 'w+', encoding=encoding) as fp:
+            fp.write(res_csv)
     finally:
         response.close()
         response.release_conn()
@@ -89,46 +86,50 @@ async def boto3_sync_files(client, bucket_name, local_path, bucket_path=None):
     :return:
     """
     remote_objects = [dic['Key'] for dic in client.list_objects(Bucket=bucket_name)['Contents']]
-    local_objects = os.scandir(local_path)
+    local_objects = [str(path.relative_to(local_path)).replace('\\', '/')
+                     for path in pathlib.Path(local_path).rglob(pattern='*') if path.is_file()]
     objects_in_remote = [obj for obj in remote_objects if obj not in local_objects]
     objects_in_local = [obj for obj in local_objects if obj not in remote_objects]
+    task_batch_dload = asyncio.create_task(boto3_batch_download(objects_in_remote, client, bucket_name, local_path))
+    task_batch_upload = asyncio.create_task(boto3_batch_upload(objects_in_local, client, bucket_name, local_path))
+    await asyncio.gather(task_batch_upload, task_batch_dload)
+
+
+async def minio_batch_download(objects_in_remote, client: Minio, bucket_name, local_path):
+    # 将下载任务打包成大量task容易造成许多上下文切换进而挤兑，目前看来不如顺序下载
     for obj in objects_in_remote:
-        local_obj_path = os.path.join(local_path, obj)
-        client.download_file(bucket_name, obj, local_obj_path)
+        await minio_download_csv(client, bucket_name, obj, local_path)
+
+
+async def minio_batch_upload(objects_in_local, client: Minio, bucket_name, local_path):
     for obj in objects_in_local:
-        remote_obj = obj
-        client.upload_file(obj, bucket_name, remote_obj)
+        await minio_upload_csv(client, bucket_name, obj, local_path)
 
 
-async def batch_download(objects_in_remote, client: Minio, bucket_name, local_path):
-    objs_tasks = []
+async def boto3_batch_download(objects_in_remote, client, bucket_name, local_path):
+    # 将下载任务打包成大量task容易造成许多上下文切换进而挤兑，目前看来不如顺序下载
     for obj in objects_in_remote:
-        task = asyncio.create_task(minio_download_csv(client, bucket_name, obj, local_path))
-        objs_tasks.append(task)
-    await asyncio.gather(*objs_tasks)
+        await boto3_download_csv(client, bucket_name, obj, local_path)
 
 
-async def batch_upload(objects_in_remote, client: Minio, bucket_name, local_path):
-    objs_tasks = []
+async def boto3_batch_upload(objects_in_remote, client, bucket_name, local_path):
     for obj in objects_in_remote:
-        task = asyncio.create_task(minio_upload_csv(client, bucket_name, obj, local_path))
-        objs_tasks.append(task)
-    await asyncio.gather(*objs_tasks)
+        await boto3_upload_csv(client, bucket_name, obj, local_path)
 
 
 async def minio_sync_files(client: Minio, bucket_name, local_path, bucket_path=None):
     """
     :param client: the minio client
     :param bucket_name: the bucket name which you want to sync your data
-    :param local_path: the path on your local machine
+    :param local_path: the path on your local machine, contents of bucket_name will be saved to the directory directly
     :param bucket_path: the path under your bucket which you want to sync
     :return:
     """
-    # 考虑根据不同情况设置recursive=True
-    remote_objects = [obj.object_name for obj in client.list_objects(bucket_name)]
-    local_objects = [dir_entry.path.split('\\')[-1] for dir_entry in os.scandir(local_path)]
+    remote_objects = [obj.object_name for obj in client.list_objects(bucket_name, prefix=bucket_path, recursive=True)]
+    local_objects = [str(path.relative_to(local_path)).replace('\\', '/')
+                     for path in pathlib.Path(local_path).rglob(pattern='*') if path.is_file()]
     objects_in_remote = [obj for obj in remote_objects if obj not in local_objects]
     objects_in_local = [obj for obj in local_objects if obj not in remote_objects]
-    task_batch_dload = asyncio.create_task(batch_download(objects_in_remote, client, bucket_name, local_path))
-    task_batch_upload = asyncio.create_task(batch_upload(objects_in_local, client, bucket_name, local_path))
+    task_batch_dload = asyncio.create_task(minio_batch_download(objects_in_remote, client, bucket_name, local_path))
+    task_batch_upload = asyncio.create_task(minio_batch_upload(objects_in_local, client, bucket_name, local_path))
     await asyncio.gather(task_batch_upload, task_batch_dload)
