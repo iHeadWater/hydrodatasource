@@ -35,14 +35,19 @@ async def minio_upload_csv(client, bucket_name, object_name, file_path):
 async def minio_download_csv(client: Minio, bucket_name, object_name: str, file_path: str, version_id=None):
     try:
         response = client.get_object(bucket_name, object_name, version_id)
+        # 图片不能直接解码, 但可以直接对文件写入response.data
         encoding = chardet.detect(response.data)['encoding']
-        res_csv: str = response.data.decode(encoding)
         object_path = os.path.join(file_path, object_name)
         object_parent = pathlib.Path(object_path).parent
         if not object_parent.exists():
             object_parent.mkdir(parents=True)
-        with open(object_path, 'w+', encoding=encoding) as fp:
-            fp.write(res_csv)
+        if encoding is not None:
+            res_csv: str = response.data.decode(encoding)
+            with open(object_path, 'w+', encoding=encoding) as fp:
+                fp.write(res_csv)
+        else:
+            with open(object_path, 'wb') as fp:
+                fp.write(response.data)
     finally:
         response.close()
         response.release_conn()
