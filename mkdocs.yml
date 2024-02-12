@@ -1,8 +1,8 @@
-site_name: hydro_privatedata
+site_name: hydrodata
 site_description: A python project to deal with internal datasources
 site_author: WenyuOuyang
-site_url: https://WenyuOuyang.github.io/hydro_privatedata
-repo_url: https://github.com/WenyuOuyang/hydro_privatedata
+site_url: https://WenyuOuyang.github.io/hydrodata
+repo_url: https://github.com/WenyuOuyang/hydrodata
 
 copyright: "Copyright &copy; 2023 - 2023 Wenyu Ouyang"
 

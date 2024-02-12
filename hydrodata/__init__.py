@@ -1,4 +1,4 @@
-"""Top-level package for hydro_privatedata."""
+"""Top-level package for hydrodata."""
 
 import pathlib
 import os

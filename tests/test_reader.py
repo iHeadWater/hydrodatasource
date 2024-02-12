@@ -1,15 +1,15 @@
 """
 Author: Wenyu Ouyang
 Date: 2023-11-01 08:58:50
-LastEditTime: 2023-11-01 09:08:27
+LastEditTime: 2024-02-12 15:33:50
 LastEditors: Wenyu Ouyang
 Description: Test funcs for reader.py
-FilePath: \hydro_privatedata\tests\test_reader.py
+FilePath: \hydrodata\tests\test_reader.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 import os
-from hydroprivatedata.config import LOCAL_DATA_PATH
-from hydroprivatedata.reader import AOI, StationDataHandler, LocalFileReader
+from hydrodata.config import LOCAL_DATA_PATH
+from hydrodata.reader import AOI, StationDataHandler, LocalFileReader
 from minio import Minio
 import hydrodataset as hds
 from hydro_opendata.reader.grdc import GRDCDataHandler

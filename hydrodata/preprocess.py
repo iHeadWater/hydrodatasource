@@ -4,21 +4,21 @@ Date: 2023-10-25 17:12:30
 LastEditTime: 2023-10-31 21:42:58
 LastEditors: Wenyu Ouyang
 Description: Preprocess data source -- transform its format to tidy format
-FilePath: \hydro_privatedata\hydroprivatedata\preprocess.py
+FilePath: \hydrodata\hydrodata\preprocess.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 import logging
 import os
 import pandas as pd
 # from hydroutils import hydro_logger
-from hydroprivatedata.config import (
+from hydrodata.config import (
     LOCAL_DATA_PATH,
     mc,
     site_bucket,
     site_object,
 )
-from hydroprivatedata.minio_api import minio_upload_csv
-from hydroprivatedata.source_data_dict import convert_to_tidy
+from hydrodata.minio_api import minio_upload_csv
+from hydrodata.source_data_dict import convert_to_tidy
 
 
 def huanren_preprocess():

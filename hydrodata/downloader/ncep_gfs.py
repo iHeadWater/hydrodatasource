@@ -42,7 +42,12 @@ def get_gfs_from_ncep(
 
     file_name_ = "gfsYYYYMMDD.tCCz.pgrb2.0p25.fFFF"
 
-    url_ = f"https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25.pl?file=gfs.tCCz.pgrb2.0p25.fFFF&lev_10_m_above_ground=on&lev_2_m_above_ground=on&lev_entire_atmosphere=on&lev_entire_atmosphere_%5C%28considered_as_a_single_layer%5C%29=on&lev_surface=on&var_APCP=on&var_DSWRF=on&var_PWAT=on&var_RH=on&var_SPFH=on&var_TCDC=on&var_TMP=on&var_UGRD=on&var_VGRD=on&subregion=&leftlon={str(bbox[0])}&rightlon={str(bbox[2])}&toplat={str(bbox[3])}&bottomlat={str(bbox[1])}&dir=%2Fgfs.YYYYMMDD%2FCC%2Fatmos"
+    url_ = (f"https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25.pl?file=gfs.tCCz.pgrb2.0p25.fFFF"
+            f"&lev_10_m_above_ground=on&lev_2_m_above_ground=on&lev_entire_atmosphere=on&lev_entire_atmosphere_%5C"
+            f"%28considered_as_a_single_layer%5C%29=on&lev_surface=on&var_APCP=on&var_DSWRF=on&var_PWAT=on&var_RH=on"
+            f"&var_SPFH=on&var_TCDC=on&var_TMP=on&var_UGRD=on&var_VGRD=on&subregion=&leftlon="
+            f"{str(bbox[0])}&rightlon={str(bbox[2])}&toplat={str(bbox[3])}&bottomlat="
+            f"{str(bbox[1])}&dir=%2Fgfs.YYYYMMDD%2FCC%2Fatmos")
     url = (
         url_.replace("YYYYMMDD", date)
         .replace("CC", creation_time.zfill(2))
@@ -77,7 +82,10 @@ def get_gfs_from_aws(
 
     aws链接: [https://registry.opendata.aws/noaa-gfs-bdp-pds/](https://registry.opendata.aws/noaa-gfs-bdp-pds/)
 
-    下载url示例: [https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25_1hr.pl?file=gfs.t00z.pgrb2.0p25.f001&all_lev=on&all_var=on&subregion=&leftlon=115&rightlon=136&toplat=54&bottomlat=38&dir=%2Fgfs.20220815%2F00%2Fatmos](https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25_1hr.pl?file=gfs.t00z.pgrb2.0p25.f001&all_lev=on&all_var=on&subregion=&leftlon=115&rightlon=136&toplat=54&bottomlat=38&dir=%2Fgfs.20220815%2F00%2Fatmos)
+    下载url示例: [https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25_1hr.pl?file=gfs.t00z.pgrb2.0p25.f001&all_lev=on
+    &all_var=on&subregion=&leftlon=115&rightlon=136&toplat=54&bottomlat=38&dir=%2Fgfs.20220815%2F00%2Fatmos](
+    https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25_1hr.pl?file=gfs.t00z.pgrb2.0p25.f001&all_lev=on&all_var=on
+    &subregion=&leftlon=115&rightlon=136&toplat=54&bottomlat=38&dir=%2Fgfs.20220815%2F00%2Fatmos)
 
     Args:
         date (str): 下载日期，格式为：YYYYMMDD

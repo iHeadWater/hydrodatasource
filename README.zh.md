@@ -7,7 +7,7 @@
  * @FilePath: \hydrodata\README.zh.md
  * Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 -->
-# hydro_privatedata
+# hydrodata
 
 ## 简介
 

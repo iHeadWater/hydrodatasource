@@ -1,1 +1,1 @@
-"""Unit test package for hydroprivatedata."""
+"""Unit test package for hydrodata."""

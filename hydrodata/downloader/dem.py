@@ -9,12 +9,12 @@
 
 """
 
+import os
+
 # from pystac_client import Client
 import requests
-import os
-import json
 
-from .downloader import download_by_stream, download_sigletasking
+from .downloader import download_sigletasking
 
 
 class Alos_DEM:

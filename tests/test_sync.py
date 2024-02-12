@@ -1,9 +1,18 @@
+"""
+Author: Wenyu Ouyang
+Date: 2023-11-02 14:52:08
+LastEditTime: 2024-02-12 15:37:00
+LastEditors: Wenyu Ouyang
+Description: 
+FilePath: \hydrodata\tests\test_sync.py
+Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
+"""
 import os
 
 import pytest
 
-from hydroprivatedata import config
-from hydroprivatedata.minio_api import minio_sync_files, boto3_sync_files
+from hydrodata import config
+from hydrodata.minio_api import minio_sync_files, boto3_sync_files
 
 pytest_plugins = ('pytest_asyncio',)
 

@@ -1,7 +1,7 @@
 # Usage
 
-To use hydro_privatedata in a project:
+To use hydrodata in a project:
 
 ```
-import hydroprivatedata
+import hydrodata
 ```

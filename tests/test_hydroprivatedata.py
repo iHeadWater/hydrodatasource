@@ -5,14 +5,14 @@ Date: 2023-10-25 15:16:21
 LastEditTime: 2023-10-26 08:56:11
 LastEditors: Wenyu Ouyang
 Description: Tests for preprocess
-FilePath: \hydro_privatedata\tests\test_hydroprivatedata.py
+FilePath: \hydrodata\tests\test_hydrodata.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 import os.path
 import pathlib
 import urllib3 as ur
 
-from hydroprivatedata import preprocess, minio_api, config
+from hydrodata import preprocess, minio_api, config
 
 
 def test_content():

@@ -1,16 +1,16 @@
-# Welcome to hydroprivatedata
+# Welcome to hydrodata
 
 
-[![image](https://img.shields.io/pypi/v/hydroprivatedata.svg)](https://pypi.python.org/pypi/hydroprivatedata)
+[![image](https://img.shields.io/pypi/v/hydrodata.svg)](https://pypi.python.org/pypi/hydrodata)
 
-[![image](https://pyup.io/repos/github/WenyuOuyang/hydroprivatedata/shield.svg)](https://pyup.io/repos/github/WenyuOuyang/hydroprivatedata)
+[![image](https://pyup.io/repos/github/WenyuOuyang/hydrodata/shield.svg)](https://pyup.io/repos/github/WenyuOuyang/hydrodata)
 
 
 **A python project to deal with internal datasources**
 
 
 -   Free software: BSD license
--   Documentation: <https://WenyuOuyang.github.io/hydroprivatedata>
+-   Documentation: <https://WenyuOuyang.github.io/hydrodata>
     
 
 ## Features

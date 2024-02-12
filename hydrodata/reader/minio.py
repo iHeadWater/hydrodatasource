@@ -242,7 +242,7 @@ class ERA5LReader:
         )
 
         return self.open_dataset(
-            data_variables, start_time, end_time, bbox, time_chunks
+            data_variables, start_time, end_time, dataset, bbox, time_chunks
         )
 
     def from_aoi(

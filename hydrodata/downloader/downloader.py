@@ -115,7 +115,6 @@ def download_from_url(url, file_name):
         file_name (str): 文件的本地存储地址
 
     """
-
     f = requests.get(url)
     with open(file_name, "wb") as tiff:
         tiff.write(f.content)

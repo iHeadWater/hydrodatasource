@@ -4,12 +4,12 @@ Date: 2023-10-31 20:56:23
 LastEditTime: 2023-10-31 21:00:43
 LastEditors: Wenyu Ouyang
 Description: Test funcs for preprocess.py
-FilePath: \hydro_privatedata\tests\test_preprocess.py
+FilePath: \hydrodata\tests\test_preprocess.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 import os
 import pandas as pd
-from hydroprivatedata.preprocess import huanren_preprocess
+from hydrodata.preprocess import huanren_preprocess
 
 
 def test_huanren_preprocess(tmp_path):

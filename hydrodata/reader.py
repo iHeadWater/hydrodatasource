@@ -4,7 +4,7 @@ Date: 2023-10-31 21:22:26
 LastEditTime: 2023-10-31 21:30:05
 LastEditors: Wenyu Ouyang
 Description: Interface for reading data
-FilePath: \hydro_privatedata\hydroprivatedata\reader.py
+FilePath: \hydrodata\hydrodata\reader.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 from abc import ABC, abstractmethod

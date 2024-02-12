@@ -4,7 +4,7 @@ Date: 2023-10-25 15:16:21
 LastEditTime: 2023-10-25 21:55:03
 LastEditors: Wenyu Ouyang
 Description: A large dict for describing the source data.
-FilePath: /hydro_privatedata/hydroprivatedata/source_data_dict.py
+FilePath: /hydrodata/hydrodata/source_data_dict.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 # 定义测站类型代码表

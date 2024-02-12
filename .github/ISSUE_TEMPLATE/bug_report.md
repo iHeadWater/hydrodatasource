@@ -8,7 +8,7 @@ labels: bug
 
 ### Environment Information
 
--   hydroprivatedata version:
+-   hydrodata version:
 -   Python version:
 -   Operating System:
 

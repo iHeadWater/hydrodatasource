@@ -9,7 +9,7 @@ You can contribute in many ways:
 
 ### Report Bugs
 
-Report bugs at <https://github.com/WenyuOuyang/hydro_privatedata/issues>.
+Report bugs at <https://github.com/WenyuOuyang/hydroues>.
 
 If you are reporting a bug, please include:
 
@@ -29,14 +29,14 @@ Look through the GitHub issues for features. Anything tagged with
 
 ### Write Documentation
 
-hydro_privatedata could always use more documentation,
-whether as part of the official hydro_privatedata docs,
+hydrodata could always use more documentation,
+whether as part of the official hydrodata docs,
 in docstrings, or even on the web in blog posts, articles, and such.
 
 ### Submit Feedback
 
 The best way to send feedback is to file an issue at
-<https://github.com/WenyuOuyang/hydro_privatedata/issues>.
+<https://github.com/WenyuOuyang/hydrodata/issues>.
 
 If you are proposing a feature:
 
@@ -46,14 +46,14 @@ If you are proposing a feature:
 
 ## Get Started!
 
-Ready to contribute? Here's how to set up hydro_privatedata for local development.
+Ready to contribute? Here's how to set up hydrodata for local development.
 
-1.  Fork the hydro_privatedata repo on GitHub.
+1.  Fork the hydrodata repo on GitHub.
 
 2.  Clone your fork locally:
 
     ```shell
-    $ git clone git@github.com:your_name_here/hydro_privatedata.git
+    $ git clone git@github.com:your_name_here/hydrodata.git
     ```
 
 3.  Install your local copy into a virtualenv. Assuming you have
@@ -61,8 +61,8 @@ Ready to contribute? Here's how to set up hydro_privatedata for local developmen
     local development:
 
     ```shell
-    $ mkvirtualenv hydro_privatedata
-    $ cd hydro_privatedata/
+    $ mkvirtualenv hydrodata
+    $ cd hydrodata/
     $ python setup.py develop
     ```
 
@@ -78,7 +78,7 @@ Ready to contribute? Here's how to set up hydro_privatedata for local developmen
     and the tests, including testing other Python versions with tox:
 
     ```shell
-    $ flake8 hydro_privatedata tests
+    $ flake8 hydrodata tests
     $ python setup.py test or pytest
     $ tox
     ```
@@ -104,5 +104,5 @@ Before you submit a pull request, check that it meets these guidelines:
     Put your new functionality into a function with a docstring, and add
     the feature to the list in README.rst.
 3.  The pull request should work for Python 3.5, 3.6, 3.7 and 3.8, and
-    for PyPy. Check <https://github.com/WenyuOuyang/hydro_privatedata/pull_requests> and make sure that the tests pass for all
+    for PyPy. Check <https://github.com/WenyuOuyang/hydrodata/pull_requests> and make sure that the tests pass for all
     supported Python versions.

@@ -9,7 +9,7 @@ import urllib3 as ur
 from yaml import load, Loader
 
 import minio_api as ma
-from hydroprivatedata import config
+from hydrodata import config
 import pathlib as pl
 import smtplib
 import email

@@ -1,26 +1,26 @@
 <!--
  * @Author: Wenyu Ouyang
  * @Date: 2023-10-24 21:30:40
- * @LastEditTime: 2024-02-12 12:59:28
+ * @LastEditTime: 2024-02-12 15:31:57
  * @LastEditors: Wenyu Ouyang
- * @Description: Readme for hydro_privatedata
+ * @Description: Readme for hydrodata
  * @FilePath: \hydrodata\README.md
  * Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 -->
-# hydro_privatedata
+# hydrodata
 
 
-[![image](https://img.shields.io/pypi/v/hydro_privatedata.svg)](https://pypi.python.org/pypi/hydro_privatedata)
-[![image](https://img.shields.io/conda/vn/conda-forge/hydro_privatedata.svg)](https://anaconda.org/conda-forge/hydro_privatedata)
+[![image](https://img.shields.io/pypi/v/hydrodata.svg)](https://pypi.python.org/pypi/hydrodata)
+[![image](https://img.shields.io/conda/vn/conda-forge/hydrodata.svg)](https://anaconda.org/conda-forge/hydrodata)
 
-[![image](https://pyup.io/repos/github/WenyuOuyang/hydro_privatedata/shield.svg)](https://pyup.io/repos/github/WenyuOuyang/hydro_privatedata)
+[![image](https://pyup.io/repos/github/WenyuOuyang/hydrodata/shield.svg)](https://pyup.io/repos/github/WenyuOuyang/hydrodata)
 
 
 **A python project to deal with internal datasources**
 
 
 -   Free software: BSD license
--   Documentation: https://WenyuOuyang.github.io/hydro_privatedata
+-   Documentation: https://WenyuOuyang.github.io/hydrodata
 
 📜 [中文文档](README.zh.md)
 
@@ -67,7 +67,7 @@ Data in the `origin` folders are raw, while the `interim` folders contain data t
 # Create a virtual environment
 conda env create -f env-dev.yml
 # Activate the virtual environment
-conda activate privatedata
+conda activate hydrodata
 ```
 
 ## Reading data from `origin`
