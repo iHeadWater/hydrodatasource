@@ -1,4 +1,4 @@
-name: privatedata
+name: hydrodata
 channels:
   - conda-forge
   - anaconda
@@ -19,3 +19,33 @@ dependencies:
   - pytest
   - black
   - flake8
+  - minio
+  - boto3
+  - s3fs=2022.05
+  - kerchunk
+  - xarray
+  - zarr
+  - dask
+  - cfgrib
+  - eccodes
+  - netCDF4
+  - h5py
+  - geopandas
+  - openpyxl=3.1
+  - requests
+  - tqdm
+  # download data from nwis
+  - dataretrieval
+  - pygeohydro
+  # for development
+  - pytest
+  - black
+  - flake8
+  - mkdocstrings
+  - mkdocstrings-python
+  - mkdocs-git-revision-date-plugin
+  - mkdocs-jupyter
+  - pip
+  - pip: 
+    - wget 
+    - hydrodataset

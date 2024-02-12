@@ -6,4 +6,17 @@ tqdm
 boto3
 minio
 s3fs
+
 hydroutils
+kerchunk
+xarray
+zarr
+dask
+cfgrib
+eccodes
+netCDF4
+h5py
+wget
+hydrodataset
+dataretrieval
+pygeohydro

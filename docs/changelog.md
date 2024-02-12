@@ -1,11 +1,33 @@
-# Changelog
+# 更新日志
 
-## v0.0.1 - Date
+## 20231011更新：
+**更新内容：**
+1. 增加了gpm1d数据；
+2. 通过catalog的datasets属性可获取数据集范围。
 
-**Improvement**:
+## 20230905更新：
+**更新内容：**
+1. 更新minio后台gpm数据，加入了camels范围的gpm数据；
+2. 原stac包下各元素整合为catalog，原s3api下各元素整合为reader；
+3. 整合了catalog和reader形成data包。
 
--   TBD
+## 20230825更新：
+**更新内容：**
+1. 合并原wis-stac、wis-s3api、wis-downloader到hydro_opendata。
 
-**New Features**:
+## 20230824更新：
+**更新内容：**
+1. 更新wis-s3api/gfs.py中open_datasat方法及其它相关代码；
+2. 更新了后台gfs降雨数据实时`下载-上传-切分-访问`代码。
 
--   TBD
+## 20230820更新：
+**更新内容：**
+1. 更新wis-s3api/gpm.py中open_datasat方法及其它相关代码；
+2. 更新了后台gpm数据实时`下载-上传-切分-访问`代码。
+
+**存在问题**
+1. gpm从2023年7月2日开始更新了数据格式，更新前后数据的时间格式不一致；
+2. 时间范围较大的话读取速度慢；
+3. 后台实时下载可能出现错误（目前每个小时运行一次后台任务，正常每次下载2个数据）
+
+

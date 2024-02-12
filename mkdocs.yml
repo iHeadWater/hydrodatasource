@@ -40,17 +40,17 @@ plugins:
     - search
     - mkdocstrings
     - git-revision-date
-    - git-revision-date-localized:
-          enable_creation_date: true
-          type: timeago
+    # - git-revision-date-localized:
+    #       enable_creation_date: true
+    #       type: timeago
     # - pdf-export
     - mkdocs-jupyter:
           include_source: True
-          ignore_h1_titles: True
-          execute: True
-          allow_errors: false
-          ignore: ["conf.py"]
-          execute_ignore: ["*ignore.ipynb"]
+          # ignore_h1_titles: True
+          # execute: True
+          # allow_errors: false
+          # ignore: ["conf.py"]
+          # execute_ignore: ["*ignore.ipynb"]
           
 markdown_extensions:
     - admonition
@@ -74,13 +74,29 @@ markdown_extensions:
 nav:
     - Home: index.md
     - Installation: installation.md
+    - Modules:
+        - Downloader: downloader.md
+        - Processor: processor.md
+        - Catalog: catalog.md
+        - Reader: reader.md
+        - GISTools: gistools.md
     - Usage: usage.md
     - Contributing: contributing.md
     - FAQ: faq.md
     - Changelog: changelog.md
-    - Report Issues: https://github.com/WenyuOuyang/hydro_privatedata/issues
+    - Report Issues: https://github.com/iHeadWater/hydrodata/issues
     - Examples:
-        - examples/intro.ipynb
+        - modules/downloader.ipynb
+        - modules/catalog.ipynb
+        - modules/reader.ipynb
+        - modules/minio.ipynb
     - API Reference:
-          - hydroprivatedata module: hydroprivatedata.md
-          - common module: common.md
+        - Downloader module: 
+            - Downloader: api/downloader.md
+            - DEM: api/dem.md
+        - Catalog module:
+            - minio: api/catalog_minio.md
+        - Reader module:
+            - minio: api/reader_minio.md
+    - Resources:
+          - hydroGIS: hydrogis.md
