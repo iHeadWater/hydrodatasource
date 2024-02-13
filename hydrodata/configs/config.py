@@ -1,3 +1,12 @@
+"""
+Author: Wenyu Ouyang
+Date: 2024-02-12 15:16:45
+LastEditTime: 2024-02-13 18:02:16
+LastEditors: Wenyu Ouyang
+Description: 
+FilePath: \hydrodata\hydrodata\configs\config.py
+Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
+"""
 import json
 
 class DataConfig:
@@ -6,12 +15,12 @@ class DataConfig:
             # 流域编号，需要加区号
             "basin_id": "1_02051500",
             
-            # 是否从hydro_opendata读取GPM_GFS文件
+            # 是否从hydrodata读取GPM_GFS文件
             "GPM_GFS_local_read": False,
             "GPM_GFS_merge": True,
             
             # 如果从本地读，需要给定GPM_GFS的路径,upload和local代表是否上传到Minio和是否下载到本地
-            "GPM_GFS_local_path": "/home/xushuolong1/hydro_opendata/data",
+            "GPM_GFS_local_path": "/home/xushuolong1/hydrodata/data",
             "GPM_GFS_upload": False,
             "GPM_GFS_local_save": True,
             
@@ -24,8 +33,8 @@ class DataConfig:
             "GFS_merge": True,
             
             # 如果从本地读，需要给定GPM或者GFS的路径
-            "GPM_local_path": "/home/xushuolong1/hydro_opendata/data/gpm.nc",
-            "GFS_local_path": "/home/xushuolong1/hydro_opendata/data/gfs.nc",
+            "GPM_local_path": "/home/xushuolong1/hydrodata/data/gpm.nc",
+            "GFS_local_path": "/home/xushuolong1/hydrodata/data/gfs.nc",
             
             # 如果从MINIO读，需要给定MINIO的accesss_key和secret_key
             "MINIO_access_key": "",
@@ -52,7 +61,7 @@ class DataConfig:
             # 流域是国内还是国外，国外是camels，国内是wis
             "dataset": "camels",
             
-            # 是否从hydro_opendata重新读取并生成gpm.nc，是否上传，是否保存在本地，如果保存，那么会保存至"GPM_local_path"
+            # 是否从hydrodata重新读取并生成gpm.nc，是否上传，是否保存在本地，如果保存，那么会保存至"GPM_local_path"
             # GFS基本同理，额外会有两个参数
             # enlarge参数，是因为GPM和GFS拼接的时候，需要GFS比GPM大一圈才能插值，不然会出现-
             # new参数，这个是为了模拟实际预报，因为实际预报的时候，GFS的数据不会是每一个时刻最新的数据
@@ -66,12 +75,12 @@ class DataConfig:
             
             # 如果重新读取并生成gpm.nc，且没有mask.nc，那么需要提供GPM_mask，GFS同理
             "GPM_mask": False,
-            "GPM_mask_path": "/home/xushuolong1/hydro_opendata/data/mask",
+            "GPM_mask_path": "/home/xushuolong1/hydrodata/data/mask",
             "GFS_mask": False,
-            "GFS_mask_path": "/home/xushuolong1/hydro_opendata/data/mask",
+            "GFS_mask_path": "/home/xushuolong1/hydrodata/data/mask",
             
             # 如果需要生成mask.nc，那么需要提供流域的shp文件
-            "shp_path": "/home/xushuolong1/hydro_opendata/data/shp/1_02051500/1_02051500.shp",
+            "shp_path": "/home/xushuolong1/hydrodata/data/shp/1_02051500/1_02051500.shp",
             
             # 如果生成GPM.nc，那么需要提供时间范围，理论上最好是连续的，以防特殊需求或者特殊情况，这里还是写成了分段的，GFS同理
             "GPM_time_periods": [

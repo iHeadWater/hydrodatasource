@@ -7,6 +7,22 @@ boto3
 minio
 s3fs
 
+kerchunk
+xarray
+zarr
+dask
+cfgrib
+eccodes
+netCDF4
+h5py
+wget
+
+dataretrieval
+pygeohydro
+
+hydroutils
+hydrodataset
+
 black
 black[jupyter]
 pip

@@ -10,7 +10,7 @@ import os
 import datetime
 from tqdm import tqdm
 from datetime import timedelta
-from hydro_opendata.reader import minio
+from hydrodata.reader import minio
 import warnings
 import scipy.interpolate
 

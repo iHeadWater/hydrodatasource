@@ -4,7 +4,7 @@ Date: 2023-10-06 20:50:41
 LastEditTime: 2023-10-14 11:50:48
 LastEditors: Wenyu Ouyang
 Description: 该模块用于下载，通常是url链接或执行命令：`download_from_url` - 通过url链接下载文件；`download_by_stream` - 通过stream方式下载url链接；`download_singletasking` - 单函数线程下载文件，显示进度条
-FilePath: /hydro_opendata/hydro_opendata/downloader/downloader.py
+FilePath: /hydrodata/hydrodata/downloader/downloader.py
 Copyright (c) 2023-2024 Jianfeng Zhu. All rights reserved.
 """
 import requests

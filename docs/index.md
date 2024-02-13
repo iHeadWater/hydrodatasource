@@ -1,3 +1,12 @@
+<!--
+ * @Author: Wenyu Ouyang
+ * @Date: 2023-10-26 08:41:30
+ * @LastEditTime: 2024-02-13 17:57:48
+ * @LastEditors: Wenyu Ouyang
+ * @Description: 
+ * @FilePath: \hydrodata\docs\index.md
+ * Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
+-->
 # Welcome to hydrodata
 
 
@@ -15,22 +24,7 @@
 
 ## Features
 
--   TODO
-
-# hydro_opendata
-
-
-[![image](https://img.shields.io/pypi/v/hydro_opendata.svg)](https://pypi.python.org/pypi/hydro_opendata)
-[![image](https://readthedocs.org/projects/hydro-opendata/badge/?version=latest)](https://hydro-opendata.readthedocs.io/en/latest/?version=latest)
-
-**可用于水文学科学计算的开放数据的获取、管理和使用路径及方法。**
-
-
--   Free software: MIT license
--   Documentation: <https://hydro-opendata.readthedocs.io/en/latest/>
-    
-
-## 功能
+**可用于水文学科学计算的开放数据的获取、管理和使用路径及方法。**    
 
 -   downloader：下载包括DEM、GPM、ERA5、GFS等。
 -   processor：计算流域平均、写chunk等数据预处理。

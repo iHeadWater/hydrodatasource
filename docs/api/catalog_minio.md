@@ -1,3 +1,3 @@
 # MinIO
 
-::: hydro_opendata.catalog.minio
+::: hydrodata.catalog.minio

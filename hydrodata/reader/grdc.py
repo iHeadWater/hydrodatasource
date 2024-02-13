@@ -4,7 +4,7 @@ Date: 2023-01-02 22:23:24
 LastEditTime: 2023-11-03 13:49:19
 LastEditors: Wenyu Ouyang
 Description: read the Global Runoff Data Centre (GRDC) daily data
-FilePath: \hydro_opendata\hydro_opendata\reader\grdc.py
+FilePath: \hydrodata\hydrodata\reader\grdc.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 # Global Runoff Data Centre module from ewatercycle: https://github.com/eWaterCycle/ewatercycle/blob/main/src/ewatercycle/observation/grdc.py
@@ -13,8 +13,8 @@ import os
 import pandas as pd
 import xarray as xr
 
-from hydro_opendata.downloader.hydrostation import catalogue_grdc
-from hydro_opendata.processor.preprocess_grdc import read_grdc_daily_data
+from hydrodata.downloader.hydrostation import catalogue_grdc
+from hydrodata.processor.preprocess_grdc import read_grdc_daily_data
 
 
 def dailygrdc2netcdf(start_date, end_date, data_dir=None, station_ids=None):

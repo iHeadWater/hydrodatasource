@@ -1,4 +1,4 @@
-from hydro_opendata.reader.minio import ERA5LReader
+from hydrodata.reader.minio import ERA5LReader
 import pandas as pd
 import geopandas as gpd
 from hydro_gistools.mean import gen_mask, mean_by_mask

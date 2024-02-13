@@ -4,14 +4,14 @@ Date: 2023-10-13 20:50:01
 LastEditTime: 2023-10-31 11:40:59
 LastEditors: Wenyu Ouyang
 Description: Test downloading function
-FilePath: \hydro_opendata\tests\test_downloader.py
+FilePath: \hydrodata\tests\test_downloader.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 import os
 import pandas as pd
 
 import hydrodataset as hds
-from hydro_opendata.downloader.hydrostation import (
+from hydrodata.downloader.hydrostation import (
     catalogue_grdc,
     download_grdc_month_data,
     download_grdc_daily_data,

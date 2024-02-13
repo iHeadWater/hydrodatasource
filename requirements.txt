@@ -7,7 +7,6 @@ boto3
 minio
 s3fs
 
-hydroutils
 kerchunk
 xarray
 zarr
@@ -17,6 +16,8 @@ eccodes
 netCDF4
 h5py
 wget
-hydrodataset
 dataretrieval
 pygeohydro
+
+hydroutils
+hydrodataset

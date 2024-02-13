@@ -1,8 +1,8 @@
-from hydro_opendata.processor.mask import generate_mask
+from hydrodata.processor.mask import generate_mask
 import xarray as xr
-from hydro_opendata.reader import minio
+from hydrodata.reader import minio
 import pandas as pd
-from hydro_opendata.configs.config import DataConfig
+from hydrodata.configs.config import DataConfig
 from minio import Minio
 import tempfile
 import os

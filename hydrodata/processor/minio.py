@@ -1,5 +1,5 @@
 import ujson
-from hydro_opendata.common import fs, ro
+from hydrodata.common import fs, ro
 import kerchunk.hdf
 from kerchunk.combine import MultiZarrToZarr
 import kerchunk.netCDF3

@@ -1,7 +1,7 @@
 from datetime import timedelta, datetime
-from hydro_opendata.reader import minio
-from hydro_opendata.processor.mask import generate_mask
-from hydro_opendata.configs.config import DataConfig
+from hydrodata.reader import minio
+from hydrodata.processor.mask import generate_mask
+from hydrodata.configs.config import DataConfig
 import numpy as np
 import xarray as xr
 import os

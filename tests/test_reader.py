@@ -12,8 +12,8 @@ from hydrodata.config import LOCAL_DATA_PATH
 from hydrodata.reader import AOI, StationDataHandler, LocalFileReader
 from minio import Minio
 import hydrodataset as hds
-from hydro_opendata.reader.grdc import GRDCDataHandler
-from hydro_opendata.reader.reader import (
+from hydrodata.reader.grdc import GRDCDataHandler
+from hydrodata.reader.reader import (
     AOI,
     GPMDataHandler,
     GFSDataHandler,

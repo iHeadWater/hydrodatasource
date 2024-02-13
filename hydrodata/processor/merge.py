@@ -1,9 +1,9 @@
 import xarray as xr
 import pandas as pd
 import numpy as np
-from hydro_opendata.configs.config import DataConfig
-from hydro_opendata.processor.gpm import make_gpm_dataset
-from hydro_opendata.processor.gfs import make_gfs_dataset
+from hydrodata.configs.config import DataConfig
+from hydrodata.processor.gpm import make_gpm_dataset
+from hydrodata.processor.gfs import make_gfs_dataset
 import json
 import s3fs
 from kerchunk.hdf import SingleHdf5ToZarr

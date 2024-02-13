@@ -4,14 +4,14 @@ Date: 2023-10-06 21:17:17
 LastEditTime: 2023-10-22 16:51:42
 LastEditors: Wenyu Ouyang
 Description: Test reading according to AOI
-FilePath: \hydro_opendata\tests\test_aoi_reading.py
+FilePath: \hydrodata\tests\test_aoi_reading.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 import os
 import pytest
 import geopandas as gpd
 
-from hydro_opendata.reader.minio import ERA5LReader, GPMReader, GFSReader
+from hydrodata.reader.minio import ERA5LReader, GPMReader, GFSReader
 import numpy as np
 
 

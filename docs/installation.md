@@ -1,3 +1,12 @@
+<!--
+ * @Author: Wenyu Ouyang
+ * @Date: 2023-10-26 08:41:30
+ * @LastEditTime: 2024-02-13 17:58:25
+ * @LastEditors: Wenyu Ouyang
+ * @Description: 
+ * @FilePath: \hydrodata\docs\installation.md
+ * Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
+-->
 # Installation
 
 ## Stable release
@@ -27,18 +36,18 @@ pip install git+https://github.com/WenyuOuyang/hydrodata
 在命令行运行：
 
 ```shell
-pip install hydro_opendata
+pip install hydrodata
 ```
 
 ## 配置
 
-首次使用hydro_opendata时，如：
+首次使用hydrodata时，如：
 
 ```python
-from hydro_opendata.data.minio import GPM
+from hydrodata.data.minio import GPM
 ```
 
-会提示输入`access_key`和`secret_key`。由于目前hydro_opendata部分功能仅限于团队内部使用，所以使用前需要向管理员申请[minio](http://minio.waterism.com:9090/)账号。
+会提示输入`access_key`和`secret_key`。由于目前hydrodata部分功能仅限于团队内部使用，所以使用前需要向管理员申请[minio](http://minio.waterism.com:9090/)账号。
 
 1. 进入[minio网页客户端](http://minio.waterism.com:9090/)
 2. 点击左侧导航栏`Identity`进入`Service Accounts`

@@ -13,7 +13,7 @@
 
 ## 20230825更新：
 **更新内容：**
-1. 合并原wis-stac、wis-s3api、wis-downloader到hydro_opendata。
+1. 合并原wis-stac、wis-s3api、wis-downloader到hydrodata。
 
 ## 20230824更新：
 **更新内容：**

@@ -1,12 +1,13 @@
 """
 Author: Wenyu Ouyang
 Date: 2023-10-25 18:49:02
-LastEditTime: 2023-10-31 21:11:12
+LastEditTime: 2024-02-13 18:10:15
 LastEditors: Wenyu Ouyang
 Description: Some configs for minio server
 FilePath: \hydrodata\hydrodata\config.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
+
 import logging
 import pathlib
 import os

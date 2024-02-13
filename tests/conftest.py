@@ -1,17 +1,17 @@
 """
 
-from hydro_opendata.common import minio_cfg
+from hydrodata.common import minio_cfg
 Author: Wenyu Ouyang
 Date: 2023-10-31 09:41:59
-LastEditTime: 2023-10-31 09:45:56
+LastEditTime: 2024-02-13 17:34:48
 LastEditors: Wenyu Ouyang
 Description: conf for pytest
-FilePath: \hydro_opendata\tests\conftest.py
+FilePath: \hydrodata\tests\conftest.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 import pytest
 
-from hydro_opendata.common import minio_cfg
+from hydrodata.common import minio_cfg
 
 
 @pytest.fixture()
