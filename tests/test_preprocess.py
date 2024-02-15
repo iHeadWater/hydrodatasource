@@ -9,7 +9,7 @@ Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 import os
 import pandas as pd
-from hydrodata.preprocess import huanren_preprocess
+from hydrodata.processor.preprocess import huanren_preprocess
 
 
 def test_huanren_preprocess(tmp_path):

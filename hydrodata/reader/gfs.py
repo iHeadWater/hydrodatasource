@@ -14,8 +14,8 @@ import calendar
 from datetime import date
 import json
 
-from ..common import minio_paras, fs, ro
-from ..utils import regen_box
+from ..configs.common import minio_paras, fs, ro
+from ..utils.utils import regen_box
 
 bucket_name = minio_paras["bucket_name"]
 

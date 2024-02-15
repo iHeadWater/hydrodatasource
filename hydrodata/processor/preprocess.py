@@ -11,14 +11,14 @@ import logging
 import os
 import pandas as pd
 # from hydroutils import hydro_logger
-from hydrodata.config import (
+from hydrodata.configs.config import (
     LOCAL_DATA_PATH,
     mc,
     site_bucket,
     site_object,
 )
-from hydrodata.minio_api import minio_upload_csv
-from hydrodata.source_data_dict import convert_to_tidy
+from hydrodata.reader.minio_api import minio_upload_csv
+from hydrodata.processor.source_data_dict import convert_to_tidy
 
 
 def huanren_preprocess():

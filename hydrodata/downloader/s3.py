@@ -2,7 +2,7 @@ import requests as r
 import datetime
 import numpy as np
 
-from ..utils import validate
+from ..utils.utils import validate
 
 
 class LandsatCatalog:

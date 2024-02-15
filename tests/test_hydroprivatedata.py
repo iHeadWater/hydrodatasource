@@ -12,7 +12,9 @@ import os.path
 import pathlib
 import urllib3 as ur
 
-from hydrodata import preprocess, minio_api, config
+from hydrodata.processor import preprocess
+from hydrodata.configs import config
+from hydrodata.reader import minio_api
 
 
 def test_content():

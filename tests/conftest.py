@@ -11,7 +11,7 @@ Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 import pytest
 
-from hydrodata.common import minio_cfg
+from hydrodata.configs.common import minio_cfg
 
 
 @pytest.fixture()

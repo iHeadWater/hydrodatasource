@@ -7,8 +7,8 @@
 - `to_netcdf` - 保存到本地文件
 """
 
-from ..common import minio_paras, fs, ro
-from ..utils import regen_box
+from ..configs.common import minio_paras, fs, ro
+from ..utils.utils import regen_box
 import os
 import s3fs
 import numpy as np

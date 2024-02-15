@@ -6,7 +6,7 @@
 - `GFS_atmos`
 """
 
-from ..common import minio_paras, fs
+from ..configs.common import minio_paras, fs
 import os
 import numpy as np
 import pandas as pd

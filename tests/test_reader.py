@@ -9,7 +9,7 @@ Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 
 import os
-from hydrodata.config import LOCAL_DATA_PATH
+from hydrodata.configs.config import LOCAL_DATA_PATH
 from minio import Minio
 import hydrodataset as hds
 from hydrodata.reader.grdc import GRDCDataHandler

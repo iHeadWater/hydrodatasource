@@ -1,3 +1,13 @@
+"""
+Author: Jianfeng Zhu
+Date: 2023-10-22 16:47:36
+LastEditTime: 2024-02-15 10:14:21
+LastEditors: Wenyu Ouyang
+Description: 
+FilePath: \hydrodata\hydrodata\reader\minio.py
+Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
+"""
+
 import os
 import numpy as np
 import xarray as xr
@@ -7,8 +17,10 @@ import dask
 import json
 import geopandas as gpd
 
-from ..common import minio_paras, fs, ro
-from ..utils import regen_box, creatspinc
+from hydrodata.downloader.minio import ERA5LCatalog, GFSCatalog, GPMCatalog
+
+from ..configs.common import minio_paras, fs, ro
+from ..utils.utils import regen_box, creatspinc
 
 bucket_name = minio_paras["bucket_name"]
 dask.config.set({"array.slicing.split_large_chunks": False})
@@ -487,7 +499,7 @@ class GPMReader:
 
         longitudes = slice(left - 0.00001, right + 0.00001)
         latitudes = slice(bottom - 0.00001, top + 0.00001)
-        
+
         ds = ds.sortby("lat", ascending=True)
         ds = ds.sel(lon=longitudes, lat=latitudes)
 
@@ -1044,3 +1056,46 @@ class GFSReader:
         ds = self.open_dataset(creation_date, creation_time, dataset, bbox, time_chunks)
 
         return ds
+
+
+class Era5L:
+    def __init__(self):
+        self._catalog = ERA5LCatalog()
+        self._reader = ERA5LReader()
+
+    @property
+    def catalog(self):
+        return self._catalog
+
+    @property
+    def reader(self):
+        return self._reader
+
+
+class GPM:
+    def __init__(self):
+        self._catalog = GPMCatalog()
+        self._reader = GPMReader()
+
+    @property
+    def catalog(self):
+        return self._catalog
+
+    @property
+    def reader(self):
+        return self._reader
+
+
+class GFS:
+    def __init__(self, variable="tp"):
+        self._catalog = GFSCatalog(variable)
+        self._reader = GFSReader()
+        self._reader.set_default_variable(self._catalog.variable)
+
+    @property
+    def catalog(self):
+        return self._catalog
+
+    @property
+    def reader(self):
+        return self._reader

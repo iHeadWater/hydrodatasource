@@ -3,7 +3,7 @@
 import pathlib
 import os
 
-from .common import minio_paras
+from .configs.common import minio_paras
 
 
 __author__ = """Jianfeng Zhu"""

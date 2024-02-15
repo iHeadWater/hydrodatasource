@@ -12,8 +12,8 @@ import os
 
 import pytest
 
-from hydrodata import config
-from hydrodata.minio_api import minio_sync_files, boto3_sync_files
+from hydrodata.configs import config
+from hydrodata.reader.minio_api import minio_sync_files, boto3_sync_files
 
 pytest_plugins = ("pytest_asyncio",)
 
