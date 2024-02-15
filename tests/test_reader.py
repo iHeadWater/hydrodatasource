@@ -7,9 +7,9 @@ Description: Test funcs for reader.py
 FilePath: \hydrodata\tests\test_reader.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
+
 import os
 from hydrodata.config import LOCAL_DATA_PATH
-from hydrodata.reader import AOI, StationDataHandler, LocalFileReader
 from minio import Minio
 import hydrodataset as hds
 from hydrodata.reader.grdc import GRDCDataHandler

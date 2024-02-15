@@ -7,14 +7,10 @@ dependencies:
   - python=3.10
   - geopandas
   - requests
-  - tqdm
   # for excel
   - openpyxl=3.1
   - xlrd
-  # for minio
-  - boto3
-  - minio
-  - s3fs
+
   - kerchunk
   - xarray
   - zarr
@@ -37,5 +33,7 @@ dependencies:
   - pip
   - pip: 
     - wget 
+    - pytest_asyncio
+    - chardet
     - hydroutils
     - hydrodataset

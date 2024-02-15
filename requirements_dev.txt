@@ -1,11 +1,6 @@
 geopandas
 openpyxl==3.1
 requests
-tqdm
-# for minio
-boto3
-minio
-s3fs
 
 kerchunk
 xarray
@@ -16,6 +11,7 @@ eccodes
 netCDF4
 h5py
 wget
+chardet
 
 dataretrieval
 pygeohydro
@@ -37,3 +33,4 @@ twine
 
 pytest
 pytest-runner
+pytest_asyncio
