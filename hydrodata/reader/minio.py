@@ -16,13 +16,14 @@ import calendar
 import dask
 import json
 import geopandas as gpd
+from ..configs.config import FS, MINIO_PARAM
 
 from hydrodata.downloader.minio import ERA5LCatalog, GFSCatalog, GPMCatalog
 
-from ..configs.common import minio_paras, fs, ro
+from ..configs.config import RO
 from ..utils.utils import regen_box, creatspinc
 
-bucket_name = minio_paras["bucket_name"]
+bucket_name = MINIO_PARAM["bucket_name"]
 dask.config.set({"array.slicing.split_large_chunks": False})
 
 
@@ -151,7 +152,7 @@ class ERA5LReader:
         elif dataset == "camels":
             self._dataset = "camdata"
 
-        with fs.open(
+        with FS.open(
             os.path.join(bucket_name, f"{self._dataset}/era5_land/era5l.json")
         ) as f:
             cont = json.load(f)
@@ -171,9 +172,9 @@ class ERA5LReader:
                     # so we don't use os.join.path
                     "fo": f"s3://{bucket_name}/{self._dataset}/era5_land/era5_land_.json",
                     "target_protocol": "s3",
-                    "target_options": ro,
+                    "target_options": RO,
                     "remote_protocol": "s3",
-                    "remote_options": ro,
+                    "remote_options": RO,
                 },
             },
         )
@@ -473,9 +474,9 @@ class GPMReader:
                 "storage_options": {
                     "fo": minio_path,
                     "target_protocol": "s3",
-                    "target_options": ro,
+                    "target_options": RO,
                     "remote_protocol": "s3",
-                    "remote_options": ro,
+                    "remote_options": RO,
                 },
             },
         )
@@ -552,7 +553,7 @@ class GPMReader:
         elif time_resolution == "30m":
             self._time_resolution = ""
 
-        with fs.open(
+        with FS.open(
             os.path.join(
                 bucket_name,
                 f"{self._dataset}/gpm{self._time_resolution}/gpm{self._time_resolution}.json",
@@ -906,7 +907,7 @@ class GFSReader:
         elif dataset == "camels":
             self._dataset = "camdata"
 
-        with fs.open(os.path.join(bucket_name, f"{self._dataset}/gfs/gfs.json")) as f:
+        with FS.open(os.path.join(bucket_name, f"{self._dataset}/gfs/gfs.json")) as f:
             cont = json.load(f)
             self._paras = cont
 
@@ -944,9 +945,9 @@ class GFSReader:
                 "storage_options": {
                     "fo": json_url,
                     "target_protocol": "s3",
-                    "target_options": ro,
+                    "target_options": RO,
                     "remote_protocol": "s3",
-                    "remote_options": ro,
+                    "remote_options": RO,
                 },
             },
         )

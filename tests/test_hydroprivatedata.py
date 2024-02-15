@@ -24,15 +24,27 @@ def test_content():
 
 def test_upload_csv():
     test_path = pathlib.Path(os.path.abspath(os.path.curdir)).parent
-    client = config.mc
-    bucket_name = config.minio_paras['bucket_path']
-    minio_api.boto3_upload_csv(client, bucket_name, 'nyc_taxi', os.path.join(test_path, 'test_data/nyc_taxi.csv'))
-    minio_api.minio_upload_csv(client, bucket_name, 'driver_data_site24', os.path.join(test_path, 'test_data/driver_data_site24.csv'))
+    client = config.MC
+    bucket_name = config.MINIO_PARAM["bucket_path"]
+    minio_api.boto3_upload_csv(
+        client,
+        bucket_name,
+        "nyc_taxi",
+        os.path.join(test_path, "test_data/nyc_taxi.csv"),
+    )
+    minio_api.minio_upload_csv(
+        client,
+        bucket_name,
+        "driver_data_site24",
+        os.path.join(test_path, "test_data/driver_data_site24.csv"),
+    )
 
 
 def test_download_csv_minio():
-    client = config.s3
-    bucket_name = config.minio_paras['bucket_path']
+    client = config.S3
+    bucket_name = config.MINIO_PARAM["bucket_path"]
     # minio_api.minio_download_csv(client, bucket_name, 'nyc_taxi', file_path='test_dload')
-    minio_api.boto3_download_csv(client, bucket_name, 'driver_data_site24', 'driver_data_site24.csv')
-    ur.request(method='GET')
+    minio_api.boto3_download_csv(
+        client, bucket_name, "driver_data_site24", "driver_data_site24.csv"
+    )
+    ur.request(method="GET")

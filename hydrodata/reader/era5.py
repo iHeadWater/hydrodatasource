@@ -7,14 +7,15 @@
 - `to_netcdf` - 保存到本地文件
 """
 
-from ..configs.common import minio_paras, fs, ro
+from ..configs.config import FS, MINIO_PARAM
+from ..configs.config import RO
 from ..utils.utils import regen_box
 import os
 import s3fs
 import numpy as np
 import xarray as xr
 
-bucket_name = minio_paras["bucket_name"]
+bucket_name = MINIO_PARAM["bucket_name"]
 
 start = np.datetime64("2015-01-01T00:00:00.000000000")
 end = np.datetime64("2021-12-31T23:00:00.000000000")
@@ -117,7 +118,7 @@ accumulated = [
     "Surface solar radiation downwards",
     "Surface thermal radiation downwards",
     # 'Temperature of snow layer',
-    "Total precipitation"
+    "Total precipitation",
     # 'Volumetric soil water layer 1',
     # 'Volumetric soil water layer 2',
     # 'Volumetric soil water layer 3',
@@ -150,9 +151,9 @@ def open_dataset(
         backend_kwargs={
             "consolidated": False,
             "storage_options": {
-                "fo": fs.open(f"s3://{bucket_name}/geodata/era5_land/era5_land_.json"),
+                "fo": FS.open(f"s3://{bucket_name}/geodata/era5_land/era5_land_.json"),
                 "remote_protocol": "s3",
-                "remote_options": ro,
+                "remote_options": RO,
             },
         },
     )

@@ -6,18 +6,18 @@
 - `from_aoi` - 通过已有GeoDataFrame范围读取数据方法
 """
 
-import os
 import numpy as np
-import s3fs
 import xarray as xr
 import calendar
 import dask
 import json
 
-from ..configs.common import minio_paras, fs, ro
+from ..configs.config import FS, MINIO_PARAM
+
+from ..configs.config import RO
 from ..utils.utils import regen_box
 
-bucket_name = minio_paras["bucket_name"]
+bucket_name = MINIO_PARAM["bucket_name"]
 
 
 # 后期从minio读取
@@ -25,7 +25,7 @@ start = np.datetime64("2016-01-01T00:00:00.000000000")
 end = np.datetime64("2023-08-17T23:30:00.000000000")
 change = np.datetime64("2023-07-01T23:30:00.000000000")
 
-with fs.open(f"{bucket_name}/geodata/gpm/gpm.json") as f:
+with FS.open(f"{bucket_name}/geodata/gpm/gpm.json") as f:
     cont = json.load(f)
 end = np.datetime64(cont["end"])
 
@@ -58,11 +58,11 @@ def get_dataset_year(start_time, end_time, bbox, time_chunks):
         backend_kwargs={
             "consolidated": False,
             "storage_options": {
-                "fo": fs.open(
+                "fo": FS.open(
                     f"s3://{bucket_name}/geodata/gpm/{year}/gpm{year}_inc.json"
                 ),
                 "remote_protocol": "s3",
-                "remote_options": ro,
+                "remote_options": RO,
             },
         },
     )
@@ -125,11 +125,11 @@ def get_dataset_month(start_time, end_time, bbox, time_chunks):
         backend_kwargs={
             "consolidated": False,
             "storage_options": {
-                "fo": fs.open(
+                "fo": FS.open(
                     f"s3://{bucket_name}/geodata/gpm/{year}/{month}/gpm{year}{month}_inc.json"
                 ),
                 "remote_protocol": "s3",
-                "remote_options": ro,
+                "remote_options": RO,
             },
         },
     )
@@ -194,11 +194,11 @@ def get_dataset_day(start_time, end_time, bbox, time_chunks):
         backend_kwargs={
             "consolidated": False,
             "storage_options": {
-                "fo": fs.open(
+                "fo": FS.open(
                     f"s3://{bucket_name}/geodata/gpm/{year}/{month}/gpm{year}{month}_{day}.json"
                 ),
                 "remote_protocol": "s3",
-                "remote_options": ro,
+                "remote_options": RO,
             },
         },
     )

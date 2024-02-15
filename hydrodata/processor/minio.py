@@ -1,5 +1,5 @@
 import ujson
-from hydrodata.configs.common import fs, ro
+from hydrodata.configs.config import RO
 import kerchunk.hdf
 from kerchunk.combine import MultiZarrToZarr
 import kerchunk.netCDF3
@@ -9,8 +9,10 @@ import shutil
 import boto3
 from hydroutils.hydro_s3 import boto3_upload_file, boto3_download_file
 
+from hydrodata.configs.config import FS
+
 so = dict(
-    mode="rb", storage_options=ro, default_fill_cache=False, default_cache_type="first"
+    mode="rb", storage_options=RO, default_fill_cache=False, default_cache_type="first"
 )  # args to fs.open()
 # default_fill_cache=False avoids caching data in between file chunks to lowers memory usage.
 
@@ -28,14 +30,14 @@ class HDFProcessor:
         pass
 
     def nc_to_zarr(self, nc_path, json_path):
-        with fs.open(nc_path, **so) as infile:
+        with FS.open(nc_path, **so) as infile:
             try:
                 h5chunks = kerchunk.hdf.SingleHdf5ToZarr(infile, nc_path)
             except Exception:
                 print(nc_path, "未生成！")
                 return
 
-            with fs.open(json_path, "wb") as f:
+            with FS.open(json_path, "wb") as f:
                 f.write(ujson.dumps(h5chunks.translate()).encode())
 
     def multi_to_zarr(
@@ -45,21 +47,21 @@ class HDFProcessor:
             concat_dims = ["time"]
         if identical_dims is None:
             identical_dims = ["lat", "lon"]
-        json_list = fs.glob(json_paths)
+        json_list = FS.glob(json_paths)
         json_list = [f"s3://{str}" for str in json_list]
 
         mzz = MultiZarrToZarr(
             json_list,
-            target_options=ro,
+            target_options=RO,
             remote_protocol="s3",
-            remote_options=ro,
+            remote_options=RO,
             concat_dims=concat_dims,
             identical_dims=identical_dims,
         )
 
         d = mzz.translate()
 
-        with fs.open(file_path) as f:
+        with FS.open(file_path) as f:
             f.write(ujson.dumps(d).encode())
 
 
@@ -78,13 +80,13 @@ class NC3Processor:
     def nc_to_zarr(self, nc_path, json_path):
         try:
             h5chunks = kerchunk.netCDF3.netcdf_recording_file(
-                f"s3://{nc_path}", storage_options=ro
+                f"s3://{nc_path}", storage_options=RO
             )
         except Exception:
             print(nc_path, "未生成！")
             return
 
-        with fs.open(json_path, "wb") as f:
+        with FS.open(json_path, "wb") as f:
             f.write(ujson.dumps(h5chunks.translate()).encode())
 
     def multi_to_zarr(
@@ -94,21 +96,21 @@ class NC3Processor:
             concat_dims = ["time"]
         if identical_dims is None:
             identical_dims = ["latitude", "longitude"]
-        json_list = fs.glob(json_paths)
+        json_list = FS.glob(json_paths)
         json_list = [f"s3://{str}" for str in json_list]
 
         mzz = MultiZarrToZarr(
             json_list,
-            target_options=ro,
+            target_options=RO,
             remote_protocol="s3",
-            remote_options=ro,
+            remote_options=RO,
             concat_dims=concat_dims,
             identical_dims=identical_dims,
         )
 
         d = mzz.translate()
 
-        with fs.open(file_path) as f:
+        with FS.open(file_path) as f:
             f.write(ujson.dumps(d).encode())
 
 

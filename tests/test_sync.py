@@ -20,8 +20,8 @@ pytest_plugins = ("pytest_asyncio",)
 
 @pytest.mark.asyncio
 async def test_sync_data():
-    s3_client = config.s3
-    mc_client = config.mc
+    s3_client = config.S3
+    mc_client = config.MC
     await minio_sync_files(
         mc_client,
         "forestbat-private",

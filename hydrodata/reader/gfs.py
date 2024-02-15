@@ -14,10 +14,12 @@ import calendar
 from datetime import date
 import json
 
-from ..configs.common import minio_paras, fs, ro
+from ..configs.config import FS, MINIO_PARAM
+
+from ..configs.config import RO
 from ..utils.utils import regen_box
 
-bucket_name = minio_paras["bucket_name"]
+bucket_name = MINIO_PARAM["bucket_name"]
 
 # 后期从minio读取
 start = np.datetime64("2016-07-10")
@@ -75,7 +77,7 @@ def open_dataset(
         short_name = data_variable
         full_name = variables[data_variable]
 
-        with fs.open(f"{bucket_name}/geodata/gfs/gfs.json") as f:
+        with FS.open(f"{bucket_name}/geodata/gfs/gfs.json") as f:
             cont = json.load(f)
             start = np.datetime64(cont[short_name][0]["start"])
             end = np.datetime64(cont[short_name][-1]["end"])
@@ -105,9 +107,9 @@ def open_dataset(
             backend_kwargs={
                 "consolidated": False,
                 "storage_options": {
-                    "fo": fs.open(json_url),
+                    "fo": FS.open(json_url),
                     "remote_protocol": "s3",
-                    "remote_options": ro,
+                    "remote_options": RO,
                 },
             },
         )
