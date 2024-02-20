@@ -16,11 +16,9 @@ import calendar
 import dask
 import json
 import geopandas as gpd
-from ..configs.config import FS, MINIO_PARAM
+from ..configs.config import FS, MINIO_PARAM, RO
 
 from hydrodata.downloader.minio import ERA5LCatalog, GFSCatalog, GPMCatalog
-
-from ..configs.config import RO
 from ..utils.utils import regen_box, creatspinc
 
 bucket_name = MINIO_PARAM["bucket_name"]
