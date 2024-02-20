@@ -211,7 +211,7 @@ def get_para(data_name):
         raise Exception("未支持的数据产品")
 
 
-def gen_mask(watershed, filedname, dataname, save_dir="."):
+def gen_mask(basin_id, watershed, dataname, save_dir="."):
     """
     计算流域平均
 
@@ -234,9 +234,7 @@ def gen_mask(watershed, filedname, dataname, save_dir="."):
 
     for index, row in watershed.iterrows():
         # wid = row[filedname]
-        _data_config = DataConfig()
-        data_config = _data_config.get_config()
-        wid = data_config["basin_id"]
+        wid = basin_id
         geo = row["geometry"]
         bbox = geo.bounds
         # print(geo.bounds)
@@ -264,15 +262,19 @@ def gen_mask(watershed, filedname, dataname, save_dir="."):
 
         wds = grids.to_xarray()
         wds.to_netcdf(os.path.join(save_dir, f"mask-{wid}-{dataname}.nc"))
-        
 
-# 生成指定流域的栅格范围
-def generate_mask(shp_path, gpm_mask_folder_path=None, gfs_mask_folder_path=None):
+
+
+def gen_single_mask(basin_id, shp_path, dataname, mask_path):
+    shp_path = os.path.join(shp_path, basin_id, f"{basin_id}.shp")
     watershed = gpd.read_file(shp_path)
-    if gpm_mask_folder_path is not None:
-        gen_mask(watershed, "FID", "gpm", save_dir=gpm_mask_folder_path)
-    if gfs_mask_folder_path is not None:
-        gen_mask(watershed, "FID", "gfs", save_dir=gfs_mask_folder_path)
+    if not os.path.exists(mask_path):
+        os.makedirs(mask_path)
+    gen_mask(basin_id, watershed, dataname, save_dir = mask_path)
+    mask_file_name = f"mask-{basin_id}-{dataname}.nc"
+    mask_file_path = os.path.join(mask_path, mask_file_name)
+    print(f"Mask file is generated in {mask_path}")
+    return xr.open_dataset(mask_file_path)
 
 
 def mean_by_mask(src, var, mask):
@@ -304,6 +306,4 @@ def mean_by_mask(src, var, mask):
 
     s = np.multiply(mask_array_expand, src_array)
 
-    m = np.nansum(s, axis=(1, 2)) / np.sum(mask_array)
-
-    return m
+    return np.nansum(s, axis=(1, 2)) / np.sum(mask_array)
