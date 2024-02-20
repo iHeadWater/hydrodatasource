@@ -8,13 +8,14 @@
 
 """
 
+
 import os
 import numpy as np
 import xarray as xr
 import geopandas as gpd
-from shapely.geometry import Point, Polygon, shape
 import dask.array as da
-from hydrodata.configs.config import DataConfig
+import itertools
+from shapely.geometry import Polygon
 
 
 def mean_over_basin(basin, basin_id, dataset, data_name, lon="lon", lat="lat"):
@@ -47,9 +48,7 @@ def mean_over_basin(basin, basin_id, dataset, data_name, lon="lon", lat="lat"):
     intersects["Area"] = intersects.area
     intersects = intersects.to_crs(epsg=4326)
 
-    m = intersects.groupby(basin_id).apply(wavg, data_name, "Area")
-
-    return m
+    return intersects.groupby(basin_id).apply(wavg, data_name, "Area")
 
 
 def wavg(group, avg_name, weight_name):
@@ -74,31 +73,28 @@ def grid_to_gdf(dataset, data_name, lon, lat):
     delta_lon = lons.size
     delta_lat = lats.size
 
-    for i in range(delta_lon):
-        for j in range(delta_lat):
-            HBLON = lons[i]
-            HBLAT = lats[j]
+    for i, j in itertools.product(range(delta_lon), range(delta_lat)):
+        HBLON = lons[i]
+        HBLAT = lats[j]
 
-            HBlons.append(HBLON)
-            HBlats.append(HBLAT)
+        HBlons.append(HBLON)
+        HBlats.append(HBLAT)
 
-            geometry.append(
-                Polygon(
-                    [
-                        (HBLON - delta / 2, HBLAT + delta / 2),
-                        (HBLON + delta / 2, HBLAT + delta / 2),
-                        (HBLON + delta / 2, HBLAT - delta / 2),
-                        (HBLON - delta / 2, HBLAT - delta / 2),
-                    ]
-                )
+        geometry.append(
+            Polygon(
+                [
+                    (HBLON - delta / 2, HBLAT + delta / 2),
+                    (HBLON + delta / 2, HBLAT + delta / 2),
+                    (HBLON + delta / 2, HBLAT - delta / 2),
+                    (HBLON - delta / 2, HBLAT - delta / 2),
+                ]
             )
+        )
 
-            try:
-                values.append(float(dataset[data_name].isel(lon=i, lat=j).data))
-            except:
-                values.append(
-                    float(dataset[data_name].isel(longitude=i, latitude=j).data)
-                )
+        try:
+            values.append(float(dataset[data_name].isel(lon=i, lat=j).data))
+        except Exception:
+            values.append(float(dataset[data_name].isel(longitude=i, latitude=j).data))
 
     data = gpd.GeoDataFrame(crs="EPSG:4326", geometry=geometry)
     data["HBlon"] = HBlons
@@ -264,13 +260,12 @@ def gen_mask(basin_id, watershed, dataname, save_dir="."):
         wds.to_netcdf(os.path.join(save_dir, f"mask-{wid}-{dataname}.nc"))
 
 
-
 def gen_single_mask(basin_id, shp_path, dataname, mask_path):
     shp_path = os.path.join(shp_path, basin_id, f"{basin_id}.shp")
     watershed = gpd.read_file(shp_path)
     if not os.path.exists(mask_path):
         os.makedirs(mask_path)
-    gen_mask(basin_id, watershed, dataname, save_dir = mask_path)
+    gen_mask(basin_id, watershed, dataname, save_dir=mask_path)
     mask_file_name = f"mask-{basin_id}-{dataname}.nc"
     mask_file_path = os.path.join(mask_path, mask_file_name)
     print(f"Mask file is generated in {mask_path}")

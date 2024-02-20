@@ -1,12 +1,13 @@
 """
 Author: Wenyu Ouyang
 Date: 2023-11-03 09:16:41
-LastEditTime: 2023-11-08 14:12:36
+LastEditTime: 2024-02-20 19:53:03
 LastEditors: Wenyu Ouyang
 Description: Preprocess scripts for hydrostations data
-FilePath: \hydrodata\hydrodata\preprocess_grdc.py
+FilePath: \hydrodata\hydrodata\processor\preprocess_grdc.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
+
 import json
 import os
 import re
@@ -27,7 +28,7 @@ from hydrodataset import CACHE_DIR
 
 
 # Path to the cache file
-cache_file_path = CACHE_DIR.joinpath("country_phone_codes.json")
+cache_file_path = os.path.join(CACHE_DIR, "country_phone_codes.json")
 STATION_LST_COLUMNS = [
     "ID",
     "STCD",
@@ -65,14 +66,14 @@ def fetch_country_phone_codes():
         raise Error(f"Error fetching data: {response.status_code}")
     countries = response.json()
     country_phone_codes = {
-        country["name"]["common"]: re.sub(
-            r"\D", "", country["idd"]["root"] + country["idd"]["suffixes"][0]
+        country["name"]["common"]: (
+            re.sub(r"\D", "", country["idd"]["root"] + country["idd"]["suffixes"][0])
+            if "idd" in country
+            and "root" in country["idd"]
+            and "suffixes" in country["idd"]
+            and country["idd"]["suffixes"]
+            else "Unknown"
         )
-        if "idd" in country
-        and "root" in country["idd"]
-        and "suffixes" in country["idd"]
-        and country["idd"]["suffixes"]
-        else "Unknown"
         for country in countries
     }
 

@@ -1,14 +1,11 @@
 geopandas
 openpyxl==3.1
+xlrd
 requests
 
 kerchunk
-xarray
-zarr
-dask
 cfgrib
 eccodes
-netCDF4
 h5py
 wget
 chardet
@@ -16,5 +13,4 @@ chardet
 dataretrieval
 pygeohydro
 
-hydroutils
 hydrodataset
