@@ -2,6 +2,8 @@ import numpy as np
 from netCDF4 import Dataset, date2num, num2date
 import time
 from datetime import datetime, timedelta
+from hydrodata.reader import minio
+import xarray as xr
 
 
 def creatspinc(value, data_vars, lats, lons, starttime, filename, resolution):
@@ -76,7 +78,7 @@ def creatspinc(value, data_vars, lats, lons, starttime, filename, resolution):
 def regen_box(bbox, resolution, offset):
     lx = bbox[0]
     rx = bbox[2]
-    LLON = round(
+    LLON = np.round(
         int(lx)
         + resolution * int((lx - int(lx)) / resolution + 0.5)
         + offset
@@ -84,7 +86,7 @@ def regen_box(bbox, resolution, offset):
         / abs(int(lx * 10) // 10 + offset - lx + 0.0000001),
         3,
     )
-    RLON = round(
+    RLON = np.round(
         int(rx)
         + resolution * int((rx - int(rx)) / resolution + 0.5)
         - offset
@@ -95,7 +97,7 @@ def regen_box(bbox, resolution, offset):
 
     by = bbox[1]
     ty = bbox[3]
-    BLAT = round(
+    BLAT = np.round(
         int(by)
         + resolution * int((by - int(by)) / resolution + 0.5)
         + offset
@@ -103,7 +105,7 @@ def regen_box(bbox, resolution, offset):
         / abs(int(by * 10) // 10 + offset - by + 0.0000001),
         3,
     )
-    TLAT = round(
+    TLAT = np.round(
         int(ty)
         + resolution * int((ty - int(ty)) / resolution + 0.5)
         - offset
@@ -143,3 +145,18 @@ def cf2datetime(ds):
     ds.coords["time"].attrs = attrs
 
     return ds
+
+def generate_time_intervals(start_date, end_date):
+    # Initialize an empty list to store the intervals
+    intervals = []
+
+    # Loop over days
+    while start_date <= end_date:
+        # Loop over the four time intervals in a day
+        for hour in ["00", "06", "12", "18"]:
+            intervals.append([start_date.strftime("%Y-%m-%d"), hour])
+
+        # Move to the next day
+        start_date += timedelta(days=1)
+
+    return intervals
