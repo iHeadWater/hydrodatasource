@@ -9,7 +9,7 @@ Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 import os
 import geopandas as gpd
-from hydrodata.processor.minio import GeoProcessor, geojson_to_shp
+from hydrodata.processor.minio_process import GeoProcessor, geojson_to_shp
 
 
 def test_geojson_to_shp(tmp_path):
