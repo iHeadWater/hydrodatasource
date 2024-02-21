@@ -7,12 +7,11 @@ from datetime import datetime
 
 
 def test_gen_mask():
-    mask_path = os.path.join(LOCAL_DATA_PATH, "data_origin", "mask")
     mask = gen_single_mask(
         basin_id = "1_02051500",
-        shp_path = os.path.join(LOCAL_DATA_PATH, "data_origin", "shp"),
-        dataname = "gfs",
-        mask_path = mask_path
+        shp_path = os.path.join(LOCAL_DATA_PATH, "datasets-origin", "shp"),
+        dataname = "gpm",
+        mask_path = os.path.join(LOCAL_DATA_PATH, "datasets-origin", "mask")
     )
     assert mask is not None
     return mask
@@ -30,8 +29,8 @@ def test_gpm():
         basin_id="1_02051500",
         dataname = "gpm",
         local_path = LOCAL_DATA_PATH,
-        mask_path=os.path.join(LOCAL_DATA_PATH, "data_origin", "mask"),
-        shp_path=os.path.join(LOCAL_DATA_PATH, "data_origin", "shp"),
+        mask_path=os.path.join(LOCAL_DATA_PATH, "datasets-origin", "mask"),
+        shp_path=os.path.join(LOCAL_DATA_PATH, "datasets-origin", "shp"),
         dataset="camels",
         time_periods=[["2017-01-01T00:00:00", "2017-01-31T00:00:00"]],
         local_save=True,
@@ -45,8 +44,8 @@ def test_gfs():
         basin_id="1_02051500",
         dataname = "gfs",
         local_path = LOCAL_DATA_PATH,
-        mask_path=os.path.join(LOCAL_DATA_PATH, "data_origin", "mask"),
-        shp_path=os.path.join(LOCAL_DATA_PATH, "data_origin", "shp"),
+        mask_path=os.path.join(LOCAL_DATA_PATH, "datasets-origin", "mask"),
+        shp_path=os.path.join(LOCAL_DATA_PATH, "datasets-origin", "shp"),
         dataset="camels",
         time_periods=[["2017-01-01T00:00:00", "2017-01-31T00:00:00"]],
         local_save=True,
@@ -55,5 +54,43 @@ def test_gfs():
     assert data is not None
     return data
 
-def test_merge():
-    pass
+def test_merge_without_local_data():
+    data = make1nc41basin(
+        basin_id="1_02051500",
+        dataname = "merge",
+        local_path = LOCAL_DATA_PATH,
+        mask_path=os.path.join(LOCAL_DATA_PATH, "datasets-origin", "mask"),
+        shp_path=os.path.join(LOCAL_DATA_PATH, "datasets-origin", "shp"),
+        dataset="camels",
+        time_periods=[
+                ["2017-01-10T00:00:00", "2017-01-11T00:00:00"],
+                ["2017-01-15T00:00:00", "2017-01-20T00:00:00"],
+            ],
+        local_save=True,
+        minio_upload=False,
+        gpm_length=169,
+        gfs_length=23,
+        time_now_length=168
+    )
+    assert data is not None
+    return data
+
+def test_merge_with_local_data():
+    data = make1nc41basin(
+        basin_id="1_02051500",
+        dataname = "merge",
+        local_path = LOCAL_DATA_PATH,
+        mask_path=os.path.join(LOCAL_DATA_PATH, "datasets-origin", "mask"),
+        shp_path=os.path.join(LOCAL_DATA_PATH, "datasets-origin", "shp"),
+        dataset="camels",
+        time_periods=[["2017-01-01T00:00:00", "2017-01-31T00:00:00"]],
+        local_save=True,
+        minio_upload=False,
+        gpm_length=169,
+        gfs_length=23,
+        time_now_length=168,
+        gpm_path = os.path.join(LOCAL_DATA_PATH, "datasets-interim", "1_02051500", "gpm.nc"),
+        gfs_path = os.path.join(LOCAL_DATA_PATH, "datasets-interim", "1_02051500", "gfs.nc"),
+    )
+    assert data is not None
+    return data
