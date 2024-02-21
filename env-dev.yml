@@ -12,12 +12,8 @@ dependencies:
   - xlrd
 
   - kerchunk
-  - xarray
-  - zarr
-  - dask
   - cfgrib
   - eccodes
-  - netCDF4
   - h5py
   # download data from nwis
   - dataretrieval
@@ -35,5 +31,4 @@ dependencies:
     - wget 
     - pytest_asyncio
     - chardet
-    - hydroutils
     - hydrodataset

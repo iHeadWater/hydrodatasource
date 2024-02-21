@@ -18,6 +18,7 @@ from hydrodata.utils.utils import generate_time_intervals
 from hydrodata.processor.mask import gen_single_mask
 from hydrodata.reader import minio
 
+
 def process_data(initial_date, initial_time, mask, dataset):
     # Convert the initial date and time to a datetime object
     current_datetime = datetime.datetime.strptime(
@@ -69,14 +70,15 @@ def process_data(initial_date, initial_time, mask, dataset):
         else:
             # No negative values found, return the data
             return data
-        
+
+
 def make_gpm_dataset(
     time_periods,
     dataset,
     mask,
 ):
     gpm_reader = minio.GPMReader()
-    latest_data = xr.Dataset()     
+    latest_data = xr.Dataset()
     box = (
         mask.coords["lon"][0],
         mask.coords["lat"][0],
@@ -167,7 +169,9 @@ def make_gfs_dataset(
                 data.name = "tp"
                 data = data.to_dataset()
             is_empty = not latest_data.data_vars
-            latest_data = data if is_empty else xr.concat([latest_data, data], dim="time")
+            latest_data = (
+                data if is_empty else xr.concat([latest_data, data], dim="time")
+            )
         if isinstance(latest_data, xr.DataArray):
             latest_data.name = "tp"
             latest_data = latest_data.to_dataset()
@@ -178,18 +182,12 @@ def make_gfs_dataset(
         if is_final_empty:
             final_latest_data = latest_data
         else:
-            final_latest_data = xr.concat(
-                [final_latest_data, latest_data], dim="time"
-            )
+            final_latest_data = xr.concat([final_latest_data, latest_data], dim="time")
     return final_latest_data
 
+
 def make_merge_dataset(
-    gpm_data,
-    gfs_data,
-    time_periods,
-    gpm_length,
-    gfs_length,
-    time_now_length
+    gpm_data, gfs_data, time_periods, gpm_length, gfs_length, time_now_length
 ):
     # 指定时间段
     for time_num in time_periods:
@@ -249,11 +247,11 @@ def make1nc41basin(
     time_periods=[["2017-01-01T00:00:00", "2017-01-31T00:00:00"]],
     local_save=True,
     minio_upload=False,
-    gpm_length = None,
-    gfs_length = None,
-    time_now_length = None,
-    gpm_path = None,
-    gfs_path = None,
+    gpm_length=None,
+    gfs_length=None,
+    time_now_length=None,
+    gpm_path=None,
+    gfs_path=None,
 ):
     if dataset not in ["camels", "wis"]:
         # 流域是国内还是国外，国外是camels，国内是wis
@@ -312,6 +310,7 @@ def make1nc41basin(
 
     return latest_data
 
+
 def make_dataset(
     basin_id="1_02051500",
     data_type = "gpm",
@@ -350,8 +349,8 @@ def make_dataset(
         if time_periods is None:
             raise ValueError("time_periods should not be None")
         return make1nc41basin(
-            basin_id = basin_id,
-            local_path = LOCAL_DATA_PATH,
+            basin_id=basin_id,
+            local_path=LOCAL_DATA_PATH,
             mask_path=os.path.join(LOCAL_DATA_PATH, "mask"),
             shp_path=os.path.join(LOCAL_DATA_PATH, "shp"),
             dataset="camels",
