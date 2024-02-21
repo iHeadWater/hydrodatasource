@@ -14,7 +14,6 @@ import xarray as xr
 import geopandas as gpd
 from shapely.geometry import Point, Polygon, shape
 import dask.array as da
-from hydrodata.configs.config import DataConfig
 
 
 def mean_over_basin(basin, basin_id, dataset, data_name, lon="lon", lat="lat"):
@@ -266,15 +265,20 @@ def gen_mask(basin_id, watershed, dataname, save_dir="."):
 
 
 def gen_single_mask(basin_id, shp_path, dataname, mask_path):
-    shp_path = os.path.join(shp_path, basin_id, f"{basin_id}.shp")
-    watershed = gpd.read_file(shp_path)
-    if not os.path.exists(mask_path):
-        os.makedirs(mask_path)
-    gen_mask(basin_id, watershed, dataname, save_dir = mask_path)
-    mask_file_name = f"mask-{basin_id}-{dataname}.nc"
-    mask_file_path = os.path.join(mask_path, mask_file_name)
-    print(f"Mask file is generated in {mask_path}")
-    return xr.open_dataset(mask_file_path)
+    if os.path.isfile(mask_path):
+        return xr.open_dataset(mask_path)
+    elif dataname in ["gpm", "gfs"]:
+        shp_path = os.path.join(shp_path, basin_id, f"{basin_id}.shp")
+        watershed = gpd.read_file(shp_path)
+        if not os.path.exists(mask_path):
+            os.makedirs(mask_path)
+        gen_mask(basin_id, watershed, dataname, save_dir = mask_path)
+        mask_file_name = f"mask-{basin_id}-{dataname}.nc"
+        mask_file_path = os.path.join(mask_path, mask_file_name)
+        print(f"Mask file is generated in {mask_path}")
+        return xr.open_dataset(mask_file_path)
+    elif dataname != "merge":
+        raise NotImplementedError("Only 'gpm', 'gfs' or 'merge' dataname is available.")
 
 
 def mean_by_mask(src, var, mask):
