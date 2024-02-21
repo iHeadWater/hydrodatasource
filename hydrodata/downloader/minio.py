@@ -39,12 +39,10 @@ class ERA5LCatalog:
         self._description = "https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-land?tab=overview"
         self._spatialresolution = "0.1 x 0.1; Native resolution is 9 km."
         self._temporalresolution = "hourly"
-
         self._datasets = self._get_datasets()
 
     def _get_datasets(self):
         dss = {}
-
         ds = {}
         with FS.open(os.path.join(bucket_name, "geodata/era5_land/era5l.json")) as f:
             era5 = json.load(f)
@@ -52,7 +50,6 @@ class ERA5LCatalog:
             ds["end_time"] = np.datetime64(era5["end"])
             ds["bbox"] = era5["bbox"]
         dss["wis"] = ds
-
         return dss
 
     @property
