@@ -55,6 +55,7 @@ def process_data(initial_date, initial_time, mask, dataset):
         # Adjust the slicing based on the total hours passed
         start_slice = total_hours_passed + 1
         end_slice = start_slice + 6
+        # Minio上存储的gfs数据都是该时刻未来120小时后的数据，因此这里设置了一个报错
         if start_slice > 120:
             raise Exception("This datetime does not have enough data to merge")
         data = data.isel(time=0, valid_time=slice(start_slice, end_slice))
@@ -133,7 +134,7 @@ def make_gpm_dataset(
 def make_gfs_dataset(
     time_periods,
     dataset,
-    mask
+    mask,
 ):
     final_latest_data = xr.Dataset()
     for time_num in time_periods:
@@ -190,9 +191,6 @@ def make_merge_dataset(
     gfs_length,
     time_now_length
 ):
-    gpm_data = make_gpm_dataset()
-    gfs_data = make_gfs_dataset()
-
     # 指定时间段
     for time_num in time_periods:
         start_time = pd.to_datetime(time_num[0])
@@ -204,15 +202,17 @@ def make_merge_dataset(
 
     # 循环处理每个小时的数据
     for specified_time in time_range:
-        m_hours = gpm_length  # 示例值，根据需要调整
-        n_hours = gfs_length  # 示例值，根据需要调整
+        m_hours = gpm_length
+        n_hours = gfs_length
 
+        # 选取specified_time前指定时间段的时间的gpm数据
         gpm_data_filtered = gpm_data.sel(
             time=slice(specified_time - pd.Timedelta(hours=m_hours), specified_time)
         )
+        # 选取specified_time后指定时间段的时间的gfs数据
         gfs_data_filtered = gfs_data.sel(
             time=slice(
-                specified_time + pd.Timedelta(1),
+                specified_time + pd.Timedelta(1), # gfs数据要在
                 specified_time + pd.Timedelta(hours=n_hours),
             )
         )
@@ -237,13 +237,14 @@ def make_merge_dataset(
         combined_data = xr.merge(
             [combined_data, combined_hourly_data], combine_attrs="override"
         )
+    return combined_data
 
 def make1nc41basin(
     basin_id="1_02051500",
     dataname = "gpm",
     local_path = LOCAL_DATA_PATH,
-    mask_path=os.path.join(LOCAL_DATA_PATH, "data_origin", "mask"),
-    shp_path=os.path.join(LOCAL_DATA_PATH, "data_origin", "shp"),
+    mask_path=os.path.join(LOCAL_DATA_PATH, "dataset-origin", "mask"),
+    shp_path=os.path.join(LOCAL_DATA_PATH, "dataset-origin", "shp"),
     dataset="camels",
     time_periods=[["2017-01-01T00:00:00", "2017-01-31T00:00:00"]],
     local_save=True,
@@ -257,33 +258,34 @@ def make1nc41basin(
     if dataset not in ["camels", "wis"]:
         # 流域是国内还是国外，国外是camels，国内是wis
         raise ValueError("Invalid dataset")
-    if os.path.isfile(mask_path):
-        mask = xr.open_dataset(mask_path)
-    else:
-        mask = gen_single_mask(basin_id, shp_path, dataname, mask_path)
+    
+    mask = gen_single_mask(basin_id, shp_path, dataname, mask_path)
+    
+    # 如果是合并数据，需要额外处理
+    if dataname == "merge":
+        mask = gen_single_mask(basin_id, shp_path, "gpm", mask_path)
+        gpm_data = make_gpm_dataset(time_periods, dataset, mask) if gpm_path is None else xr.open_dataset(gpm_path)
+        mask = gen_single_mask(basin_id, shp_path, "gfs", mask_path)
+        gfs_data = make_gfs_dataset(time_periods, dataset, mask) if gfs_path is None else xr.open_dataset(gfs_path)
+        
+    data_functions = {
+        "gpm": lambda: make_gpm_dataset(time_periods, dataset, mask),
+        "gfs": lambda: make_gfs_dataset(time_periods, dataset, mask),
+        "merge": lambda: make_merge_dataset(gpm_data, gfs_data, time_periods, gpm_length, gfs_length, time_now_length)
+    }
+    
+    # 检查数据名称是否有效
+    if dataname not in data_functions:
+        raise NotImplementedError(f"This type of data ({dataname}) is not available for now, please try gpm, gfs, or merge")
 
-    if dataname == "gpm":    
-        latest_data = make_gpm_dataset(time_periods, dataset, mask)
-    elif dataname == "gfs":
-        latest_data = make_gfs_dataset(time_periods, dataset, mask)
-    elif dataname == "merge":
-        if gpm_path is None:
-            gpm_data = make_gpm_dataset(time_periods, dataset, mask)
-        else:
-            gpm_data = xr.open_dataset(gpm_path)
-        if gfs_path is None:
-            gfs_data = make_gpm_dataset(time_periods, dataset, mask)
-        else:
-            gfs_data = xr.open_dataset(gpm_path)
-        latest_data = make_merge_dataset(gpm_data, gfs_data, time_periods, gpm_length, gfs_length, time_now_length)
-    else:
-        raise NotImplementedError("This type of data is not available for now, please try gpm, gfs or merge")
+    # 根据数据名称调用相应的函数
+    latest_data = data_functions[dataname]()
 
     if local_save:
-        local_save_path = os.path.join(local_path, "data_interim", basin_id)
+        local_save_path = os.path.join(local_path, "datasets-interim", basin_id)
         if not os.path.exists(local_save_path):
             os.makedirs(local_save_path)
-        local_file_path = os.path.join(local_path, "data_interim", basin_id, dataname)
+        local_file_path = os.path.join(local_path, "datasets-interim", basin_id, dataname)
         local_file_name = local_file_path + ".nc"
         latest_data.to_netcdf(local_file_name)
 
@@ -316,6 +318,11 @@ def make_dataset(
     local_read = False,
     minio_read = True,
     time_periods = None,
+    gpm_length = None,
+    gfs_length = None,
+    time_now_length = None,
+    gpm_path = None,
+    gfs_path = None,
 ):
     local_path = os.path.join(LOCAL_DATA_PATH, data_type, ".nc")
     if local_read:
@@ -351,4 +358,9 @@ def make_dataset(
             time_periods=time_periods,
             local_save=True,
             minio_upload=True,
+            gpm_length = gpm_length,
+            gfs_length = gfs_length,
+            time_now_length = time_now_length,
+            gpm_path = gpm_path,
+            gfs_path = gfs_path,
         )
