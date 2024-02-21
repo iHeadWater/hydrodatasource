@@ -2,7 +2,6 @@ import numpy as np
 from netCDF4 import Dataset, date2num, num2date
 import time
 from datetime import datetime, timedelta
-from hydrodata.reader import minio
 import xarray as xr
 
 
