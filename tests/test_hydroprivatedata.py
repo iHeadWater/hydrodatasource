@@ -47,4 +47,4 @@ def test_download_csv_minio():
     minio_api.boto3_download_csv(
         client, bucket_name, "driver_data_site24", "driver_data_site24.csv"
     )
-    ur.request(method="GET")
+

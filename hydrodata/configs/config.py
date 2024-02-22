@@ -76,7 +76,7 @@ except Exception as e:
 LOCAL_DATA_PATH = SETTING["local_data_path"]["root"]
 
 MINIO_PARAM = {
-    "endpoint_url": SETTING["minio"]["server_url"],
+    "endpoint_url": SETTING["minio"]["client_endpoint"],
     "access_key": SETTING["minio"]["access_key"],
     "secret_key": SETTING["minio"]["secret"],
     "bucket_name": "test",
