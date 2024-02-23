@@ -77,23 +77,22 @@ LOCAL_DATA_PATH = SETTING["local_data_path"]["root"]
 
 MINIO_PARAM = {
     "endpoint_url": SETTING["minio"]["client_endpoint"],
-    "access_key": SETTING["minio"]["access_key"],
-    "secret_key": SETTING["minio"]["secret"],
-    "bucket_name": "test",
+    "key": SETTING["minio"]["access_key"],
+    "secret": SETTING["minio"]["secret"],
 }
 
 FS = s3fs.S3FileSystem(
     client_kwargs={"endpoint_url": MINIO_PARAM["endpoint_url"]},
-    key=MINIO_PARAM["access_key"],
-    secret=MINIO_PARAM["secret_key"],
+    key=MINIO_PARAM["key"],
+    secret=MINIO_PARAM["secret"],
     use_ssl=False,
 )
 
 # remote_options parameters for xr open_dataset from minio
 RO = {
     "client_kwargs": {"endpoint_url": MINIO_PARAM["endpoint_url"]},
-    "key": MINIO_PARAM["access_key"],
-    "secret": MINIO_PARAM["secret_key"],
+    "key": MINIO_PARAM["key"],
+    "secret": MINIO_PARAM["secret"],
     "use_ssl": False,
 }
 
@@ -102,13 +101,13 @@ RO = {
 S3 = boto3.client(
     "s3",
     endpoint_url=SETTING["minio"]["server_url"],
-    aws_access_key_id=MINIO_PARAM["access_key"],
-    aws_secret_access_key=MINIO_PARAM["secret_key"],
+    aws_access_key_id=MINIO_PARAM["key"],
+    aws_secret_access_key=MINIO_PARAM["secret"],
 )
 MC = Minio(
     SETTING["minio"]["server_url"].replace("http://", ""),
-    access_key=MINIO_PARAM["access_key"],
-    secret_key=MINIO_PARAM["secret_key"],
+    access_key=MINIO_PARAM["key"],
+    secret_key=MINIO_PARAM["secret"],
     secure=False,  # True if using HTTPS
 )
 STATION_BUCKET = "stations"

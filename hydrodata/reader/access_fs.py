@@ -1,25 +1,85 @@
-import gzip
+import logging
 import os
-import pathlib
 
-import fsspec
-import xarray
+import geopandas as gpd
+import intake as itk
+import pandas as pd
+import xarray as xr
 
 import hydrodata.configs.config as conf
 
 
 # 实验性质
-def spec_path(url_path: str | os.PathLike, head='local'):
+def spec_path(url_path: str, head='local'):
     if head == 'local':
-        url_path = pathlib.Path(url_path).resolve()
-        with fsspec.open(url_path) as fp:
-            fp.read()
+        url_path = os.path.join(conf.LOCAL_DATA_PATH, url_path)
+        read_valid_data(url_path)
     elif head == 'minio':
         url_path = 's3://' + url_path
-        with conf.FS.open(url_path) as fp:
-            # 这里改成任何读取数据的代码
-            zip_fp = gzip.GzipFile(fileobj=fp, mode='rb')
-            # 仅作示例，实际上读不通，路径对上就行了
-            ds = xarray.open_dataset(zip_fp.read())
+        read_valid_data(url_path, storage_option=conf.MINIO_PARAM)
     else:
         raise ValueError("head should be 'local' or 'minio'")
+
+
+# Extract from HydroForecast
+def read_valid_data(obj: str, storage_option=None, need_cache=False):
+    """
+    Read valid data from different file types.
+    See https://intake.readthedocs.io/en/latest/plugin-directory.html
+    pip install intake-xarray intake-geopandas
+
+    Parameters:
+    obj (str): The file path or URL of the data.
+    storage_option (dict, optional): The storage options for accessing the data. Defaults to None.
+    need_cache (bool, optional): Whether to cache the data. Defaults to False.
+
+    Returns:
+    object: The data object.
+    """
+    data_obj = None
+    dot_in_obj = '.' in obj
+    if not dot_in_obj:
+        txt_source = itk.open_textfiles(obj, storage_options=storage_option)
+        data_obj = txt_source.read()
+        if need_cache is True:
+            data_obj.to_file(path=obj)
+    elif dot_in_obj:
+        ext_name = obj.split('.')[-1]
+        if ext_name == 'csv':
+            data_obj = pd.read_csv(obj, storage_options=storage_option)
+            if need_cache is True:
+                data_obj.to_csv(obj)
+        elif ext_name == 'nc' or ext_name == 'nc4':
+            nc_source = itk.open_netcdf(obj, storage_options=storage_option)
+            data_obj: xr.Dataset = nc_source.read()
+            if need_cache is True:
+                data_obj.to_netcdf(path=obj)
+        elif ext_name == 'json':
+            json_source = itk.open_json(obj, storage_options=storage_option)
+            data_obj = json_source.read()
+        elif ext_name == 'shp':
+            # Can't run directly, see this: https://github.com/geopandas/geopandas/issues/3129
+            remote_shp_obj = conf.FS.open(obj)
+            data_obj = gpd.read_file(remote_shp_obj, engine='pyogrio')
+            if need_cache is True:
+                data_obj.to_file(path=obj)
+        elif 'grb2' in obj:
+            # ValueError: unrecognized engine cfgrib must be one of: ['netcdf4', 'h5netcdf', 'scipy', 'store', 'zarr']
+            # https://blog.csdn.net/weixin_44052055/article/details/108658464?spm=1001.2014.3001.5501
+            # 似乎只能用conda来装eccodes
+            remote_grib_obj = conf.FS.open(obj)
+            grib_ds = xr.open_dataset(remote_grib_obj)
+            if need_cache is True:
+                grib_ds.to_netcdf(obj)
+        elif ext_name == 'txt':
+            txt_source = itk.open_textfiles(obj, storage_options=storage_option)
+            data_obj = txt_source.read()
+            if need_cache is True:
+                data_obj.to_file(path=obj)
+        else:
+            logging.error(f'Unsupported file type: {ext_name}')
+    else:
+        data_obj = object()
+        logging.error("这是数据存储，不是百度云盘！")
+    # print(data_obj)
+    return data_obj
