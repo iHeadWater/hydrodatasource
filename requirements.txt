@@ -12,5 +12,6 @@ chardet
 
 dataretrieval
 pygeohydro
+pykalman
 
 hydrodataset
