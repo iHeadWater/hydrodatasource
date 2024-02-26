@@ -9,7 +9,6 @@ import xarray as xr
 import hydrodata.configs.config as conf
 
 
-# 实验性质
 def spec_path(url_path: str, head='local'):
     if head == 'local':
         url_path = os.path.join(conf.LOCAL_DATA_PATH, url_path)
@@ -41,18 +40,18 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False):
     if not dot_in_obj:
         txt_source = itk.open_textfiles(obj, storage_options=storage_option)
         data_obj = txt_source.read()
-        if need_cache is True:
+        if (need_cache is True) & (storage_option is not None):
             data_obj.to_file(path=obj)
     elif dot_in_obj:
         ext_name = obj.split('.')[-1]
         if ext_name == 'csv':
             data_obj = pd.read_csv(obj, storage_options=storage_option)
-            if need_cache is True:
+            if (need_cache is True) & (storage_option is not None):
                 data_obj.to_csv(obj)
         elif ext_name == 'nc' or ext_name == 'nc4':
             nc_source = itk.open_netcdf(obj, storage_options=storage_option)
             data_obj: xr.Dataset = nc_source.read()
-            if need_cache is True:
+            if (need_cache is True) & (storage_option is not None):
                 data_obj.to_netcdf(path=obj)
         elif ext_name == 'json':
             json_source = itk.open_json(obj, storage_options=storage_option)
@@ -61,7 +60,7 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False):
             # Can't run directly, see this: https://github.com/geopandas/geopandas/issues/3129
             remote_shp_obj = conf.FS.open(obj)
             data_obj = gpd.read_file(remote_shp_obj, engine='pyogrio')
-            if need_cache is True:
+            if (need_cache is True) & (storage_option is not None):
                 data_obj.to_file(path=obj)
         elif 'grb2' in obj:
             # ValueError: unrecognized engine cfgrib must be one of: ['netcdf4', 'h5netcdf', 'scipy', 'store', 'zarr']
@@ -69,17 +68,16 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False):
             # 似乎只能用conda来装eccodes
             remote_grib_obj = conf.FS.open(obj)
             grib_ds = xr.open_dataset(remote_grib_obj)
-            if need_cache is True:
+            if (need_cache is True) & (storage_option is not None):
                 grib_ds.to_netcdf(obj)
         elif ext_name == 'txt':
             txt_source = itk.open_textfiles(obj, storage_options=storage_option)
             data_obj = txt_source.read()
-            if need_cache is True:
+            if (need_cache is True) & (storage_option is not None):
                 data_obj.to_file(path=obj)
         else:
             logging.error(f'Unsupported file type: {ext_name}')
     else:
         data_obj = object()
         logging.error("这是数据存储，不是百度云盘！")
-    # print(data_obj)
     return data_obj
