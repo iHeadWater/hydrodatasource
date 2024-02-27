@@ -14,8 +14,6 @@ import pandas as pd
 import geopandas as gpd
 import json
 
-bucket_name = MINIO_PARAM["bucket_name"]
-
 
 class ERA5LCatalog:
     """
@@ -40,11 +38,12 @@ class ERA5LCatalog:
         self._spatialresolution = "0.1 x 0.1; Native resolution is 9 km."
         self._temporalresolution = "hourly"
         self._datasets = self._get_datasets()
+        self._bucket_name = "test"
 
     def _get_datasets(self):
         dss = {}
         ds = {}
-        with FS.open(os.path.join(bucket_name, "geodata/era5_land/era5l.json")) as f:
+        with FS.open(os.path.join(self._bucket_name, "geodata/era5_land/era5l.json")) as f:
             era5 = json.load(f)
             ds["start_time"] = np.datetime64(era5["start"])
             ds["end_time"] = np.datetime64(era5["end"])
@@ -149,14 +148,14 @@ class GPMCatalog:
         )
         self._spatialresolution = "0.1 x 0.1; Native resolution is 9 km. (60°S-60°N)"
         self._temporalresolution = "half-hourly; 1 day"
-
+        self._bucket_name = "test"
         self._datasets = self._get_datasets()
 
     def _get_datasets(self):
         dss = {}
         lds = []
         ds = {}
-        with FS.open(os.path.join(bucket_name, "geodata/gpm/gpm.json")) as f:
+        with FS.open(os.path.join(self._bucket_name, "geodata/gpm/gpm.json")) as f:
             gpm = json.load(f)
             ds["time_resolution"] = "30 minutes"
             ds["start_time"] = np.datetime64(gpm["start"])
@@ -165,7 +164,7 @@ class GPMCatalog:
         lds.append(ds)
 
         ds = {}
-        with FS.open(os.path.join(bucket_name, "geodata/gpm1d/gpm1d.json")) as f:
+        with FS.open(os.path.join(self._bucket_name, "geodata/gpm1d/gpm1d.json")) as f:
             gpm = json.load(f)
             ds["time_resolution"] = "1 day"
             ds["start_time"] = np.datetime64(gpm["start"])
@@ -176,7 +175,7 @@ class GPMCatalog:
 
         lds = []
         ds = {}
-        with FS.open(os.path.join(bucket_name, "camdata/gpm/gpm.json")) as f:
+        with FS.open(os.path.join(self._bucket_name, "camdata/gpm/gpm.json")) as f:
             gpm = json.load(f)
             ds["time_resolution"] = "30 minutes"
             ds["start_time"] = np.datetime64(gpm["start"])
@@ -185,7 +184,7 @@ class GPMCatalog:
         lds.append(ds)
 
         ds = {}
-        with FS.open(os.path.join(bucket_name, "camdata/gpm1d/gpm1d.json")) as f:
+        with FS.open(os.path.join(self._bucket_name, "camdata/gpm1d/gpm1d.json")) as f:
             gpm = json.load(f)
             ds["time_resolution"] = "1 day"
             ds["start_time"] = np.datetime64(gpm["start"])
@@ -296,14 +295,14 @@ class GFSCatalog:
         )
         self._spatialresolution = "0.25 x 0.25"
         self._temporalresolution = "hourly; 1-120h"
-
+        self._bucket_name = "test"
         self._datasets = self._get_datasets()
 
     def _get_datasets(self):
         dss = {}
 
         ds = {}
-        with FS.open(os.path.join(bucket_name, "geodata/gfs/gfs.json")) as f:
+        with FS.open(os.path.join(self._bucket_name, "geodata/gfs/gfs.json")) as f:
             gfs = json.load(f)
         dss["wis"] = gfs[self._variable]
 
