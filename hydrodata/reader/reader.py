@@ -107,7 +107,7 @@ class CommonHandler(AOI):
                     2. Check your settings. Make sure you have enough permission to access the minio server and the bucket.")
 
 class DataHandler(CommonHandler):
-    def __init__(self, aoi_type, aoi_param, region = None, time_periods = None, dataname = None, minio_read = False, local_save = True, minio_upload = False):
+    def __init__(self, aoi_type, aoi_param, region = None, time_periods = None, dataname = None, minio_read = True, local_save = True, minio_upload = False):
         super().__init__(aoi_type, aoi_param, region, time_periods)
         self._dataname = dataname
         self._minio_read = minio_read
