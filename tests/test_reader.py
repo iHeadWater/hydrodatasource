@@ -24,9 +24,10 @@ def test_gpm_read_minio():
     data_handler = DataHandler(
         aoi_type="basin", # only basin for now, the streamflow data needs to be reorganized in the minio server,  then to be read.
         aoi_param="86_21401550",
-        dataname="gpm"
+        dataname="gpm",
+        minio_read=True
     )
-    data = data_handler.read_file_from_minio()
+    data = data_handler.handle()
     assert data is not None
     return data
 
@@ -34,9 +35,10 @@ def test_gfs_read_minio():
     data_handler = DataHandler(
         aoi_type="basin",
         aoi_param="86_21401550",
-        dataname="gfs"
+        dataname="gfs",
+        minio_read=True
     )
-    data = data_handler.read_file_from_minio()
+    data = data_handler.handle()
     assert data is not None
     return data
 
@@ -44,9 +46,25 @@ def test_gpm_gfs_read_minio():
     data_handler = DataHandler(
         aoi_type="basin",
         aoi_param="86_21401550",
-        dataname="gpm_gfs"
+        dataname="gpm_gfs",
+        minio_read=True
     )
-    data = data_handler.read_file_from_minio()
+    data = data_handler.handle()
+    assert data is not None
+    return data
+
+def test_gpm_read_with_process():
+    # if there is no data in minio, we want to merge a new one and save in local_data_path
+    data_handler = DataHandler(
+        aoi_type="basin",
+        aoi_param="86_21401550",
+        region="wis",
+        time_periods=[["2017-01-01T00:00:00", "2017-01-31T00:00:00"]],
+        dataname="gpm",
+        minio_read=False,
+        local_save=True
+    )
+    data = data_handler.handle()
     assert data is not None
     return data
 
