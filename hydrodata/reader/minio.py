@@ -21,7 +21,6 @@ from ..configs.config import FS, MINIO_PARAM, RO
 from hydrodata.downloader.minio import ERA5LCatalog, GFSCatalog, GPMCatalog
 from ..utils.utils import regen_box, creatspinc
 
-bucket_name = MINIO_PARAM["bucket_name"]
 dask.config.set({"array.slicing.split_large_chunks": False})
 
 
@@ -111,6 +110,7 @@ class ERA5LReader:
             "Surface thermal radiation downwards",
             "Total precipitation",
         ]
+        self._bucket_name = "test"
 
     def open_dataset(
         self,
@@ -151,7 +151,7 @@ class ERA5LReader:
             self._dataset = "camdata"
 
         with FS.open(
-            os.path.join(bucket_name, f"{self._dataset}/era5_land/era5l.json")
+            os.path.join(self._bucket_name, f"{self._dataset}/era5_land/era5l.json")
         ) as f:
             cont = json.load(f)
             self._starttime = np.datetime64(cont["start"])
@@ -168,7 +168,7 @@ class ERA5LReader:
                 "storage_options": {
                     # no matter you run code in windows or linux, the bucket's format should be Linux style
                     # so we don't use os.join.path
-                    "fo": f"s3://{bucket_name}/{self._dataset}/era5_land/era5_land_.json",
+                    "fo": f"s3://{self._bucket_name}/{self._dataset}/era5_land/era5_land_.json",
                     "target_protocol": "s3",
                     "target_options": RO,
                     "remote_protocol": "s3",
@@ -449,7 +449,7 @@ class GPMReader:
     """
 
     def __init__(self):
-        pass
+        self._bucket_name = "test"
 
     def _get_dataset(self, scale, start_time, end_time, bbox, time_chunks):
         year = str(start_time)[:4]
@@ -457,10 +457,10 @@ class GPMReader:
         day = str(self._endtime)[8:10].zfill(2)
 
         if scale == "Y":
-            minio_path = f"s3://{bucket_name}/{self._dataset}/gpm{self._time_resolution}/{year}/gpm{year}_inc.json"
+            minio_path = f"s3://{self._bucket_name}/{self._dataset}/gpm{self._time_resolution}/{year}/gpm{year}_inc.json"
 
         elif scale == "M":
-            minio_path = f"s3://{bucket_name}/{self._dataset}/gpm{self._time_resolution}/{year}/{month}/gpm{year}{month}_inc.json"
+            minio_path = f"s3://{self._bucket_name}/{self._dataset}/gpm{self._time_resolution}/{year}/{month}/gpm{year}{month}_inc.json"
 
         chunks = {"time": time_chunks}
         ds = xr.open_dataset(
@@ -553,7 +553,7 @@ class GPMReader:
 
         with FS.open(
             os.path.join(
-                bucket_name,
+                self._bucket_name,
                 f"{self._dataset}/gpm{self._time_resolution}/gpm{self._time_resolution}.json",
             )
         ) as f:
@@ -855,7 +855,7 @@ class GFSReader:
             "10u": "u_component_of_wind_10m_above_ground",
             "10v": "v_component_of_wind_10m_above_ground",
         }
-
+        self._bucket_name = "test"
         self._default = "tp"
 
     @property
@@ -905,7 +905,7 @@ class GFSReader:
         elif dataset == "camels":
             self._dataset = "camdata"
 
-        with FS.open(os.path.join(bucket_name, f"{self._dataset}/gfs/gfs.json")) as f:
+        with FS.open(os.path.join(self._bucket_name, f"{self._dataset}/gfs/gfs.json")) as f:
             cont = json.load(f)
             self._paras = cont
 
@@ -929,9 +929,9 @@ class GFSReader:
 
         change = np.datetime64("2022-09-01")
         if creation_date < change:
-            json_url = f"s3://{bucket_name}/{self._dataset}/gfs/gfs_history/{year}/{month}/{day}/gfs{year}{month}{day}.t{creation_time}z.0p25.json"
+            json_url = f"s3://{self._bucket_name}/{self._dataset}/gfs/gfs_history/{year}/{month}/{day}/gfs{year}{month}{day}.t{creation_time}z.0p25.json"
         else:
-            json_url = f"s3://{bucket_name}/{self._dataset}/gfs/{short_name}/{year}/{month}/{day}/gfs{year}{month}{day}.t{creation_time}z.0p25.json"
+            json_url = f"s3://{self._bucket_name}/{self._dataset}/gfs/{short_name}/{year}/{month}/{day}/gfs{year}{month}{day}.t{creation_time}z.0p25.json"
 
         chunks = {"valid_time": time_chunks}
         ds = xr.open_dataset(
