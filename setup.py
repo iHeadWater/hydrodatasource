@@ -6,8 +6,11 @@ import io
 from os import path as op
 from setuptools import setup, find_packages
 
+'''
+# avoid crash because of Chinese like this: https://pastebin.com/drsw2DEL
 with open('README.md') as readme_file:
     readme = readme_file.read()
+''' 
 
 here = op.abspath(op.dirname(__file__))
 
