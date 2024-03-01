@@ -6,8 +6,11 @@ import io
 from os import path as op
 from setuptools import setup, find_packages
 
+'''
+# avoid crash because of Chinese like this: https://pastebin.com/drsw2DEL
 with open('README.md') as readme_file:
     readme = readme_file.read()
+''' 
 
 here = op.abspath(op.dirname(__file__))
 
@@ -41,7 +44,7 @@ setup(
     install_requires=install_requires,
     dependency_links=dependency_links,
     license="BSD license",
-    long_description=readme,
+    # long_description=readme,
     long_description_content_type='text/markdown',
     include_package_data=True,
     keywords='hydrodata',
