@@ -6,6 +6,7 @@ import geopandas as gpd
 import intake as itk
 import pandas as pd
 import xarray as xr
+import zarr
 
 import hydrodata.configs.config as conf
 
@@ -41,8 +42,7 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False):
     dot_in_obj = '.' in obj
     cache_name = obj.lstrip('s3://').split('/')[-1]
     if not dot_in_obj:
-        txt_source = itk.open_textfiles(obj, storage_options=storage_option)
-        data_obj = txt_source.read()
+        data_obj = pd.read_fwf(obj, storage_options=storage_option)
         if (need_cache is True) & (storage_option is not None):
             data_obj.to_file(path=os.path.join(conf.LOCAL_DATA_PATH, cache_name))
     elif dot_in_obj:
@@ -51,9 +51,11 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False):
             data_obj = pd.read_csv(obj, storage_options=storage_option)
             if (need_cache is True) & (storage_option is not None):
                 data_obj.to_csv(path=os.path.join(conf.LOCAL_DATA_PATH, cache_name))
-        elif ext_name == 'nc' or ext_name == 'nc4':
-            nc_source = itk.open_netcdf(obj, storage_options=storage_option)
-            data_obj: xr.Dataset = nc_source.read()
+        elif (ext_name == 'nc') or (ext_name == 'nc4') or (ext_name == 'hdf5'):
+            # 目前没有赋予reference json+netcdf/hdf5/grib2读取能力，还要补充
+            nc_source = itk.datatypes.HDF5(obj, storage_options=storage_option)
+            nc_src_reader = itk.readers.HDF5(nc_source).to_reader()
+            data_obj: xr.Dataset = nc_src_reader.read()
             if (need_cache is True) & (storage_option is not None):
                 data_obj.to_netcdf(path=os.path.join(conf.LOCAL_DATA_PATH, cache_name))
         elif ext_name == 'json':
@@ -82,6 +84,10 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False):
             # data_obj = txt_source.read()
             if (need_cache is True) & (storage_option is not None):
                 data_obj.to_csv(os.path.join(conf.LOCAL_DATA_PATH, cache_name))
+        elif ext_name == '.zarr':
+            zarr_mapper = conf.FS.get_mapper(obj)
+            zarr_store = zarr.storage.KVStore(zarr_mapper)
+            data_obj = xr.open_zarr(zarr_store)
         else:
             logging.error(f'Unsupported file type: {ext_name}')
     else:
