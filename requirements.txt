@@ -1,5 +1,5 @@
 geopandas
-openpyxl==3.1
+openpyxl~=3.1
 xlrd
 requests
 
@@ -14,8 +14,7 @@ dataretrieval
 pygeohydro
 pykalman
 
-boto3~=1.34.34
-aiobotocore>=2.11.2
-s3fs>=2024.2.0
+boto3>=1.34.34, <=1.34.51
+s3fs~=2024.2.0
 minio
 hydrodataset
