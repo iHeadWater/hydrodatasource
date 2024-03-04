@@ -603,7 +603,7 @@ class HydroBasins(HydroData):
         self.attr_data_source_bucket = "basins-interim"
 
     def read_Y_xrdataset(
-        self, gage_id_lst: list, user: str, path: str | os.PathLike | list
+        self, gage_id_lst: list, path: str | os.PathLike | list, user: str
     ):
         if user in SETTING["trainer"]:
             data = xr.open_dataset(path)
@@ -632,6 +632,21 @@ class HydroBasins(HydroData):
             return attr.sel(basin=gage_id_lst)
         return attr[var_lst].sel(basin=gage_id_lst)
 
+    def read_MPPT_xrdataset(
+        self,
+        gage_id_lst: list,
+        path: str | os.PathLike | list,
+        user: str,
+        basin: str = None,
+    ):
+        if user in SETTING["trainer"]:
+            data = xr.open_dataset(path)
+        elif user in SETTING["tester"]:
+            data = path
+        else:
+            data = xr.Dataset()
+        return data.sel(basin=gage_id_lst)
+
     def read_MP(self, gage_id_lst: list, path: str | os.PathLike | list, user: str):
         if user in SETTING["trainer"]:
             mean_prep = xr.open_dataset(path)
@@ -641,3 +656,32 @@ class HydroBasins(HydroData):
             mean_prep = xr.Dataset()
         return mean_prep["p_mean"].sel(basin=gage_id_lst)
 
+    def read_MSP_xrdataset(
+        self,
+        gage_id_lst: list,
+        path: str | os.PathLike | list,
+        user: str,
+        basin: str = None,
+    ):
+        if user in SETTING["trainer"]:
+            data = xr.open_dataset(path)
+        elif user in SETTING["tester"]:
+            data = path
+        else:
+            data = xr.Dataset()
+        return data.sel(basin=gage_id_lst)
+    
+    def read_MGFS_xrdataset(
+        self,
+        gage_id_lst: list,
+        path: str | os.PathLike | list,
+        user: str,
+        basin: str = None,
+    ):
+        if user in SETTING["trainer"]:
+            data = xr.open_dataset(path)
+        elif user in SETTING["tester"]:
+            data = path
+        else:
+            data = xr.Dataset()
+        return data.sel(basin=gage_id_lst)
