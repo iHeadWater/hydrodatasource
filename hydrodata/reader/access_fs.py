@@ -3,7 +3,7 @@ import logging
 import os
 
 import geopandas as gpd
-import intake as itk
+import intake as intk
 import pandas as pd
 import ujson
 import xarray as xr
@@ -69,10 +69,12 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False, need_refer=
             if (need_cache is True) & (storage_option is not None):
                 data_obj.to_csv(path=os.path.join(conf.LOCAL_DATA_PATH, cache_name))
         elif (ext_name == 'nc') or (ext_name == 'nc4') or (ext_name == 'hdf5'):
-            # 目前没有赋予reference json+netcdf/hdf5/grib2读取能力，还要补充
-            nc_source = itk.datatypes.HDF5(obj, storage_options=storage_option)
-            nc_src_reader = itk.readers.HDF5(nc_source).to_reader()
-            data_obj: xr.Dataset = nc_src_reader.read()
+            if need_refer is True:
+                data_obj = gen_refer_and_read_zarr(obj, storage_option=storage_option)
+            else:
+                nc_source = intk.datatypes.HDF5(obj, storage_options=storage_option)
+                nc_src_reader = intk.readers.HDF5(nc_source).to_reader()
+                data_obj: xr.Dataset = nc_src_reader.read()
             if (need_cache is True) & (storage_option is not None):
                 data_obj.to_netcdf(path=os.path.join(conf.LOCAL_DATA_PATH, cache_name))
         elif ext_name == 'json':
@@ -116,8 +118,8 @@ def gen_refer_and_read_zarr(obj_path, storage_option=None):
         with open(obj_path, 'wb') as fpj:
             nc_chunks = SingleHdf5ToZarr(h5f=obj_path)
             fpj.write(ujson.dumps(nc_chunks.translate()).encode())
-    data_type_obj = itk.datatypes.HDF5(obj_json_path, storage_options=storage_option)
-    data_reader_obj = itk.readers.XArrayDatasetReader(data_type_obj).to_reader()
+    data_type_obj = intk.datatypes.HDF5(obj_json_path, storage_options=storage_option)
+    data_reader_obj = intk.readers.XArrayDatasetReader(data_type_obj).to_reader()
     data_obj = data_reader_obj.read()
     return data_obj
 
