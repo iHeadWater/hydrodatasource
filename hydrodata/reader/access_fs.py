@@ -73,7 +73,7 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False, need_refer=
                 data_obj = gen_refer_and_read_zarr(obj, storage_option=storage_option)
             else:
                 nc_source = intk.datatypes.HDF5(obj, storage_options=storage_option)
-                nc_src_reader = intk.readers.HDF5(nc_source).to_reader()
+                nc_src_reader = intk.readers.DaskHDF(nc_source).to_reader()
                 data_obj: xr.Dataset = nc_src_reader.read()
             if (need_cache is True) & (storage_option is not None):
                 data_obj.to_netcdf(path=os.path.join(conf.LOCAL_DATA_PATH, cache_name))
@@ -112,7 +112,7 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False, need_refer=
 
 
 def gen_refer_and_read_zarr(obj_path, storage_option=None):
-    # 先不急于建桶
+    # 有问题尚未解决
     obj_json_path = 's3://references/' + str(obj_path) + '.json'
     if not conf.FS.exists(obj_json_path):
         with open(obj_path, 'wb') as fpj:
