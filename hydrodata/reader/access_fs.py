@@ -47,7 +47,7 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False, need_refer=
     pip install intake-xarray intake-geopandas
 
     Parameters:
-    obj (str): The file path or URL of the data.
+    obj (str): The file path or URL of the data, format is 's3://bucket_name/file_name'.
     storage_option (dict, optional): The storage options for accessing the data. Defaults to None.
     need_cache (bool, optional): Whether to cache the data. Defaults to False.
 
@@ -86,11 +86,11 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False, need_refer=
             data_obj = pd.read_json(obj, storage_options=storage_option)
             if (need_cache is True) & (storage_option is not None):
                 data_obj.to_json(path_or_buf=os.path.join(conf.LOCAL_DATA_PATH, cache_name))
-        elif ext_name == 'shp':
-            # Can't run directly, see this: https://github.com/geopandas/geopandas/issues/3129
-            remote_shp_obj = conf.FS.open(obj)
+        elif ext_name == 'zip':
+            # Now zipfile is used to read shapefile
+            # Can't read shapefile directly, see this: https://github.com/geopandas/geopandas/issues/3129
             # pip install pyogrio
-            data_obj = gpd.read_file(remote_shp_obj, engine='pyogrio')
+            data_obj = gpd.read_file(conf.FS.open(obj), engine='pyogrio')
             if (need_cache is True) & (storage_option is not None):
                 data_obj.to_file(path=os.path.join(conf.LOCAL_DATA_PATH, cache_name))
         elif 'grb2' in obj:
