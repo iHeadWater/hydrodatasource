@@ -3,17 +3,17 @@ import numpy as np
 import xarray as xr
 import collections
 import pandas as pd
-
+import hydrodata.configs.config as conf
 from tqdm import tqdm
 from pathlib import Path
 from abc import ABC
 from typing import Union
-
+from minio import Minio
 from hydroutils import hydro_file, hydro_time
 from hydrodataset import HydroDataset
 from hydrodata.reader.reader import DataHandler
 from hydrodata.configs.config import SETTING
-
+from hydrodata.reader import access_fs
 
 CACHE_DIR = hydro_file.get_cache_dir()
 
@@ -597,91 +597,39 @@ class HydroBasins(HydroData):
 
     def set_data_source_describe(self):
         self.ts_data_source = "MINIO"
-        self.ts_data_source_bucket = "basins-interim"
+        self.ts_data_source_bucket = "basins-origin"
 
         self.attr_data_source = "MINIO"
-        self.attr_data_source_bucket = "basins-interim"
+        self.attr_data_source_bucket = "basins-origin"
 
-    def read_Y_xrdataset(
-        self, gage_id_lst: list, path: str | os.PathLike | list, user: str
-    ):
-        if user in SETTING["trainer"]:
-            data = xr.open_dataset(path)
-        elif user in SETTING["tester"]:
-            data = path
-        else:
-            data = xr.Dataset()
-        return data.sel(basin=gage_id_lst)
-
-    def read_BA_xrdataset(
-        self,
-        gage_id_lst: list,
-        var_lst: list,
-        user: str,
-        path: str | os.PathLike | list,
-    ):
-        if var_lst is None or len(var_lst) == 0:
-            return None
-        if user in SETTING["trainer"]:
-            attr = xr.open_dataset(path)
-        elif user in SETTING["tester"]:
-            attr = path
-        else:
-            attr = xr.Dataset()
+    def read_BA_xrdataset(self, gage_id_lst: list, var_lst: list, path):
+        attr = access_fs.spec_path(path, head="minio")
         if "all" in var_lst:
             return attr.sel(basin=gage_id_lst)
         return attr[var_lst].sel(basin=gage_id_lst)
 
-    def read_MPPT_xrdataset(
-        self,
-        gage_id_lst: list,
-        path: str | os.PathLike | list,
-        user: str,
-        basin: str = None,
-    ):
-        if user in SETTING["trainer"]:
-            data = xr.open_dataset(path)
-        elif user in SETTING["tester"]:
-            data = path
-        else:
-            data = xr.Dataset()
-        return data.sel(basin=gage_id_lst)
-
-    def read_MP(self, gage_id_lst: list, path: str | os.PathLike | list, user: str):
-        if user in SETTING["trainer"]:
-            mean_prep = xr.open_dataset(path)
-        elif user in SETTING["tester"]:
-            mean_prep = path
-        else:
-            mean_prep = xr.Dataset()
+    def read_MP(self, gage_id_lst, path):
+        mean_prep = access_fs.spec_path(path, head="minio")
         return mean_prep["p_mean"].sel(basin=gage_id_lst)
 
-    def read_MSP_xrdataset(
-        self,
-        gage_id_lst: list,
-        path: str | os.PathLike | list,
-        user: str,
-        basin: str = None,
-    ):
-        if user in SETTING["trainer"]:
-            data = xr.open_dataset(path)
-        elif user in SETTING["tester"]:
-            data = path
-        else:
-            data = xr.Dataset()
-        return data.sel(basin=gage_id_lst)
-    
-    def read_MGFS_xrdataset(
-        self,
-        gage_id_lst: list,
-        path: str | os.PathLike | list,
-        user: str,
-        basin: str = None,
-    ):
-        if user in SETTING["trainer"]:
-            data = xr.open_dataset(path)
-        elif user in SETTING["tester"]:
-            data = path
-        else:
-            data = xr.Dataset()
-        return data.sel(basin=gage_id_lst)
+    def merge_nc_minio_datasets(self, folder_path, basin, var_lst):
+        datasets = []
+        basins = []
+
+        url_path = "s3://" + folder_path
+        file_lst = conf.FS.glob(url_path + "/**")
+        if folder_path in file_lst:
+            file_lst.remove(folder_path)
+
+        for file_path in file_lst:
+            basin_id = file_path.split("_")[-1].split(".")[0]
+            if basin_id in basin:
+                basins.append(basin_id)
+                ds = access_fs.spec_path(file_path, head="minio")
+                ds = ds.assign_coords({"basin": basin_id})
+                ds = ds.expand_dims("basin")
+                datasets.append(ds[var_lst])
+
+        merged_dataset = xr.concat(datasets, dim="basin")
+
+        return merged_dataset
