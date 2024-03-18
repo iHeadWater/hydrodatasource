@@ -15,6 +15,9 @@ dependencies:
   - cfgrib
   - eccodes
   - h5py
+
+  - intake
+  
   # download data from nwis
   - dataretrieval
   - pygeohydro
