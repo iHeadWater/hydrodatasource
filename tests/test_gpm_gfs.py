@@ -7,6 +7,7 @@ Description: Test cases for gpm and gfs data
 FilePath: \hydrodata\tests\test_gpm_gfs.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
+
 from hydrodata.processor.mask import gen_single_mask
 from hydrodata.configs.config import LOCAL_DATA_PATH
 from hydrodata.processor.gpm_gfs import make1nc41basin
@@ -17,10 +18,22 @@ from datetime import datetime
 
 def test_gen_mask():
     mask = gen_single_mask(
-        basin_id = "1_02051500",
-        shp_path = os.path.join(LOCAL_DATA_PATH, "datasets-origin", "shp"),
-        dataname = "gpm",
-        mask_path = os.path.join(LOCAL_DATA_PATH, "datasets-origin", "mask")
+        basin_id="1_02051500",
+        shp_path=os.path.join(LOCAL_DATA_PATH, "datasets-origin", "shp"),
+        dataname="gpm",
+        mask_path=os.path.join(LOCAL_DATA_PATH, "datasets-origin", "mask"),
+    )
+    assert mask is not None
+    return mask
+
+
+def test_gen_mask_minio():
+    mask = gen_single_mask(
+        basin_id="10310500",
+        shp_path="s3://basins-origin/basin_shapefiles/rr_CHN_songliao_10310500_basin.zip",
+        dataname="gpm",
+        mask_path=os.path.join(LOCAL_DATA_PATH, "datasets-origin", "mask"),
+        minio=True
     )
     assert mask is not None
     return mask
@@ -37,8 +50,8 @@ def test_time_intervals():
 def test_gpm():
     data = make1nc41basin(
         basin_id="1_02051500",
-        dataname = "gpm",
-        local_path = LOCAL_DATA_PATH,
+        dataname="gpm",
+        local_path=LOCAL_DATA_PATH,
         mask_path=os.path.join(LOCAL_DATA_PATH, "datasets-origin", "mask"),
         shp_path=os.path.join(LOCAL_DATA_PATH, "datasets-origin", "shp"),
         dataset="camels",
@@ -53,8 +66,8 @@ def test_gpm():
 def test_gfs():
     data = make1nc41basin(
         basin_id="1_02051500",
-        dataname = "gfs",
-        local_path = LOCAL_DATA_PATH,
+        dataname="gfs",
+        local_path=LOCAL_DATA_PATH,
         mask_path=os.path.join(LOCAL_DATA_PATH, "datasets-origin", "mask"),
         shp_path=os.path.join(LOCAL_DATA_PATH, "datasets-origin", "shp"),
         dataset="camels",
@@ -65,32 +78,34 @@ def test_gfs():
     assert data is not None
     return data
 
+
 def test_merge_without_local_data():
     data = make1nc41basin(
         basin_id="1_02051500",
-        dataname = "merge",
-        local_path = LOCAL_DATA_PATH,
+        dataname="merge",
+        local_path=LOCAL_DATA_PATH,
         mask_path=os.path.join(LOCAL_DATA_PATH, "datasets-origin", "mask"),
         shp_path=os.path.join(LOCAL_DATA_PATH, "datasets-origin", "shp"),
         dataset="camels",
         time_periods=[
-                ["2017-01-10T00:00:00", "2017-01-11T00:00:00"],
-                ["2017-01-15T00:00:00", "2017-01-20T00:00:00"],
-            ],
+            ["2017-01-10T00:00:00", "2017-01-11T00:00:00"],
+            ["2017-01-15T00:00:00", "2017-01-20T00:00:00"],
+        ],
         local_save=True,
         minio_upload=False,
         gpm_length=169,
         gfs_length=23,
-        time_now_length=168
+        time_now_length=168,
     )
     assert data is not None
     return data
 
+
 def test_merge_with_local_data():
     data = make1nc41basin(
         basin_id="1_02051500",
-        dataname = "merge",
-        local_path = LOCAL_DATA_PATH,
+        dataname="merge",
+        local_path=LOCAL_DATA_PATH,
         mask_path=os.path.join(LOCAL_DATA_PATH, "datasets-origin", "mask"),
         shp_path=os.path.join(LOCAL_DATA_PATH, "datasets-origin", "shp"),
         dataset="camels",
@@ -100,8 +115,12 @@ def test_merge_with_local_data():
         gpm_length=169,
         gfs_length=23,
         time_now_length=168,
-        gpm_path = os.path.join(LOCAL_DATA_PATH, "datasets-interim", "1_02051500", "gpm.nc"),
-        gfs_path = os.path.join(LOCAL_DATA_PATH, "datasets-interim", "1_02051500", "gfs.nc"),
+        gpm_path=os.path.join(
+            LOCAL_DATA_PATH, "datasets-interim", "1_02051500", "gpm.nc"
+        ),
+        gfs_path=os.path.join(
+            LOCAL_DATA_PATH, "datasets-interim", "1_02051500", "gfs.nc"
+        ),
     )
     assert data is not None
     return data

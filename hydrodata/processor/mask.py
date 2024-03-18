@@ -16,6 +16,8 @@ import geopandas as gpd
 import dask.array as da
 import itertools
 from shapely.geometry import Polygon
+import hydrodata.configs.config as conf
+
 
 def mean_over_basin(basin, basin_id, dataset, data_name, lon="lon", lat="lat"):
     """
@@ -259,15 +261,18 @@ def gen_mask(basin_id, watershed, dataname, save_dir="."):
         wds.to_netcdf(os.path.join(save_dir, f"mask-{wid}-{dataname}.nc"))
 
 
-def gen_single_mask(basin_id, shp_path, dataname, mask_path):
+def gen_single_mask(basin_id, shp_path, dataname, mask_path, minio=False):
     if os.path.isfile(mask_path):
         return xr.open_dataset(mask_path)
     elif dataname in ["gpm", "gfs"]:
-        shp_path = os.path.join(shp_path, basin_id, f"{basin_id}.shp")
-        watershed = gpd.read_file(shp_path)
+        if minio == False:
+            shp_path = os.path.join(shp_path, basin_id, f"{basin_id}.shp")
+            watershed = gpd.read_file(shp_path)
+        else:
+            watershed = gpd.read_file(conf.FS.open(shp_path))
         if not os.path.exists(mask_path):
             os.makedirs(mask_path)
-        gen_mask(basin_id, watershed, dataname, save_dir = mask_path)
+        gen_mask(basin_id, watershed, dataname, save_dir=mask_path)
         mask_file_name = f"mask-{basin_id}-{dataname}.nc"
         mask_file_path = os.path.join(mask_path, mask_file_name)
         print(f"Mask file is generated in {mask_path}")

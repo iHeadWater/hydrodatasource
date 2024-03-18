@@ -1,4 +1,6 @@
 from hydrodata.reader import access_fs
+import hydrodata.configs.config as conf
+import geopandas as gpd
 
 
 def test_read_spec():
@@ -8,3 +10,12 @@ def test_read_spec():
         head="minio",
     )
     print(mean_forcing_nc)
+
+
+def test_read_shp():
+    watershed = gpd.read_file(
+        conf.FS.open(
+            "s3://basins-origin/basin_shapefiles/rr_CHN_songliao_10310500_basin.zip"
+        )
+    )
+    print(watershed)
