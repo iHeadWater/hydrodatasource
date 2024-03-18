@@ -9,7 +9,6 @@ import ujson
 import xarray as xr
 import zarr
 from kerchunk.hdf import SingleHdf5ToZarr
-
 import hydrodata.configs.config as conf
 
 
@@ -68,13 +67,19 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False, need_refer=
             data_obj = pd.read_csv(obj, storage_options=storage_option)
             if (need_cache is True) & (storage_option is not None):
                 data_obj.to_csv(path=os.path.join(conf.LOCAL_DATA_PATH, cache_name))
-        elif (ext_name == 'nc') or (ext_name == 'nc4') or (ext_name == 'hdf5'):
+        elif (ext_name == 'nc') or (ext_name == 'nc4') or (ext_name == 'hdf5') or (ext_name == 'h5'):
             if need_refer is True:
                 data_obj = gen_refer_and_read_zarr(obj, storage_option=storage_option)
             else:
+                '''
                 nc_source = intk.datatypes.HDF5(obj, storage_options=storage_option)
                 nc_src_reader = intk.readers.DaskHDF(nc_source).to_reader()
                 data_obj: xr.Dataset = nc_src_reader.read()
+                '''
+                if (ext_name == 'nc4') or (ext_name == 'nc4'):
+                    data_obj = xr.open_dataset(conf.FS.open(obj), chunks='auto')
+                elif (ext_name == 'hdf5') or (ext_name == 'h5'):
+                    data_obj = xr.open_dataset(conf.FS.open(obj), engine='h5netcdf', chunks='auto', phony_dims='access')
             if (need_cache is True) & (storage_option is not None):
                 data_obj.to_netcdf(path=os.path.join(conf.LOCAL_DATA_PATH, cache_name))
         elif ext_name == 'json':
@@ -84,6 +89,7 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False, need_refer=
         elif ext_name == 'shp':
             # Can't run directly, see this: https://github.com/geopandas/geopandas/issues/3129
             remote_shp_obj = conf.FS.open(obj)
+            # pip install pyogrio
             data_obj = gpd.read_file(remote_shp_obj, engine='pyogrio')
             if (need_cache is True) & (storage_option is not None):
                 data_obj.to_file(path=os.path.join(conf.LOCAL_DATA_PATH, cache_name))
@@ -91,8 +97,7 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False, need_refer=
             # ValueError: unrecognized engine cfgrib must be one of: ['netcdf4', 'h5netcdf', 'scipy', 'store', 'zarr']
             # https://blog.csdn.net/weixin_44052055/article/details/108658464?spm=1001.2014.3001.5501
             # 似乎只能用conda来装eccodes
-            remote_grib_obj = conf.FS.open(obj)
-            grib_ds = xr.open_dataset(remote_grib_obj)
+            grib_ds = xr.open_dataset(conf.FS.open(obj))
             if (need_cache is True) & (storage_option is not None):
                 grib_ds.to_netcdf(path=os.path.join(conf.LOCAL_DATA_PATH, cache_name))
         elif ext_name == 'txt':
@@ -101,6 +106,8 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False, need_refer=
                 data_obj.to_csv(os.path.join(conf.LOCAL_DATA_PATH, cache_name))
         elif ext_name == '.zarr':
             zarr_mapper = conf.FS.get_mapper(obj)
+            # KVStore is introduced in zarr specification V3
+            # https://zarr-specs.readthedocs.io/en/latest/v3/stores.html
             zarr_store = zarr.storage.KVStore(zarr_mapper)
             data_obj = xr.open_zarr(zarr_store)
         else:
@@ -112,18 +119,16 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False, need_refer=
 
 
 def gen_refer_and_read_zarr(obj_path, storage_option=None):
-    # 有问题尚未解决
+    # https://github.com/fsspec/kerchunk/discussions/431
     obj_json_path = 's3://references/' + str(obj_path) + '.json'
     if not conf.FS.exists(obj_json_path):
-        with open(obj_path, 'wb') as fpj:
-            nc_chunks = SingleHdf5ToZarr(h5f=obj_path)
-            fpj.write(ujson.dumps(nc_chunks.translate()).encode())
+        obj_path = 's3://' + obj_path
+        with conf.FS.open(obj_path, 'rb') as fpj:
+            nc_chunks = SingleHdf5ToZarr(fpj, obj_path)
+            with conf.FS.open(obj_json_path, 'wb') as fp:
+                fp.write(ujson.dumps(nc_chunks.translate()).encode())
     data_type_obj = intk.datatypes.HDF5(obj_json_path, storage_options=storage_option)
     data_reader_obj = intk.readers.XArrayDatasetReader(data_type_obj).to_reader()
     data_obj = data_reader_obj.read()
     return data_obj
 
-
-def filter_area_from_minio(aoi_type, aoi_param, data_name, state='origin', need_cache=False):
-    # todo
-    minio_path = aoi_type + '/' + aoi_param + '/' + data_name
