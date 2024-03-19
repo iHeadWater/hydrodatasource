@@ -1,6 +1,8 @@
 from hydrodata.reader import access_fs
 import hydrodata.configs.config as conf
 import geopandas as gpd
+
+
 from hydrodata.reader.data_source import HydroBasins
 
 
@@ -28,3 +30,22 @@ def test_read_BA():
         gage_id_lst=["21401550"], var_lst=["all"], path="basins-origin/attributes.nc"
     )
     print(attr.compute())
+
+
+
+def test_read_pp_stations_shp():
+    """
+    # 读取zip中的shpfiles文件
+    pp_stations = gpd.read_file(
+        conf.FS.open(
+            "s3://stations-origin/stations_list/pp_stations.zip"
+        )
+    )
+    
+    """
+    # 读取csv文件
+    pp_stations = access_fs.spec_path(
+        "stations-origin/stations_list/pp_stations.csv",
+        head = 'minio',
+        )
+    print(pp_stations)

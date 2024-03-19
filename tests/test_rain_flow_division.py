@@ -1,8 +1,4 @@
 import pytest
-import sys
-
-sys.path.append('/home/liutianxv/hydrodata')
-
 from hydrodata.cleaner.rain_flow_division import Dcma_esr
 
 
