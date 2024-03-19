@@ -522,9 +522,7 @@ class HydroGrids(HydroData):
         self.grid_data_source = "MINIO"
         self.grid_data_source_bucket = "grids-interim"
 
-    def read_PPT_xrdataset(
-        self, gage_id_lst: list, path: str | os.PathLike | list, user: str, basin: str
-    ):
+    def read_PPT_xrdataset(self, gage_id_lst: list, path, user: str, basin: str):
         if user in SETTING["trainer"]:
             if path is not None:
                 data = xr.open_dataset(os.path.join(path, f"{basin}.nc"))
@@ -544,9 +542,7 @@ class HydroGrids(HydroData):
             raise NotImplementedError
         return data
 
-    def read_GFS_xrdataset(
-        self, gage_id_lst: list, path: str | os.PathLike | list, user: str, basin: str
-    ):
+    def read_GFS_xrdataset(self, gage_id_lst: list, path, user: str, basin: str):
         if user in SETTING["trainer"]:
             if path is not None:
                 data = xr.open_dataset(os.path.join(path, f"{basin}_gfs.nc"))
@@ -566,9 +562,7 @@ class HydroGrids(HydroData):
             raise NotImplementedError
         return data
 
-    def read_SP_xrdataset(
-        self, gage_id_lst: list, path: str | os.PathLike | list, user: str, basin: str
-    ):
+    def read_SP_xrdataset(self, gage_id_lst: list, path, user: str, basin: str):
         if user in SETTING["trainer"]:
             if path is not None:
                 data = xr.open_dataset(os.path.join(path, f"{basin}_soil.nc"))
