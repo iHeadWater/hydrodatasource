@@ -1,6 +1,7 @@
 from hydrodata.reader import access_fs
 import hydrodata.configs.config as conf
 import geopandas as gpd
+from hydrodata.reader.data_source import HydroBasins
 
 
 def test_read_spec():
@@ -15,7 +16,15 @@ def test_read_spec():
 def test_read_shp():
     watershed = gpd.read_file(
         conf.FS.open(
-            "s3://basins-origin/basin_shapefiles/rr_CHN_songliao_10310500_basin.zip"
+            "s3://basins-origin/basin_shapefiles/basin_USA_camels_01411300.zip"
         )
     )
     print(watershed)
+
+
+def test_read_BA():
+    basin = HydroBasins(data_path="./")  # 该路径只是为了实例化该类，测试时可随意指定
+    attr = basin.read_BA_xrdataset(
+        gage_id_lst=["21401550"], var_lst=["all"], path="basins-origin/attributes.nc"
+    )
+    print(attr.compute())

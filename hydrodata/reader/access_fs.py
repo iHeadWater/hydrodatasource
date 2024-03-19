@@ -76,7 +76,7 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False, need_refer=
                 nc_src_reader = intk.readers.DaskHDF(nc_source).to_reader()
                 data_obj: xr.Dataset = nc_src_reader.read()
                 '''
-                if (ext_name == 'nc4') or (ext_name == 'nc4'):
+                if (ext_name == 'nc') or (ext_name == 'nc4'):
                     data_obj = xr.open_dataset(conf.FS.open(obj), chunks='auto')
                 elif (ext_name == 'hdf5') or (ext_name == 'h5'):
                     data_obj = xr.open_dataset(conf.FS.open(obj), engine='h5netcdf', chunks='auto', phony_dims='access')
