@@ -23,6 +23,9 @@ def test_read_shp():
     )
     print(watershed)
 
+    all_watershed = gpd.read_file(conf.FS.open("s3://basins-interim/basins_shp.zip"))
+    print(all_watershed)
+
 
 def test_read_BA():
     basin = HydroBasins(data_path="./")  # 该路径只是为了实例化该类，测试时可随意指定
@@ -30,7 +33,6 @@ def test_read_BA():
         gage_id_lst=["21401550"], var_lst=["all"], path="basins-origin/attributes.nc"
     )
     print(attr.compute())
-
 
 
 def test_read_pp_stations_shp():
@@ -41,11 +43,11 @@ def test_read_pp_stations_shp():
             "s3://stations-origin/stations_list/pp_stations.zip"
         )
     )
-    
+
     """
     # 读取csv文件
     pp_stations = access_fs.spec_path(
         "stations-origin/stations_list/pp_stations.csv",
-        head = 'minio',
-        )
+        head="minio",
+    )
     print(pp_stations)
