@@ -35,19 +35,52 @@ def test_read_BA():
     print(attr.compute())
 
 
-def test_read_pp_stations_shp():
-    """
-    # 读取zip中的shpfiles文件
-    pp_stations = gpd.read_file(
-        conf.FS.open(
-            "s3://stations-origin/stations_list/pp_stations.zip"
-        )
-    )
-
-    """
+def test_read_pp_stations_csv():
     # 读取csv文件
     pp_stations = access_fs.spec_path(
         "stations-origin/stations_list/pp_stations.csv",
         head="minio",
     )
     print(pp_stations)
+
+def test_read_pp_stations_shp():
+    # 读取zip中的shpfiles文件
+    pp_stations = gpd.read_file(
+        conf.FS.open(
+            "s3://stations-origin/stations_list/pp_stations.zip"
+        )
+    )
+    print(pp_stations)
+
+def test_read_zz_stations_csv():
+    # 读取csv文件
+    zz_stations = access_fs.spec_path(
+        "stations-origin/stations_list/zz_stations.csv",
+        head="minio",
+    )
+    print(zz_stations)
+
+def test_read_zz_stations_shp():
+    # 读取zip中的shpfiles文件
+    zz_stations = gpd.read_file(
+        conf.FS.open(
+            "s3://stations-origin/stations_list/zz_stations.zip"
+        )
+    )
+    print(zz_stations)
+def test_read_zq_stations_csv():
+    # 读取csv文件
+    zq_stations = access_fs.spec_path(
+        "stations-origin/stations_list/zq_stations.csv",
+        head="minio",
+    )
+    print(zq_stations)
+
+def test_read_zq_stations_shp():
+    # 读取zip中的shpfiles文件
+    zq_stations = gpd.read_file(
+        conf.FS.open(
+            "s3://stations-origin/stations_list/zq_stations.zip"
+        )
+    )
+    print(zq_stations)
