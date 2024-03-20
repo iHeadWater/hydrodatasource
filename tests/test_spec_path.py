@@ -23,7 +23,7 @@ def test_read_shp():
     )
     print(watershed)
 
-    all_watershed = gpd.read_file(conf.FS.open("s3://basins-interim/basins_shp.zip"))
+    all_watershed = gpd.read_file(conf.FS.open("s3://basins-origin/basins_shp.zip"))
     print(all_watershed)
 
 
@@ -33,6 +33,12 @@ def test_read_BA():
         gage_id_lst=["21401550"], var_lst=["all"], path="basins-origin/attributes.nc"
     )
     print(attr.compute())
+
+    all_attr = access_fs.spec_path(
+        "basins-origin/attributes.nc",
+        head="minio",
+    )
+    print(all_attr.compute())
 
 
 def test_read_pp_stations_shp():
