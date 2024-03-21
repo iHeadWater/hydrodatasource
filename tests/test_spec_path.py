@@ -90,3 +90,12 @@ def test_read_zq_stations_shp():
         )
     )
     print(zq_stations)
+
+def test_read_recovered_data():
+    import pandas as pd
+    test_csv = pd.read_csv('s3://stations-interim/zq_stations/zq_CHN_songliao_10310500.csv', storage_options=conf.MINIO_PARAM)
+    zq_csv = pd.read_csv('s3://stations-interim/zq_stations.csv', storage_options=conf.MINIO_PARAM)
+    dams_gdf = gpd.read_file(conf.FS.open('s3://reservoirs-origin/dams.zip'))
+    rsvrs_gdf = gpd.read_file(conf.FS.open('s3://reservoirs-origin/rsvrs_shp.zip'))
+    rr_df = pd.read_csv('s3://reservoirs-origin/rr_stations/zq_CHN_songliao_10310500.csv', storage_options=conf.MINIO_PARAM)
+    
