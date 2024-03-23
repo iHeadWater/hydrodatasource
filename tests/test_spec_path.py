@@ -122,3 +122,7 @@ def test_read_recovered_data():
 def test_read_river_network():
     test_gdf = gpd.read_file(conf.FS.open('s3://basins-origin/HydroRIVERS_v10_shp.zip'))
     return test_gdf
+
+def test_read_rsvr_origin():
+    test_rsvr_df = pd.read_csv('s3://reservoirs-origin/rr_stations/zq_CHN_songliao_10310500.csv', storage_options=conf.MINIO_PARAM)
+    return test_rsvr_df
