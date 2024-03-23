@@ -34,4 +34,5 @@ dependencies:
     - wget 
     - pytest_asyncio
     - chardet
+    - pykalman
     - hydrodataset

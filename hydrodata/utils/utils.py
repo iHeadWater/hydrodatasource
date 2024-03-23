@@ -2,7 +2,12 @@ import numpy as np
 from netCDF4 import Dataset, date2num, num2date
 import time
 from datetime import datetime, timedelta
+import pandas as pd
+import pint
 import xarray as xr
+
+# please don't remove the following line although it seems not used
+import pint_xarray  # noqa
 
 
 def creatspinc(value, data_vars, lats, lons, starttime, filename, resolution):
@@ -32,7 +37,7 @@ def creatspinc(value, data_vars, lats, lons, starttime, filename, resolution):
 
     # Global Attributes
     gridspi.description = "var"
-    gridspi.history = "Created " + time.ctime(time.time())
+    gridspi.history = f"Created {time.ctime(time.time())}"
     gridspi.source = "netCDF4 python module tutorial"
 
     # Variable Attributes
@@ -120,8 +125,8 @@ def regen_box(bbox, resolution, offset):
 def validate(date_text, formatter, error):
     try:
         return datetime.strptime(date_text, formatter)
-    except ValueError:
-        raise ValueError(error)
+    except ValueError as e:
+        raise ValueError(error) from e
 
 
 def cf2datetime(ds):
@@ -137,13 +142,12 @@ def cf2datetime(ds):
         d = str(tmp.hour).zfill(2)
         e = str(tmp.minute).zfill(2)
         f = str(tmp.second).zfill(2)
-        time_tmp2.append(
-            np.datetime64("{}-{}-{} {}:{}:{}.00000000".format(a, b, c, d, e, f))
-        )
+        time_tmp2.append(np.datetime64(f"{a}-{b}-{c} {d}:{e}:{f}.00000000"))
     ds = ds.assign_coords(time=time_tmp2)
     ds.coords["time"].attrs = attrs
 
     return ds
+
 
 def generate_time_intervals(start_date, end_date):
     # Initialize an empty list to store the intervals
@@ -152,10 +156,73 @@ def generate_time_intervals(start_date, end_date):
     # Loop over days
     while start_date <= end_date:
         # Loop over the four time intervals in a day
-        for hour in ["00", "06", "12", "18"]:
-            intervals.append([start_date.strftime("%Y-%m-%d"), hour])
-
+        intervals.extend(
+            [start_date.strftime("%Y-%m-%d"), hour] for hour in ["00", "06", "12", "18"]
+        )
         # Move to the next day
         start_date += timedelta(days=1)
 
     return intervals
+
+
+def streamflow_unit_conv(streamflow, area, target_unit="mm/d", inverse=False):
+    """Convert the unit of streamflow data to mm/xx(time) for a basin or inverse.
+
+    Parameters
+    ----------
+    streamflow: xarray.Dataset, numpy.ndarray, pandas.DataFrame/Series
+        Streamflow data of each basin.
+    area: xarray.Dataset or pint.Quantity wrapping numpy.ndarray, pandas.DataFrame/Series
+        Area of each basin.
+    target_unit: str
+        The unit to convert to.
+    inverse: bool
+        If True, convert the unit to m^3/s.
+        If False, convert the unit to mm/day or mm/h.
+
+    Returns
+    -------
+    Converted data in the same type as the input streamflow.
+    """
+
+    # Function to handle the conversion for numpy and pandas
+    def np_pd_conversion(streamflow, area, target_unit, inverse):
+        if not inverse:
+            result = (streamflow / area).to(target_unit)
+        else:
+            result = (streamflow * area).to(target_unit)
+        return result.magnitude
+
+    # Handle xarray
+    if isinstance(streamflow, xr.Dataset) and isinstance(area, xr.Dataset):
+        if not inverse:
+            if target_unit not in ["mm/d", "mm/day", "mm/h", "mm/hour"]:
+                raise ValueError("target_unit should be 'mm/d' or 'mm/h'")
+            q = streamflow.pint.quantify()
+            a = area.pint.quantify()
+            r = q[list(q.keys())[0]] / a[list(a.keys())[0]]
+            result = r.pint.to(target_unit).to_dataset(name=list(q.keys())[0])
+        else:
+            if target_unit not in ["m^3/s", "m3/s"]:
+                raise ValueError("target_unit should be 'm^3/s'")
+            r = streamflow.pint.quantify()
+            a = area.pint.quantify()
+            q = r[list(r.keys())[0]] * a[list(a.keys())[0]]
+            result = q.pint.to(target_unit).to_dataset(name=list(r.keys())[0])
+        # dequantify to get normal xr_dataset
+        return result.pint.dequantify()
+
+    # Handle numpy and pandas
+    elif isinstance(streamflow, pint.Quantity) and isinstance(area, pint.Quantity):
+        if type(streamflow.magnitude) not in [np.ndarray, pd.DataFrame, pd.Series]:
+            raise TypeError(
+                "Input streamflow must be xarray.Dataset, or pint.Quantity wrapping numpy.ndarray, or pandas.DataFrame/Series"
+            )
+        if type(area.magnitude) != type(streamflow.magnitude):
+            raise TypeError("streamflow and area must be the same type")
+        return np_pd_conversion(streamflow, area, target_unit, inverse)
+
+    else:
+        raise TypeError(
+            "Input streamflow must be xarray.Dataset, or pint.Quantity wrapping numpy.ndarray, or pandas.DataFrame/Series"
+        )
