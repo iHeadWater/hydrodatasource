@@ -1,10 +1,10 @@
 """
 Author: Wenyu Ouyang
 Date: 2023-10-25 15:16:21
-LastEditTime: 2023-10-25 21:55:03
+LastEditTime: 2024-03-23 19:14:52
 LastEditors: Wenyu Ouyang
-Description: A large dict for describing the source data.
-FilePath: /hydrodata/hydrodata/source_data_dict.py
+Description: To check if user's data format is correct
+FilePath: \hydrodata\hydrodata\processor\check_tidy_data.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 # 定义测站类型代码表

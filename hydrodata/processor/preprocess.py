@@ -20,7 +20,7 @@ from hydrodata.configs.config import (
     STATION_OBJECT,
 )
 from hydrodata.reader.minio_api import minio_upload_csv
-from hydrodata.processor.source_data_dict import convert_to_tidy
+from hydrodata.processor.check_tidy_data import convert_to_tidy
 
 
 def huanren_preprocess():
