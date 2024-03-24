@@ -1,10 +1,10 @@
 """
 Author: Wenyu Ouyang
 Date: 2023-10-25 17:12:30
-LastEditTime: 2024-02-15 16:35:38
+LastEditTime: 2024-03-24 09:26:42
 LastEditors: Wenyu Ouyang
 Description: Preprocess data source -- transform its format to tidy format
-FilePath: \hydrodata\hydrodata\processor\preprocess.py
+FilePath: \hydrodata\hydrodata\reader\stations.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 
@@ -20,7 +20,6 @@ from hydrodata.configs.config import (
     STATION_OBJECT,
 )
 from hydrodata.reader.minio_api import minio_upload_csv
-from hydrodata.processor.check_tidy_data import convert_to_tidy
 
 
 def huanren_preprocess():

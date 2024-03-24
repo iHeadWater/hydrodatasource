@@ -1,6 +1,7 @@
 from hydrodata.reader import access_fs
 import hydrodata.configs.config as conf
 import geopandas as gpd
+import pandas as pd
 
 
 from hydrodata.reader.data_source import HydroBasins
@@ -101,28 +102,28 @@ def test_read_zq_stations_shp():
     print(zq_stations)
 
 
-def test_read_recovered_data():
-    import pandas as pd
-
+def test_read_zqstations_ts():
     test_csv = pd.read_csv(
-        "s3://stations-interim/zq_stations/zq_CHN_songliao_10310500.csv",
+        "s3://stations-origin/zq_stations/zq_CHN_songliao_10310500.csv",
         storage_options=conf.MINIO_PARAM,
     )
-    zq_csv = pd.read_csv(
-        "s3://stations-interim/zq_stations.csv", storage_options=conf.MINIO_PARAM
-    )
+    return test_csv
+
+
+def test_read_reservoirs_info():
     dams_gdf = gpd.read_file(conf.FS.open("s3://reservoirs-origin/dams.zip"))
     rsvrs_gdf = gpd.read_file(conf.FS.open("s3://reservoirs-origin/rsvrs_shp.zip"))
-    rr_df = pd.read_csv(
+    return dams_gdf, rsvrs_gdf
+
+
+def test_read_river_network():
+    test_gdf = gpd.read_file(conf.FS.open("s3://basins-origin/HydroRIVERS_v10_shp.zip"))
+    return test_gdf
+
+
+def test_read_rsvr_ts():
+    test_rsvr_df = pd.read_csv(
         "s3://reservoirs-origin/rr_stations/zq_CHN_songliao_10310500.csv",
         storage_options=conf.MINIO_PARAM,
     )
-    return test_csv, zq_csv, dams_gdf, rsvrs_gdf, rr_df
-
-def test_read_river_network():
-    test_gdf = gpd.read_file(conf.FS.open('s3://basins-origin/HydroRIVERS_v10_shp.zip'))
-    return test_gdf
-
-def test_read_rsvr_origin():
-    test_rsvr_df = pd.read_csv('s3://reservoirs-origin/rr_stations/zq_CHN_songliao_10310500.csv', storage_options=conf.MINIO_PARAM)
     return test_rsvr_df

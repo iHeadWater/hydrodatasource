@@ -2,24 +2,23 @@
 """
 Author: Wenyu Ouyang
 Date: 2023-10-25 15:16:21
-LastEditTime: 2023-10-26 08:56:11
+LastEditTime: 2024-03-24 09:24:59
 LastEditors: Wenyu Ouyang
-Description: Tests for preprocess
-FilePath: \hydrodata\tests\test_hydrodata.py
+Description: Tests for reading basins' data
+FilePath: \hydrodata\tests\test_reader_basins.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 import os.path
 import pathlib
-import urllib3 as ur
 
-from hydrodata.processor import preprocess
+from hydrodata.reader import stations
 from hydrodata.configs import config
 from hydrodata.reader import minio_api
 
 
 def test_content():
     # preprocess.huanren_preprocess()
-    preprocess.biliu_stbprp_decode()
+    stations.biliu_stbprp_decode()
 
 
 def test_upload_csv():
@@ -47,4 +46,3 @@ def test_download_csv_minio():
     minio_api.boto3_download_csv(
         client, bucket_name, "driver_data_site24", "driver_data_site24.csv"
     )
-
