@@ -3,7 +3,7 @@ import hydrodata.configs.config as conf
 import geopandas as gpd
 import pandas as pd
 import pytest
-
+import os
 
 from hydrodata.reader.data_source import HydroBasins
 
@@ -121,3 +121,17 @@ def test_read_rsvr_ts():
         storage_options=conf.MINIO_PARAM,
     )
     return test_rsvr_df
+
+def test_read_pp():
+    pp_df = pd.read_csv(
+        "s3://stations-origin/pp_stations/hour_data/1h/pp_CHN_songliao_10951870.csv",
+        storage_options=conf.MINIO_PARAM,
+    )
+    return pp_df
+
+def test_read_zz():
+    zz_df = pd.read_csv(
+        "s3://stations-origin/zz_stations/hour_data/1h/zz_CHN_dalianxiaoku_21302120.csv",
+        storage_options=conf.MINIO_PARAM,
+    )
+    return zz_df
