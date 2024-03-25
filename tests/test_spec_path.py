@@ -2,10 +2,12 @@ from hydrodata.reader import access_fs
 import hydrodata.configs.config as conf
 import geopandas as gpd
 import pandas as pd
+import pytest
 
 
 from hydrodata.reader.data_source import HydroBasins
 
+@pytest.fixture
 
 def test_read_spec():
     # access_fs.spec_path("st_rain_c.csv")
@@ -75,19 +77,19 @@ def test_read_stations_shp():
 def test_read_stations_list():
     # 读取csv文件
     zz_stations_df = pd.read_csv(
-        "stations-origin/stations_list/zz_stations.csv",
+        "s3://stations-origin/stations_list/zz_stations.csv",
         storage_options=conf.MINIO_PARAM,index_col= False
     )
     print("zz_stations 站点列表如下:")
     print(zz_stations_df)
     pp_stations_df = pd.read_csv(
-        "stations-origin/stations_list/pp_stations.csv",
+        "s3://stations-origin/stations_list/pp_stations.csv",
         storage_options=conf.MINIO_PARAM,index_col= False
     )
     print("zz_stations 站点列表如下:")
     print(pp_stations_df)
     zq_stations_df = pd.read_csv(
-        "stations-origin/stations_list/zq_stations.csv",
+        "s3://stations-origin/stations_list/zq_stations.csv",
         storage_options=conf.MINIO_PARAM,index_col= False
     )
     print("zz_stations 站点列表如下:")
