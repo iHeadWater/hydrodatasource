@@ -86,13 +86,13 @@ def test_read_stations_list():
         "s3://stations-origin/stations_list/pp_stations.csv",
         storage_options=conf.MINIO_PARAM,index_col= False
     )
-    print("zz_stations 站点列表如下:")
+    print("pp_stations 站点列表如下:")
     print(pp_stations_df)
     zq_stations_df = pd.read_csv(
         "s3://stations-origin/stations_list/zq_stations.csv",
         storage_options=conf.MINIO_PARAM,index_col= False
     )
-    print("zz_stations 站点列表如下:")
+    print("zq_stations 站点列表如下:")
     print(zq_stations_df)
     return zz_stations_df,pp_stations_df,zq_stations_df
 
@@ -138,7 +138,7 @@ def test_read_zz():
 
 def test_read_zq():
     zq_df = pd.read_csv(
-        "s3://stations-origin/zq_stations/hour_data/1h/zq_USA_USGS_01181000.csv",
+       "s3://stations-origin/zq_stations/hour_data/1h/zq_USA_usgs_01181000.csv",
         storage_options=conf.MINIO_PARAM,
     )
     return zq_df
