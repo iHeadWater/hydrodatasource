@@ -510,59 +510,6 @@ class SelfMadeCamels(HydroDataset):
         """read mean precipitation of each basin/unit"""
         return self.read_attr_xrdataset(gage_id_lst, ["p_mean"])
 
-
-class HydroGrids(HydroData):
-    def __init__(self, data_path):
-        super().__init__(data_path)
-
-    def get_name(self):
-        return " HydroGrids"
-
-    def set_data_source_describe(self):
-        self.grid_data_source = "MINIO"
-        self.grid_data_source_bucket = "grids-interim"
-
-    def read_PPT_xrdataset(self, gage_id_lst: list, path, user: str, basin: str):
-        if user in SETTING["trainer"]:
-            if path is not None:
-                data = xr.open_dataset(os.path.join(path, f"{basin}.nc"))
-            else:
-                data_handler = DataHandler(
-                    aoi_type="basin",
-                    aoi_param=basin,
-                    dataname="gpm_gfs",
-                    minio_read=True,
-                )
-                data = data_handler.handle()
-
-        elif user in SETTING["tester"]:
-            data = path[gage_id_lst.index(basin)]
-
-        else:
-            raise NotImplementedError
-        return data
-
-    def read_GFS_xrdataset(self, gage_id_lst: list, path, user: str, basin: str):
-        if user in SETTING["trainer"]:
-            if path is not None:
-                data = xr.open_dataset(os.path.join(path, f"{basin}_gfs.nc"))
-            else:
-                data_handler = DataHandler(
-                    aoi_type="basin",
-                    aoi_param=basin,
-                    dataname="gpm_gfs",  # hydrodata写好后修改
-                    minio_read=True,
-                )
-                data = data_handler.handle()
-
-        elif user in SETTING["tester"]:
-            data = path[gage_id_lst.index(basin)]
-
-        else:
-            raise NotImplementedError
-        return data
-
-    def read_SP_xrdataset(self, gage_id_lst: list, path, user: str, basin: str):
         if user in SETTING["trainer"]:
             if path is not None:
                 data = xr.open_dataset(os.path.join(path, f"{basin}_soil.nc"))
@@ -608,10 +555,7 @@ class HydroBasins(HydroData):
         datasets = []
         basins = []
 
-        url_path = "s3://" + folder_path
-        file_lst = conf.FS.glob(url_path + "/**")
-        if folder_path in file_lst:
-            file_lst.remove(folder_path)
+        file_lst = self.read_file_lst(folder_path)
 
         for file_path in file_lst:
             basin_id = file_path.split("_")[-1].split(".")[0]
@@ -625,3 +569,17 @@ class HydroBasins(HydroData):
         merged_dataset = xr.concat(datasets, dim="basin")
 
         return merged_dataset
+
+    def read_grid_data(self, file_lst, basin):
+        for file_path in file_lst:
+            basin_id = file_path.split("_")[-1].split(".")[0]
+            if basin_id in basin:
+                grid_data = access_fs.spec_path(file_path, head="minio")
+                return grid_data
+
+    def read_file_lst(self, folder_path):
+        url_path = "s3://" + folder_path
+        file_lst = conf.FS.glob(url_path + "/**")
+        if folder_path in file_lst:
+            file_lst.remove(folder_path)
+        return file_lst
