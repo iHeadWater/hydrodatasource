@@ -135,3 +135,10 @@ def test_read_zz():
         storage_options=conf.MINIO_PARAM,
     )
     return zz_df
+
+def test_read_zq():
+    zq_df = pd.read_csv(
+        "s3://stations-origin/zq_stations/hour_data/1h/zq_USA_USGS_01181000.csv",
+        storage_options=conf.MINIO_PARAM,
+    )
+    return zq_df
