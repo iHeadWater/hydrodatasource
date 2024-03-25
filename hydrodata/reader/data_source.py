@@ -591,11 +591,8 @@ class HydroBasins(HydroData):
         return " HydroBasins"
 
     def set_data_source_describe(self):
-        self.ts_data_source = "MINIO"
-        self.ts_data_source_bucket = "basins-origin"
-
-        self.attr_data_source = "MINIO"
-        self.attr_data_source_bucket = "basins-origin"
+        self.data_source = "MINIO"
+        self.data_source_bucket = "basins-origin"
 
     def read_BA_xrdataset(self, gage_id_lst: list, var_lst: list, path):
         attr = access_fs.spec_path(path, head="minio")
@@ -605,7 +602,7 @@ class HydroBasins(HydroData):
 
     def read_MP(self, gage_id_lst, path):
         mean_prep = access_fs.spec_path(path, head="minio")
-        return mean_prep["p_mean"].sel(basin=gage_id_lst)
+        return mean_prep["pet_mm_syr"].sel(basin=gage_id_lst)
 
     def merge_nc_minio_datasets(self, folder_path, basin, var_lst):
         datasets = []
