@@ -1,7 +1,7 @@
 import pandas as pd
 import xarray as xr
 
-import hydrodata.configs.config as conf
+import hydrodatasource.configs.config as conf
 
 
 def query_path_from_metadata(time_start=None, time_end=None, bbox=None):

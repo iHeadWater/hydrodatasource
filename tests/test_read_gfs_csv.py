@@ -1,4 +1,4 @@
-import hydrodata.configs.config as conf
+import hydrodatasource.configs.config as conf
 import xarray as xr
 import numpy as np
 import pandas as pd

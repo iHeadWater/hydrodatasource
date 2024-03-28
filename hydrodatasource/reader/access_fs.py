@@ -9,7 +9,7 @@ import ujson
 import xarray as xr
 import zarr
 from kerchunk.hdf import SingleHdf5ToZarr
-import hydrodata.configs.config as conf
+import hydrodatasource.configs.config as conf
 
 
 def spec_path(url_path: str, head='local', need_cache=False, is_dir=False):
