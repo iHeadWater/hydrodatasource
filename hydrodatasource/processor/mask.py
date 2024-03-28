@@ -260,6 +260,7 @@ def gen_mask(basin_id, watershed, dataname, save_dir="."):
 
         wds = grids.to_xarray()
         wds.to_netcdf(os.path.join(save_dir, f"mask-{wid}-{dataname}.nc"))
+        return wds
 
 
 def gen_single_mask(basin_id, shp_path, dataname, mask_path, minio=False):
