@@ -100,12 +100,12 @@ RO = {
 # Set up MinIO client
 S3 = boto3.client(
     "s3",
-    endpoint_url=SETTING["minio"]["server_url"],
+    endpoint_url=SETTING["minio"]["client_endpoint"],
     aws_access_key_id=MINIO_PARAM["key"],
     aws_secret_access_key=MINIO_PARAM["secret"],
 )
 MC = Minio(
-    SETTING["minio"]["server_url"].replace("http://", ""),
+    SETTING["minio"]["client_endpoint"].replace("http://", ""),
     access_key=MINIO_PARAM["key"],
     secret_key=MINIO_PARAM["secret"],
     secure=False,  # True if using HTTPS

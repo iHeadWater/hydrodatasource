@@ -66,7 +66,7 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False, need_refer=
         if ext_name == 'csv':
             data_obj = pd.read_csv(obj, storage_options=storage_option)
             if (need_cache is True) & (storage_option is not None):
-                data_obj.to_csv(path=os.path.join(conf.LOCAL_DATA_PATH, cache_name))
+                data_obj.to_csv(path_or_buf=os.path.join(conf.LOCAL_DATA_PATH, cache_name))
         elif (ext_name == 'nc') or (ext_name == 'nc4') or (ext_name == 'hdf5') or (ext_name == 'h5'):
             if need_refer is True:
                 data_obj = gen_refer_and_read_zarr(obj, storage_option=storage_option)
