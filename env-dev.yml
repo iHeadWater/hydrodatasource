@@ -1,4 +1,4 @@
-name: hydrodata
+name: hydrodatasource
 channels:
   - conda-forge
   - anaconda
@@ -25,6 +25,7 @@ dependencies:
   - pytest
   - black
   - flake8
+  - twine
   - mkdocstrings
   - mkdocstrings-python
   - mkdocs-git-revision-date-plugin
