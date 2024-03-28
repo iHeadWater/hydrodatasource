@@ -1,21 +1,22 @@
 """
 Author: Wenyu Ouyang
 Date: 2023-10-31 09:26:31
-LastEditTime: 2023-10-31 11:39:25
+LastEditTime: 2024-03-28 08:33:33
 LastEditors: Wenyu Ouyang
 Description: Interface for reader
-FilePath: \hydrodata\hydrodata\reader\reader.py
+FilePath: \hydrodata\hydrodatasource\reader\reader.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
+
 from abc import ABC, abstractmethod
-from hydrodata.processor.mask import gen_single_mask
 import os
-from hydrodata.configs.config import LOCAL_DATA_PATH
-from hydrodata.processor.gpm_gfs import make1nc41basin
+import json
 import datetime
 import xarray as xr
-from hydrodata.configs.config import GRID_INTERIM_BUCKET, RO, FS
-import json
+
+from hydrodatasource.processor.gpm_gfs import make1nc41basin
+from hydrodatasource.configs.config import LOCAL_DATA_PATH, GRID_INTERIM_BUCKET, RO, FS
+from hydrodatasource.processor.mask import gen_single_mask
 
 
 class AOI:
@@ -32,13 +33,13 @@ class AOI:
         return self._aoi_param
 
     def get_mask(self):
-    # If it's a polygon, return its mask for data extraction
+        # If it's a polygon, return its mask for data extraction
         if self._aoi_type == "basin":
             return gen_single_mask(
-                basin_id = self._aoi_param,
-                shp_path = os.path.join(LOCAL_DATA_PATH, "datasets-origin", "shp"),
-                dataname = "gpm",
-                mask_path = os.path.join(LOCAL_DATA_PATH, "datasets-origin", "mask")
+                basin_id=self._aoi_param,
+                shp_path=os.path.join(LOCAL_DATA_PATH, "datasets-origin", "shp"),
+                dataname="gpm",
+                mask_path=os.path.join(LOCAL_DATA_PATH, "datasets-origin", "mask"),
             )
         else:
             # basin only for now
@@ -46,10 +47,11 @@ class AOI:
 
     # ... any other useful methods to describe or manipulate the AOI
 
+
 class CommonHandler(AOI):
-    def __init__(self, aoi_type, aoi_param, region = None, time_periods = None):
+    def __init__(self, aoi_type, aoi_param, region=None, time_periods=None):
         super().__init__(aoi_type, aoi_param)
-        self._region = region # camels or wis, "camels" is on behalf of us, "wis" is on behalf of cn
+        self._region = region  # camels or wis, "camels" is on behalf of us, "wis" is on behalf of cn
         self._time_periods = time_periods
 
     @property
@@ -59,7 +61,7 @@ class CommonHandler(AOI):
     @property
     def time_periods(self):
         return self._time_periods
-        
+
     def is_valid_time_periods(self):
         # 检查 time_periods 是否是列表
         if not isinstance(self._time_periods, list):
@@ -80,7 +82,7 @@ class CommonHandler(AOI):
                     return False
 
         return True
-    
+
     def read_file_from_minio(self):
         try:
             json_file_path = os.path.join(self._aoi_param, f"{self._dataname}.json")
@@ -101,27 +103,40 @@ class CommonHandler(AOI):
                 },
             )
         except:
-            raise FileNotFoundError("Please check the file in the minio server. \
+            raise FileNotFoundError(
+                "Please check the file in the minio server. \
                 This error is generally caused by the following two situations:\n\
                     1. There is no file for this basin in the minio server. Please make a new one and upload it.\n\
-                    2. Check your settings. Make sure you have enough permission to access the minio server and the bucket.")
+                    2. Check your settings. Make sure you have enough permission to access the minio server and the bucket."
+            )
+
 
 class DataHandler(CommonHandler):
-    def __init__(self, aoi_type, aoi_param, region = None, time_periods = None, dataname = None, minio_read = True, local_save = True, minio_upload = False):
+    def __init__(
+        self,
+        aoi_type,
+        aoi_param,
+        region=None,
+        time_periods=None,
+        dataname=None,
+        minio_read=True,
+        local_save=True,
+        minio_upload=False,
+    ):
         super().__init__(aoi_type, aoi_param, region, time_periods)
         self._dataname = dataname
         self._minio_read = minio_read
         self._local_save = local_save
         self._minio_upload = minio_upload
-        
+
     @property
     def dataname(self):
         return self._local_file_path
-    
+
     @property
     def dataname(self):
         return self._dataname
-    
+
     @property
     def minio_read(self):
         return self._minio_read
@@ -129,7 +144,7 @@ class DataHandler(CommonHandler):
     @property
     def local_save(self):
         return self._local_save
-    
+
     @property
     def minio_upload(self):
         return self._minio_upload
@@ -137,7 +152,7 @@ class DataHandler(CommonHandler):
     def handle(self):
         if self._minio_read == True:
             return self.read_file_from_minio()
-        else:    
+        else:
             return make1nc41basin(
                 basin_id=self._aoi_param,
                 dataname=self._dataname,
@@ -149,8 +164,8 @@ class DataHandler(CommonHandler):
                 local_save=self._local_save,
                 minio_upload=self._minio_upload,
             )
-    
-    #TODO: time_periods is only used in make1nc41basin funtion, it needs to be used in other cases
+
+    # TODO: time_periods is only used in make1nc41basin funtion, it needs to be used in other cases
 
 
 class DataReaderStrategy(ABC):

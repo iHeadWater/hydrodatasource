@@ -10,8 +10,12 @@ h5py
 wget
 chardet
 
+intake
+
 dataretrieval
 pygeohydro
+
+pykalman
 
 hydrodataset
 

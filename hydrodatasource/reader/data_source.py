@@ -11,10 +11,10 @@ from hydrodataset import HydroDataset
 from hydroutils import hydro_file, hydro_time
 from tqdm import tqdm
 
-import hydrodata.configs.config as conf
-from hydrodata.configs.config import SETTING
-from hydrodata.reader import access_fs
-from hydrodata.reader.reader import DataHandler
+import hydrodatasource.configs.config as conf
+from hydrodatasource.configs.config import SETTING
+from hydrodatasource.reader import access_fs
+from hydrodatasource.reader.reader import DataHandler
 
 CACHE_DIR = hydro_file.get_cache_dir()
 
@@ -510,65 +510,6 @@ class SelfMadeCamels(HydroDataset):
         """read mean precipitation of each basin/unit"""
         return self.read_attr_xrdataset(gage_id_lst, ["p_mean"])
 
-
-class HydroGrids(HydroData):
-    def __init__(self, data_path):
-        super().__init__(data_path)
-
-    def get_name(self):
-        return " HydroGrids"
-
-    def set_data_source_describe(self):
-        self.grid_data_source = "MINIO"
-        self.grid_data_source_bucket = "grids-interim"
-
-    def read_PPT_xrdataset(
-        self, gage_id_lst: list, path: str | os.PathLike | list, user: str, basin: str
-    ):
-        if user in SETTING["trainer"]:
-            if path is not None:
-                data = xr.open_dataset(os.path.join(path, f"{basin}.nc"))
-            else:
-                data_handler = DataHandler(
-                    aoi_type="basin",
-                    aoi_param=basin,
-                    dataname="gpm_gfs",
-                    minio_read=True,
-                )
-                data = data_handler.handle()
-
-        elif user in SETTING["tester"]:
-            data = path[gage_id_lst.index(basin)]
-
-        else:
-            raise NotImplementedError
-        return data
-
-    def read_GFS_xrdataset(
-        self, gage_id_lst: list, path: str | os.PathLike | list, user: str, basin: str
-    ):
-        if user in SETTING["trainer"]:
-            if path is not None:
-                data = xr.open_dataset(os.path.join(path, f"{basin}_gfs.nc"))
-            else:
-                data_handler = DataHandler(
-                    aoi_type="basin",
-                    aoi_param=basin,
-                    dataname="gpm_gfs",  # hydrodata写好后修改
-                    minio_read=True,
-                )
-                data = data_handler.handle()
-
-        elif user in SETTING["tester"]:
-            data = path[gage_id_lst.index(basin)]
-
-        else:
-            raise NotImplementedError
-        return data
-
-    def read_SP_xrdataset(
-        self, gage_id_lst: list, path: str | os.PathLike | list, user: str, basin: str
-    ):
         if user in SETTING["trainer"]:
             if path is not None:
                 data = xr.open_dataset(os.path.join(path, f"{basin}_soil.nc"))
@@ -597,11 +538,8 @@ class HydroBasins(HydroData):
         return " HydroBasins"
 
     def set_data_source_describe(self):
-        self.ts_data_source = "MINIO"
-        self.ts_data_source_bucket = "basins-origin"
-
-        self.attr_data_source = "MINIO"
-        self.attr_data_source_bucket = "basins-origin"
+        self.data_source = "MINIO"
+        self.data_source_bucket = "basins-origin"
 
     def read_BA_xrdataset(self, gage_id_lst: list, var_lst: list, path):
         attr = access_fs.spec_path(path, head="minio")
@@ -611,16 +549,13 @@ class HydroBasins(HydroData):
 
     def read_MP(self, gage_id_lst, path):
         mean_prep = access_fs.spec_path(path, head="minio")
-        return mean_prep["p_mean"].sel(basin=gage_id_lst)
+        return mean_prep["pet_mm_syr"].sel(basin=gage_id_lst)
 
     def merge_nc_minio_datasets(self, folder_path, basin, var_lst):
         datasets = []
         basins = []
 
-        url_path = "s3://" + folder_path
-        file_lst = conf.FS.glob(url_path + "/**")
-        if folder_path in file_lst:
-            file_lst.remove(folder_path)
+        file_lst = self.read_file_lst(folder_path)
 
         for file_path in file_lst:
             basin_id = file_path.split("_")[-1].split(".")[0]
@@ -634,3 +569,17 @@ class HydroBasins(HydroData):
         merged_dataset = xr.concat(datasets, dim="basin")
 
         return merged_dataset
+
+    def read_grid_data(self, file_lst, basin):
+        for file_path in file_lst:
+            basin_id = file_path.split("_")[-1].split(".")[0]
+            if basin_id in basin:
+                grid_data = access_fs.spec_path(file_path, head="minio")
+                return grid_data
+
+    def read_file_lst(self, folder_path):
+        url_path = "s3://" + folder_path
+        file_lst = conf.FS.glob(url_path + "/**")
+        if folder_path in file_lst:
+            file_lst.remove(folder_path)
+        return file_lst

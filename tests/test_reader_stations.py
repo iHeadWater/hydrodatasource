@@ -1,15 +1,17 @@
 """
 Author: Wenyu Ouyang
 Date: 2023-10-31 20:56:23
-LastEditTime: 2023-10-31 21:00:43
+LastEditTime: 2024-03-28 08:39:15
 LastEditors: Wenyu Ouyang
-Description: Test funcs for preprocess.py
-FilePath: \hydrodata\tests\test_preprocess.py
+Description: Test funcs for reading stations' data
+FilePath: \hydrodata\tests\test_reader_stations.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
+
 import os
 import pandas as pd
-from hydrodata.processor.preprocess import huanren_preprocess
+
+from hydrodatasource.reader.stations import huanren_preprocess
 
 
 def test_huanren_preprocess(tmp_path):

@@ -7,16 +7,16 @@ import os
 import numpy as np
 import json
 
-from hydrodata.configs.config import (
+from hydrodatasource.configs.config import (
     FS,
     GRID_INTERIM_BUCKET,
     LOCAL_DATA_PATH,
     MC,
     RO,
 )
-from hydrodata.utils.utils import generate_time_intervals
-from hydrodata.processor.mask import gen_single_mask
-from hydrodata.reader import minio
+from hydrodatasource.utils.utils import generate_time_intervals
+from hydrodatasource.processor.mask import gen_single_mask
+from hydrodatasource.reader import minio
 
 
 def process_data(initial_date, initial_time, mask, dataset):
@@ -133,6 +133,7 @@ def make_gpm_dataset(
             latest_data = xr.concat([latest_data, merge_gpm_data], dim="time")
     return latest_data
 
+
 def make_gfs_dataset(
     time_periods,
     dataset,
@@ -210,7 +211,7 @@ def make_merge_dataset(
         # 选取specified_time后指定时间段的时间的gfs数据
         gfs_data_filtered = gfs_data.sel(
             time=slice(
-                specified_time + pd.Timedelta(1), # gfs数据要在
+                specified_time + pd.Timedelta(1),  # gfs数据要在
                 specified_time + pd.Timedelta(hours=n_hours),
             )
         )
@@ -237,10 +238,11 @@ def make_merge_dataset(
         )
     return combined_data
 
+
 def make1nc41basin(
     basin_id="1_02051500",
-    dataname = "gpm",
-    local_path = LOCAL_DATA_PATH,
+    dataname="gpm",
+    local_path=LOCAL_DATA_PATH,
     mask_path=os.path.join(LOCAL_DATA_PATH, "dataset-origin", "mask"),
     shp_path=os.path.join(LOCAL_DATA_PATH, "dataset-origin", "shp"),
     dataset="camels",
@@ -256,25 +258,37 @@ def make1nc41basin(
     if dataset not in ["camels", "wis"]:
         # 流域是国内还是国外，国外是camels，国内是wis
         raise ValueError("Invalid dataset")
-    
+
     mask = gen_single_mask(basin_id, shp_path, dataname, mask_path)
-    
+
     # 如果是合并数据，需要额外处理
     if dataname == "merge":
         mask = gen_single_mask(basin_id, shp_path, "gpm", mask_path)
-        gpm_data = make_gpm_dataset(time_periods, dataset, mask) if gpm_path is None else xr.open_dataset(gpm_path)
+        gpm_data = (
+            make_gpm_dataset(time_periods, dataset, mask)
+            if gpm_path is None
+            else xr.open_dataset(gpm_path)
+        )
         mask = gen_single_mask(basin_id, shp_path, "gfs", mask_path)
-        gfs_data = make_gfs_dataset(time_periods, dataset, mask) if gfs_path is None else xr.open_dataset(gfs_path)
-        
+        gfs_data = (
+            make_gfs_dataset(time_periods, dataset, mask)
+            if gfs_path is None
+            else xr.open_dataset(gfs_path)
+        )
+
     data_functions = {
         "gpm": lambda: make_gpm_dataset(time_periods, dataset, mask),
         "gfs": lambda: make_gfs_dataset(time_periods, dataset, mask),
-        "merge": lambda: make_merge_dataset(gpm_data, gfs_data, time_periods, gpm_length, gfs_length, time_now_length)
+        "merge": lambda: make_merge_dataset(
+            gpm_data, gfs_data, time_periods, gpm_length, gfs_length, time_now_length
+        ),
     }
-    
+
     # 检查数据名称是否有效
     if dataname not in data_functions:
-        raise NotImplementedError(f"This type of data ({dataname}) is not available for now, please try gpm, gfs, or merge")
+        raise NotImplementedError(
+            f"This type of data ({dataname}) is not available for now, please try gpm, gfs, or merge"
+        )
 
     # 根据数据名称调用相应的函数
     latest_data = data_functions[dataname]()
@@ -283,7 +297,9 @@ def make1nc41basin(
         local_save_path = os.path.join(local_path, "datasets-interim", basin_id)
         if not os.path.exists(local_save_path):
             os.makedirs(local_save_path)
-        local_file_path = os.path.join(local_path, "datasets-interim", basin_id, dataname)
+        local_file_path = os.path.join(
+            local_path, "datasets-interim", basin_id, dataname
+        )
         local_file_name = local_file_path + ".nc"
         latest_data.to_netcdf(local_file_name)
 

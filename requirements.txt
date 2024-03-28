@@ -10,11 +10,15 @@ h5py
 wget
 chardet
 
+intake
+
 dataretrieval
 pygeohydro
+
 pykalman
 
-boto3>=1.34.34, <=1.34.51
-s3fs~=2024.2.0
-minio
+# this part has been updated in hydroutils which will be installed as a dependency when installing hydrodataset
+# boto3>=1.34.34, <=1.34.51
+# s3fs~=2024.2.0
+# minio
 hydrodataset

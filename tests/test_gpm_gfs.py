@@ -1,19 +1,20 @@
 """
 Author: Shuolong Xu
 Date: 2024-02-15 16:40:34
-LastEditTime: 2024-02-20 19:55:03
+LastEditTime: 2024-03-28 08:42:05
 LastEditors: Wenyu Ouyang
 Description: Test cases for gpm and gfs data
 FilePath: \hydrodata\tests\test_gpm_gfs.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 
-from hydrodata.processor.mask import gen_single_mask
-from hydrodata.configs.config import LOCAL_DATA_PATH
-from hydrodata.processor.gpm_gfs import make1nc41basin
-from hydrodata.utils.utils import generate_time_intervals
 import os
 from datetime import datetime
+
+from hydrodatasource.processor.mask import gen_single_mask
+from hydrodatasource.configs.config import LOCAL_DATA_PATH
+from hydrodatasource.processor.gpm_gfs import make1nc41basin
+from hydrodatasource.utils.utils import generate_time_intervals
 
 
 def test_gen_mask():
@@ -33,7 +34,7 @@ def test_gen_mask_minio():
         shp_path="s3://basins-origin/basin_shapefiles/rr_CHN_songliao_10310500_basin.zip",
         dataname="gpm",
         mask_path=os.path.join(LOCAL_DATA_PATH, "datasets-origin", "mask"),
-        minio=True
+        minio=True,
     )
     assert mask is not None
     return mask

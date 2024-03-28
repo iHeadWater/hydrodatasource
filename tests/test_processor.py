@@ -1,15 +1,16 @@
 """
 Author: Wenyu Ouyang
 Date: 2023-10-28 08:28:37
-LastEditTime: 2023-10-31 09:45:31
+LastEditTime: 2024-03-28 08:41:56
 LastEditors: Wenyu Ouyang
 Description: Test funcs for processor
 FilePath: \hydrodata\tests\test_processor.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
+
 import os
 import geopandas as gpd
-from hydrodata.processor.minio_process import GeoProcessor, geojson_to_shp
+from hydrodatasource.processor.minio_process import GeoProcessor, geojson_to_shp
 
 
 def test_geojson_to_shp(tmp_path):

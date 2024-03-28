@@ -1,42 +1,102 @@
 <!--
  * @Author: Wenyu Ouyang
  * @Date: 2023-10-25 14:43:12
- * @LastEditTime: 2024-02-12 12:59:44
+ * @LastEditTime: 2024-03-23 19:20:11
  * @LastEditors: Wenyu Ouyang
  * @Description: Chinese version README
  * @FilePath: \hydrodata\README.zh.md
  * Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 -->
-# hydrodata
+# hydrodatasource
 
-## 简介
+[![image](https://img.shields.io/pypi/v/hydrodatasource.svg)](https://pypi.python.org/pypi/hydrodatasource)
+<!-- [![image](https://img.shields.io/conda/vn/conda-forge/hydrodatasource.svg)](https://anaconda.org/conda-forge/hydrodatasource) -->
 
-本项目主要用来处理minio上初步处理的内部数据，因为内部数据通常形式比较繁杂，因此处理起来会很麻烦，所以内部数据转换到minio上的过程在内部Gitlab项目中进行处理，一事一议，就不再（也基本没法）制作标准化的处理流程了。
+-   Free software: MIT license
+-   Documentation: <https://hydrodatasource.readthedocs.io/en/latest/>
+ 
+尽管水文领域存在很多流域水文数据集，但是一个很显然的问题是还有很多数据没被整理到公开的数据集中，包括
 
-minio上的数据文件组织结构是这样的（暂定，还需进一步完善）：
+- 时效性的问题没来得及整理的
+- 没被现有数据集考虑到的
+- 以及不会被公开的数据。
+
+这些数据占据着相当的比例，尤其是对于中国的水文数据来说。比如，最常用的CAMELS数据集数据到2014年12月，马上也快10年之久了；GRDC径流数据虽然有用，但是也很少被专门做到某个数据集中，GFS、GPM、SMAP等一系列实时近实时的网格数据也很少被做成数据集，更多的是ERA5Land等质量更高的数据被做到数据集中以进行研究；大量不公开的数据自然也无法被拿去构建数据集。
+
+但是这些数据又非常重要，为此，我们构思了这个hydrodatasource仓库，旨在提供一个能统一整理这些数据的方式，使得这些数据能够在以流域为基本单元的科研和生产背景下被更好地利用。关于完整数据集，请关注：[hydrodataset](https://github.com/OuyangWenyu/hydrodataset)
+
+更具体一点来说，这个仓库的目标是提供一个统一的流域水文数据获取、管理和使用路径及方法，使得水文计算尤其是基于人工智能方面的水文模型计算更加方便。
+
+## How many data sources are there
+
+以流域为最终数据描述主体的角度来考虑，目前我们的数据源主要包括以下几类：
+
+| **一级分类** | **二级分类** | **更新频率** | **数据结构** | **具体数据源** |
+| --- | --- | --- | --- | --- |
+| 基础 | 地理图 | 历史存档 | 矢量 | 流域边界、站点等shapefile |
+|  | 高程数据 | 历史存档 | 栅格 | [DEM](https://github.com/DahnJ/Awesome-DEM)|
+|  | 属性数据 | 历史存档 | 表格 | HydroATLAS数据集 |
+| 气象 | 再分析数据集 | 历史存档、延迟动态 | 栅格 | ERA5Land |
+|  | 遥感降水 | 历史存档、近实时动态 | 栅格 | GPM |
+|  | 气象模式预报 | 历史存档、实时滚动 | 栅格 | GFS |
+|  | AI气象预报 | 实时滚动 | 栅格 | AIFS |
+|  | 地面气象站 | 历史存档 | 表格 | NOAA 气象站 |
+|  | 地面雨量站 | 历史存档、实时/延迟动态 | 表格 | 非公开雨量站 |
+| 水文 | 遥感土壤含水量 | 历史存档、近实时动态 | 栅格 | SMAP |
+|  | 墒情站 | 历史存档、实时动态 | 表格 | 非公开的墒情站 |
+|  | 地面水文站 | 历史存档 | 表格 | USGS |
+|  | 地面水文站 | 历史存档、实时动态 | 表格 | 非公开的水位、流量站 |
+|  | 径流数据集 | 历史存档 | 表格 | GRDC |
+
+注：更新频率不完全指实际数据源的更新频率，主要以本仓库的数据更新频率为准。
+
+## What are the main features
+
+在具体使用之前，有必要了解下本仓库的主要特点，这样才能知道怎么使用，希望用户能保持一点耐心。
+
+我们的想法是能让有不同硬件资源的人都能比较方便地使用这个工具。关于硬件资源，这里稍作介绍。由于整个仓库涉及地数据类型很多，数据量也很大，所以作为开发者的我们是构建了一个 MinIO 服务。MinIO 是一个开源的对象存储服务，可以很方便地部署在本地或者云端，我们这里是部署在本地的。这样，我们就可以把数据存储在 MinIO 上，然后通过 MinIO 提供的 API 来读取数据。这样做的好处是，我们能有效地管理大量的数据，和开发统一访问的接口，使得数据的读取更加方便。但是，这样做的缺点是，需要一定的硬件资源，比如硬盘空间、内存等。所以，我们也考虑针对一部分数据提供完全本地文件的交互方式来读取，但是这种方式我们就不会做完全功能的测试覆盖了。
+
+基于上面的基本思路，针对不同的数据，我们的处理方式也有所区别。
+
+- 对于非公开的数据，公开的代码部分主要是考虑提供工具函数，以支持用户自己处理自己的数据，以便后续运行我们提供的开源模型。当然，开发者自己内部会提供数据的读取服务。
+- 对于公开的数据，我们会提供一些数据下载、格式转换和读取的代码，以支持用户在自己本地上操作数据。
+
+接下来，我们就按这两部分来展开。
+
+### For non-public data
+
+非公开的数据主要就是地面站点的数据，所以我们就针对这部分数据，提供一些数据转换格式的工具，我们会定义一个用户需要准备的数据格式，然后后续的部分就直接调用工具即可。总的来说，我们会希望用户按照一定的表格格式准备自己的数据，然后我们会处理成 netcdf 格式的数据，以便后续的模型读取。至于具体要准备的数据格式，我们提供了一个data_checker函数来检查数据格式，用户可以通过这个函数来了解数据的具体格式。后续我们也会补充一个文档来详细说明数据的具体格式。
+
+### For public data
+
+公开的数据主要是一些已经被整理成数据集的数据，我们会提供一些数据下载、格式转换和读取的代码，以支持用户在自己本地上操作数据。这部分数据主要是一些已经被整理成数据集的数据，比如 CAMELS、GRDC、ERA5Land 等。
+
+但是，如前所述，我们不会提供针对本地文件的完整测试覆盖，我们主要在MinIO上测试相关代码。
+
+## How to use
+
+### Installation
+
+We recommend installing the package via pip:
+
+```bash
+pip install hydrodatasource
+```
+
+### Usage
+
+我们约定的数据文件组织结构第一集目录是这样的：
     
 ```
 ├── datasets-origin
+├── datasets-interim
 ├── basins-origin
-│   ├── basins_list
-├── reservoirs-origin
-│   ├── reservoirs_list
-│   ├── res_liaob_biliuhe
-│   │   ├── liaob_biliuhe_inflow.csv
-├── rivers-origin
-├── grids-origin
-│   ├── DEM
-│   |   ├── xxx (产品名)
-├── GFS
-│   ├── xxxx (年份)
-├── stations-origin
-│   ├── stations_list
-│   │  ├── pp.csv
-│   ├── pp_stations
-│   │  ├── pp_1_01013500.csv
 ├── basins-interim
-│   ├── 1_01013500_datatype_process
+├── reservoirs-origin
+├── reservoirs-interim
+├── grids-origin
 ├── grids-interim
+├── stations-origin
 ├── stations-interim
 ```
 
@@ -44,125 +104,13 @@ minio上的数据文件组织结构是这样的（暂定，还需进一步完善
 
 origin文件夹中的数据是原始数据，interim文件夹中的数据是经过初步处理的数据，基本上来说，origin中的数据就是前期在gitlab的一事一议项目中处理之后的数据结果，interim就是这里要把origin的数据根据一项什么具体需求处理成什么格式后得到的数据。
 
-**本项目的功能主要是读取origin中的数据，然后根据一些具体需求，处理成interim中的数据，并提供一些本地文件夹和minio桶同步的功能（同步推荐实用minio提供的终端工具）。还有一个预期的功能是在读取本地或者minio的数据时让用户没有感觉，只要通过简单设定，就能从minio或者本地读取同样的数据**
+这样的分类能完全覆盖表格中的数据类型。
 
-## 读取origin数据
+对于非公开站点数据：
 
-待完成……
-
-## 处理origin数据
-
-待完成……
-
-## 同步本地文件夹和minio桶
-
-这部分推荐使用 MinIO 客户端 mc 的 mirror 命令，具体的技术细节可以参考内部的技术文档。
-
-## 构建兼容本地和minio数据的读取器
-
-如果要兼容之前所有的数据，那么本质上就是需要把原来所有的数据读取代码从只能读本地的重构到能兼容minio和本地的，因为这个之前单纯就是科研，所以没太考虑，那么就导致如果具体执行，这个工作量是很大的。
-
-所以我们要采取一种就是有优先级重要性的建设方式，像成熟的数据集和我们自己内部构建的流域集总式（流域均值）的数据集，这种数据量也都不大，可以先不管了，就还维持原来的读取方式，但是对于一些大数据量的数据集，比如格点数据，就需要重点考虑建设这个读取器了。
-
-基本的构建思路是这样的：
-
-1. 中心化数据读取逻辑：创建一个统一的数据读取函数，所有需要读取数据的地方都调用这个函数。这样，只需要在一个地方修改读取数据的逻辑，而不是在代码的多个地方。当然具体实现还得结合具体的情况，但是要尽可能地把数据读取的功能统一到一个module下面，然后通过不同的函数来实现各类具体的读取逻辑。
-2. 使用配置来切换数据源：使用配置和一点点设计模式，例如策略模式等，来实现数据源的切换。
-3. 逐步重构：代码涉及读取数据的环节可能很多，所以就一点点地修改测试，先把数据读取比较密集频繁的地方，比如torch dataset类里面的内容重构了，再统一检查其他地方，逐步完善。
-   
-# hydro-opendata
-
-
-[![image](https://img.shields.io/pypi/v/hydro-opendata.svg)](https://pypi.python.org/pypi/hydro-opendata)
-<!-- [![image](https://img.shields.io/conda/vn/conda-forge/hydro-opendata.svg)](https://anaconda.org/conda-forge/hydro-opendata) -->
-
-
-**可用于水文学科学计算的开放数据的获取、管理和使用路径及方法。**
-
-
--   Free software: MIT license
--   Documentation: <https://hydro-opendata.readthedocs.io/en/latest/>
- 
-## 背景
-
-在人工智能的大背景下，数据驱动的水文模型已得到广泛研究和应用。同时，得益于遥测技术发展和数据开放共享，获取数据变得容易且选择更多了。对于研究者而言，需要什么数据？能获取什么数据？从哪下载？怎么读取？如何处理？等一系列问题尤为重要，也是源平台数据中心建设需要解决的问题。
-
-本仓库主要基于外部开放数据，梳理数据类别和数据清单，构建能够实现数据“下载-存储-处理-读写-可视化”的数据流及其技术栈。
-
-## 总体方案
-
-![数据框架图](images/framework.png)
-
-## 主要数据源
-
-从现有认识来看，可用于水文建模的外部数据包括但不限于以下几类：
-
-| **一级分类** | **二级分类** | **更新频率** | **数据结构** | **示例** |
-| --- | --- | --- | --- | --- |
-| 基础地理 | 水文要素 | 静态 | 矢量 | 流域边界、站点 |
-|  | 地形地貌 | 静态 | 栅格 | [DEM](https://github.com/DahnJ/Awesome-DEM)、流向、土地利用 |
-| 天气气象 | 再分析 | 动态 | 栅格 | ERA5 |
-|  | 近实时 | 动态 | 栅格 | GPM |
-|  | 预测 | 滚动 | 栅格 | GFS |
-| 图像影像 | 卫星遥感 | 动态 | 栅格 | Landsat、Sentinel、MODIS |
-|  | 街景图片 | 静态 | 多媒体 |  |
-|  | 监控视频 | 动态 | 多媒体 |  |
-|  | 无人机视频 | 动态 | 多媒体 |  |
-| 众包数据 | POI | 静态 | 矢量 | 百度地图 |
-|  | 社交网络 | 动态 | 多媒体 | 微博 |
-| 水文数据 | 河流流量数据 | 动态 | 表格 | GRDC |
-
-从数据更新频率上来看，分为静态数据和动态数据。
-
-从数据结构上看，分为矢量、栅格和多媒体数据等非结构化数据。
-
-## 结构及功能框架
-
-![代码仓](images/repos.jpg)
-
-### wis-stac
-
-数据清单及其元数据，根据AOI返回数据列表。
-
-### wis-downloader
-
-从外部数据源下载数据。根据数据源不同，下载方法不尽相同，主要包括：
-
-- 通过集成官方提供的api，如[bmi_era5](https://github.com/gantian127/bmi_era5)
-- 通过获取数据的下载链接，如[Herbie](https://github.com/blaylockbk/Herbie)、[MultiEarth](https://github.com/bair-climate-initiative/multiearth)、[Satpy](https://github.com/pytroll/satpy)，大部分云数据平台如Microsoft、AWS等数据组织的方式大多为[stac](https://github.com/radiantearth/stac-spec)
-
-### wis-processor
-
-对数据进行预处理，如流域平局、提取特征值等。
-
-使用[kerchunk](https://fsspec.github.io/kerchunk/)将不同格式数据转换成[zarr](https://zarr.readthedocs.io/en/stable/)格式存储到[MinIO](http://minio.waterism.com:9090/)服务器中，实现数据的跨文件读取，提高数据读取效率。
-
-### wis-s3api
-
-数据在MinIO中经过上述写块处理后，即可跨文件读取。只需要提供数据的类别、时间范围和空间范围等参数即可读取数据。
-
-对于遥感影像数据，数据量大且多，无法逐一下载后读取。可以采用[stac+stackstac](./data_api/examples/RSImages.ipynb)直接将Sentinel或Landsat数据读入到xarray的dataset中。
-
-
-### wis-gistools
-
-集成一些常用的GIS工具，如克里金插值、泰森多边形等。
-
-- 克里金插值
-    - [PyKrige](https://github.com/GeoStat-Framework/PyKrige)
-- 泰森多边形
-    - [WhiteboxTools.VoronoiDiagram](https://whiteboxgeo.com/manual/wbt_book/available_tools/gis_analysis.html?highlight=voro#voronoidiagram)
-    - [scipy.spatial.Voronoi](https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.Voronoi.html)
-- 流域划分
-    - [Rapid Watershed Delineation using an Automatic Outlet Relocation Algorithm](https://github.com/xiejx5/watershed_delineation)
-    - [High-performance watershed delineation algorithm for GPU using CUDA and OpenMP](https://github.com/bkotyra/watershed_delineation_gpu)
-- 流域平均
-    - [plotting and creation of masks of spatial regions](https://github.com/regionmask/regionmask)
-
-## 可视化
-
-在Jupyter平台中使用[leafmap](https://github.com/giswqs/leafmap)展示地理空间数据。
-
-## 其它
-
-- [hydro-GIS资源目录](./resources/README.md)
+1. 首先，用户需要准备好自己的数据，数据格式要求是表格格式，执行下面的命令了解数据的具体格式：
+    ```python
+    from hydrodatasource import station
+    station.get_station_format()
+    ```
+2. 把文件放到文件夹 stations-origin 中，具体的上级绝对路径请在自己电脑用户文件夹下面的 hydro_settings.yml文件中配置。

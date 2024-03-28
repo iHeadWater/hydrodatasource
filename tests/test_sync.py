@@ -1,7 +1,7 @@
 """
 Author: Ynag Wang
 Date: 2023-11-02 14:52:08
-LastEditTime: 2024-02-14 23:46:47
+LastEditTime: 2024-03-28 08:39:39
 LastEditors: Wenyu Ouyang
 Description: 
 FilePath: \hydrodata\tests\test_sync.py
@@ -12,8 +12,8 @@ import os
 
 import pytest
 
-from hydrodata.configs import config
-from hydrodata.reader.minio_api import minio_sync_files, boto3_sync_files
+from hydrodatasource.configs import config
+from hydrodatasource.reader.minio_api import minio_sync_files, boto3_sync_files
 
 pytest_plugins = ("pytest_asyncio",)
 

@@ -1,10 +1,10 @@
 """
 Author: Wenyu Ouyang
 Date: 2023-10-14 11:51:22
-LastEditTime: 2023-10-31 11:41:41
+LastEditTime: 2024-03-28 08:38:29
 LastEditors: Wenyu Ouyang
 Description: Reading streamflow/water level data from hydrostation data source
-FilePath: \hydrodata\hydrodata\downloader\hydrostation.py
+FilePath: \hydrodata\hydrodatasource\downloader\hydrostation.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 from datetime import datetime
@@ -16,7 +16,8 @@ import pytz
 import requests
 from dataretrieval import nwis
 from pygeohydro import NWIS
-from hydrodata.downloader.downloader import (
+
+from hydrodatasource.downloader.downloader import (
     download_ftp_file,
     unzip_file,
     wget_download,

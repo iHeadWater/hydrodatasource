@@ -1,5 +1,4 @@
 import ujson
-from hydrodata.configs.config import RO
 import kerchunk.hdf
 from kerchunk.combine import MultiZarrToZarr
 import kerchunk.netCDF3
@@ -7,9 +6,11 @@ import geopandas as gpd
 import os
 import shutil
 import boto3
+
 from hydroutils.hydro_s3 import boto3_upload_file, boto3_download_file
 
-from hydrodata.configs.config import FS
+from hydrodatasource.configs.config import FS
+from hydrodatasource.configs.config import RO
 
 so = dict(
     mode="rb", storage_options=RO, default_fill_cache=False, default_cache_type="first"
