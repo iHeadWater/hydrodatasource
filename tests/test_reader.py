@@ -1,7 +1,7 @@
 """
 Author: Wenyu Ouyang
 Date: 2023-11-01 08:58:50
-LastEditTime: 2024-02-12 15:33:50
+LastEditTime: 2024-03-28 08:40:38
 LastEditors: Wenyu Ouyang
 Description: Test funcs for reader.py
 FilePath: \hydrodata\tests\test_reader.py
@@ -9,49 +9,48 @@ Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 
 import os
-from hydrodata.configs.config import LOCAL_DATA_PATH
 from minio import Minio
 import hydrodataset as hds
-from hydrodata.reader.grdc import GRDCDataHandler
-from hydrodata.reader.reader import (
+
+from hydrodatasource.configs.config import LOCAL_DATA_PATH
+from hydrodatasource.reader.grdc import GRDCDataHandler
+from hydrodatasource.reader.reader import (
     AOI,
     DataHandler,
     LocalFileReader,
     MinioFileReader,
 )
 
+
 def test_gpm_read_minio():
     data_handler = DataHandler(
-        aoi_type="basin", # only basin for now, the streamflow data needs to be reorganized in the minio server,  then to be read.
+        aoi_type="basin",  # only basin for now, the streamflow data needs to be reorganized in the minio server,  then to be read.
         aoi_param="86_21401550",
         dataname="gpm",
-        minio_read=True
+        minio_read=True,
     )
     data = data_handler.handle()
     assert data is not None
     return data
+
 
 def test_gfs_read_minio():
     data_handler = DataHandler(
-        aoi_type="basin",
-        aoi_param="86_21401550",
-        dataname="gfs",
-        minio_read=True
+        aoi_type="basin", aoi_param="86_21401550", dataname="gfs", minio_read=True
     )
     data = data_handler.handle()
     assert data is not None
     return data
 
+
 def test_gpm_gfs_read_minio():
     data_handler = DataHandler(
-        aoi_type="basin",
-        aoi_param="86_21401550",
-        dataname="gpm_gfs",
-        minio_read=True
+        aoi_type="basin", aoi_param="86_21401550", dataname="gpm_gfs", minio_read=True
     )
     data = data_handler.handle()
     assert data is not None
     return data
+
 
 def test_gpm_read_with_process():
     # if there is no data in minio, we want to merge a new one and save in local_data_path
@@ -62,11 +61,12 @@ def test_gpm_read_with_process():
         time_periods=[["2017-01-01T00:00:00", "2017-01-31T00:00:00"]],
         dataname="gpm",
         minio_read=False,
-        local_save=True
+        local_save=True,
     )
     data = data_handler.handle()
     assert data is not None
     return data
+
 
 # The new method no longer needs ways below, but I keep them in case we need it.
 

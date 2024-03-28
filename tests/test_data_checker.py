@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 
-from hydrodata.processor.data_checker import DataChecker
+from hydrodatasource.processor.data_checker import DataChecker
 
 
 def test_check_folder_structure():

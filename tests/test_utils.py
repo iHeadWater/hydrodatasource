@@ -1,7 +1,7 @@
 """
 Author: Wenyu Ouyang
 Date: 2024-03-23 15:10:23
-LastEditTime: 2024-03-23 16:25:09
+LastEditTime: 2024-03-28 08:39:29
 LastEditors: Wenyu Ouyang
 Description: Test for utility functions
 FilePath: \hydrodata\tests\test_utils.py
@@ -13,7 +13,7 @@ import xarray as xr
 import pint
 import pytest
 
-from hydrodata.utils.utils import streamflow_unit_conv
+from hydrodatasource.utils.utils import streamflow_unit_conv
 
 ureg = pint.UnitRegistry()
 ureg.force_ndarray_like = True  # or ureg.force_ndarray = True

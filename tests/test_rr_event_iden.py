@@ -1,7 +1,7 @@
 """
 Author: Yang Wang, Jingyi Wang, and Wenyu Ouyang
 Date: 2023-10-28 09:23:22
-LastEditTime: 2024-03-23 17:17:44
+LastEditTime: 2024-03-28 08:40:17
 LastEditors: Wenyu Ouyang
 Description: Test for rainfall-runoff event identification
 FilePath: \hydrodata\tests\test_rr_event_iden.py
@@ -9,13 +9,14 @@ Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 
 import os
+import numpy as np
+from pint import UnitRegistry
 
 from hydrodataset import Camels
-import numpy as np
-from hydrodata.configs.config import SETTING
-from hydrodata.cleaner.dmca_esr import rainfall_runoff_event_identify
-from hydrodata.utils.utils import streamflow_unit_conv
-from pint import UnitRegistry
+
+from hydrodatasource.configs.config import SETTING
+from hydrodatasource.cleaner.dmca_esr import rainfall_runoff_event_identify
+from hydrodatasource.utils.utils import streamflow_unit_conv
 
 
 def test_rainfall_runoff_event_identify():

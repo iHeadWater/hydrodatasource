@@ -1,16 +1,16 @@
 """
 Author: Wenyu Ouyang
 Date: 2024-03-24 08:48:57
-LastEditTime: 2024-03-24 12:04:22
+LastEditTime: 2024-03-28 08:38:13
 LastEditors: Wenyu Ouyang
 Description: Check user's data format is correct (local and minio)
-FilePath: \hydrodata\hydrodata\processor\data_checker.py
+FilePath: \hydrodata\hydrodatasource\processor\data_checker.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 
 import os
 import pandas as pd
-from hydrodata.configs.config import (
+from hydrodatasource.configs.config import (
     LOCAL_DATA_PATH,
 )
 

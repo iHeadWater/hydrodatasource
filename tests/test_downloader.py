@@ -1,7 +1,7 @@
 """
 Author: Wenyu Ouyang
 Date: 2023-10-13 20:50:01
-LastEditTime: 2023-10-31 11:40:59
+LastEditTime: 2024-03-28 08:42:28
 LastEditors: Wenyu Ouyang
 Description: Test downloading function
 FilePath: \hydrodata\tests\test_downloader.py
@@ -11,7 +11,8 @@ import os
 import pandas as pd
 
 import hydrodataset as hds
-from hydrodata.downloader.hydrostation import (
+
+from hydrodatasource.downloader.hydrostation import (
     catalogue_grdc,
     download_grdc_month_data,
     download_grdc_daily_data,

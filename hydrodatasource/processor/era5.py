@@ -1,18 +1,19 @@
 """
 Author: Jiaxu Wu
 Date: 2024-01-12 15:21:20
-LastEditTime: 2024-02-15 18:32:51
+LastEditTime: 2024-03-28 08:37:54
 LastEditors: Wenyu Ouyang
-Description: 
-FilePath: \hydrodata\hydrodata\processor\era5.py
+Description: processor for era5 data
+FilePath: \hydrodata\hydrodatasource\processor\era5.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
-from hydrodata.reader.minio import ERA5LReader
 import pandas as pd
 import geopandas as gpd
-from hydro_gistools.mean import gen_mask, mean_by_mask
 import xarray as xr
 
+from hydro_gistools.mean import gen_mask, mean_by_mask
+
+from hydrodatasource.reader.minio import ERA5LReader
 
 def get_era5():
     era5_land = ERA5LReader()

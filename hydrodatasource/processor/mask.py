@@ -16,7 +16,8 @@ import geopandas as gpd
 import dask.array as da
 import itertools
 from shapely.geometry import Polygon
-import hydrodata.configs.config as conf
+
+import hydrodatasource.configs.config as conf
 
 
 def mean_over_basin(basin, basin_id, dataset, data_name, lon="lon", lat="lat"):

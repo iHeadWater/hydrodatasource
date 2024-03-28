@@ -2,7 +2,7 @@
 """
 Author: Wenyu Ouyang
 Date: 2023-10-25 15:16:21
-LastEditTime: 2024-03-24 09:24:59
+LastEditTime: 2024-03-28 08:40:25
 LastEditors: Wenyu Ouyang
 Description: Tests for reading basins' data
 FilePath: \hydrodata\tests\test_reader_basins.py
@@ -11,9 +11,9 @@ Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 import os.path
 import pathlib
 
-from hydrodata.reader import stations
-from hydrodata.configs import config
-from hydrodata.reader import minio_api
+from hydrodatasource.reader import stations
+from hydrodatasource.configs import config
+from hydrodatasource.reader import minio_api
 
 
 def test_content():

@@ -11,10 +11,10 @@ from hydrodataset import HydroDataset
 from hydroutils import hydro_file, hydro_time
 from tqdm import tqdm
 
-import hydrodata.configs.config as conf
-from hydrodata.configs.config import SETTING
-from hydrodata.reader import access_fs
-from hydrodata.reader.reader import DataHandler
+import hydrodatasource.configs.config as conf
+from hydrodatasource.configs.config import SETTING
+from hydrodatasource.reader import access_fs
+from hydrodatasource.reader.reader import DataHandler
 
 CACHE_DIR = hydro_file.get_cache_dir()
 

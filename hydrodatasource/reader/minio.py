@@ -1,10 +1,10 @@
 """
 Author: Jianfeng Zhu
 Date: 2023-10-22 16:47:36
-LastEditTime: 2024-02-15 10:14:21
+LastEditTime: 2024-03-28 08:34:13
 LastEditors: Wenyu Ouyang
-Description: 
-FilePath: \hydrodata\hydrodata\reader\minio.py
+Description: Reader class for grid data in minio
+FilePath: \hydrodata\hydrodatasource\reader\minio.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 
@@ -16,10 +16,10 @@ import calendar
 import dask
 import json
 import geopandas as gpd
-from ..configs.config import FS, MINIO_PARAM, RO
 
-from hydrodata.downloader.minio import ERA5LCatalog, GFSCatalog, GPMCatalog
+from ..configs.config import FS, MINIO_PARAM, RO
 from ..utils.utils import regen_box, creatspinc
+from hydrodatasource.downloader.minio import ERA5LCatalog, GFSCatalog, GPMCatalog
 
 dask.config.set({"array.slicing.split_large_chunks": False})
 
