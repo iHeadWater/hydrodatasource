@@ -10,6 +10,7 @@ import hydrodatasource.configs.config as conf
 def query_path_from_metadata(time_start=None, time_end=None, bbox=None, data_source='gpm'):
     # query path from other columns from metadata.csv
     metadata_df = pd.read_csv('metadata.csv')
+    tile_list = []
     paths = metadata_df
     if time_start is not None:
         paths = paths[paths['time_start'] >= time_start]
@@ -40,6 +41,7 @@ def query_path_from_metadata(time_start=None, time_end=None, bbox=None, data_sou
         else:
             tile_ds = path_ds
         tile_path = path.rstrip('.nc4') + '_tile.nc4'
+        tile_list.append(tile_path)
         temp_df = pd.DataFrame(
             {'bbox': str(bbox), 'time_start': time_start, 'time_end': time_end, 'res_lon': 0.25, 'res_lat': 0.25,
              'path': tile_path}, index=default_index(1))
@@ -51,7 +53,7 @@ def query_path_from_metadata(time_start=None, time_end=None, bbox=None, data_sou
             conf.FS.put_file('temp.nc4', tile_path)
             os.remove('temp.nc4')
     metadata_df.to_csv('metadata.csv', index=False)
-    return paths
+    return tile_list
 
 
 def choose_gfs(paths, start_time, end_time):
