@@ -77,7 +77,7 @@ def choose_gfs(paths, start_time, end_time):
         date_str = date.strftime('%Y/%m/%d')
         for i in range(len(produce_times)):
             for j in range(6 * i, 6 * (i + 1)):
-                path = 's3://grids-origin/GFS/GEE/30m/' + date_str + '/' + produce_times[i] + '/gfs20220103.t' + \
+                path = 's3://grids-origin/GFS/GEE/1h/' + date_str + '/' + produce_times[i] + '/gfs20220103.t' + \
                        produce_times[i] + 'z.nc4.0p25.f' + '{:03d}'.format(j)
                 path_list.append(path)
     return path_list

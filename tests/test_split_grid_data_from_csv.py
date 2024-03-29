@@ -27,7 +27,7 @@ def test_generate_bbox_from_shp():
     return mask, bbox
 
 
-def test_split_grid_data_from_single_basin():
+def test_split_grid_data_from_single_basin_gpm():
     # 从单个流域生成网格tile文件，部分流域在生成网格时可能出现问题
     # test_shp = 's3://basins-origin/basin_shapefiles/basin_USA_camels_12013500.zip'
     test_shp = 's3://basins-origin/basin_shapefiles/basin_USA_camels_12145500.zip'
@@ -35,6 +35,21 @@ def test_split_grid_data_from_single_basin():
     time_start = '2018-06-05 01:00:00'
     time_end = '2018-06-05 02:00:00'
     tile_list = query_path_from_metadata(time_start, time_end, bbox, data_source='gpm')
+    data_list = []
+    for tile in tile_list:
+        data_list.append(xr.open_dataset(conf.FS.open(tile)))
+    print(data_list)
+    return tile_list
+
+
+def test_split_grid_data_from_single_basin_gfs():
+    # 从单个流域生成网格tile文件，部分流域在生成网格时可能出现问题, division by zero
+    # test_shp = 's3://basins-origin/basin_shapefiles/basin_USA_camels_12013500.zip'
+    test_shp = 's3://basins-origin/basin_shapefiles/basin_USA_camels_01414500.zip'
+    mask, bbox = generate_bbox_from_shp(test_shp)
+    time_start = '2022-01-03'
+    time_end = '2022-01-03'
+    tile_list = query_path_from_metadata(time_start, time_end, bbox, data_source='gfs')
     data_list = []
     for tile in tile_list:
         data_list.append(xr.open_dataset(conf.FS.open(tile)))
