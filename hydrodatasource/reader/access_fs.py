@@ -67,7 +67,7 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False, need_refer=
             data_obj = pd.read_csv(obj, storage_options=storage_option)
             if (need_cache is True) & (storage_option is not None):
                 data_obj.to_csv(path_or_buf=os.path.join(conf.LOCAL_DATA_PATH, cache_name))
-        elif (ext_name == 'nc') or (ext_name == 'nc4') or (ext_name == 'hdf5') or (ext_name == 'h5'):
+        elif (ext_name == 'nc') or (ext_name == 'nc4') or (ext_name == 'hdf5') or (ext_name == 'h5') or ('nc4' in obj):
             if need_refer is True:
                 data_obj = gen_refer_and_read_zarr(obj, storage_option=storage_option)
             else:
@@ -76,7 +76,7 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False, need_refer=
                 nc_src_reader = intk.readers.DaskHDF(nc_source).to_reader()
                 data_obj: xr.Dataset = nc_src_reader.read()
                 '''
-                if (ext_name == 'nc4') or (ext_name == 'nc4'):
+                if (ext_name == 'nc') or (ext_name == 'nc4') or ('nc4' in obj):
                     data_obj = xr.open_dataset(conf.FS.open(obj), chunks='auto')
                 elif (ext_name == 'hdf5') or (ext_name == 'h5'):
                     data_obj = xr.open_dataset(conf.FS.open(obj), engine='h5netcdf', chunks='auto', phony_dims='access')

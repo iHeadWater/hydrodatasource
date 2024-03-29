@@ -1,10 +1,9 @@
 import geopandas as gpd
 import pandas as pd
 import pytest
-import os
-
-from hydrodatasource.reader import access_fs
+import xarray as xr
 import hydrodatasource.configs.config as conf
+from hydrodatasource.reader import access_fs
 from hydrodatasource.reader.data_source import HydroBasins
 
 
@@ -150,3 +149,14 @@ def test_read_zq():
         storage_options=conf.MINIO_PARAM,
     )
     return zq_df
+
+
+def test_df2ds():
+    zq_df = pd.read_csv(
+        "s3://stations-origin/zq_stations/hour_data/1h/zq_USA_usgs_01181000.csv",
+        storage_options=conf.MINIO_PARAM,
+    )
+    # 两种写法都可以，但索引列名不同
+    zq_ds = xr.Dataset().from_dataframe(zq_df)  # Coordinates: index
+    # zq_dss = xr.Dataset(zq_df) # Coordinates: dim_0
+    return zq_ds

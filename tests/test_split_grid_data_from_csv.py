@@ -1,6 +1,3 @@
-import os
-import shutil
-
 from hydrodatasource.reader.spliter_grid import query_path_from_metadata, generate_bbox_from_shp
 
 
