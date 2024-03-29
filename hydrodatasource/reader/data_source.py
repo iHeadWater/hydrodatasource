@@ -30,8 +30,6 @@ class HydroData(ABC):
 
     def __init__(self, data_path):
         self.data_source_dir = data_path
-        if not self.data_source_dir.is_dir():
-            self.data_source_dir.mkdir(parents=True)
 
     def get_name(self):
         raise NotImplementedError
