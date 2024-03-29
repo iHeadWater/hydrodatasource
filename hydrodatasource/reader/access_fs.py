@@ -65,6 +65,7 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False, need_refer=
         ext_name = obj.split('.')[-1]
         if ext_name == 'csv':
             data_obj = pd.read_csv(obj, storage_options=storage_option)
+            data_obj = xr.Dataset(data_obj)
             if (need_cache is True) & (storage_option is not None):
                 data_obj.to_csv(path_or_buf=os.path.join(conf.LOCAL_DATA_PATH, cache_name))
         elif (ext_name == 'nc') or (ext_name == 'nc4') or (ext_name == 'hdf5') or (ext_name == 'h5') or ('nc4' in obj):
