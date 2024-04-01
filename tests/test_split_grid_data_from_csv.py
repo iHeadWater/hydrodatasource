@@ -28,8 +28,6 @@ def test_generate_bbox_from_shp():
 
 
 def test_split_grid_data_from_single_basin_gpm():
-    # 从单个流域生成网格tile文件，部分流域在生成网格时可能出现问题
-    # test_shp = 's3://basins-origin/basin_shapefiles/basin_USA_camels_12013500.zip'
     test_shp = 's3://basins-origin/basin_shapefiles/basin_USA_camels_12145500.zip'
     mask, bbox = generate_bbox_from_shp(test_shp)
     time_start = '2018-06-05 01:00:00'
@@ -43,8 +41,6 @@ def test_split_grid_data_from_single_basin_gpm():
 
 
 def test_split_grid_data_from_single_basin_gfs():
-    # 从单个流域生成网格tile文件，部分流域在生成网格时可能出现问题, division by zero
-    # test_shp = 's3://basins-origin/basin_shapefiles/basin_USA_camels_12013500.zip'
     test_shp = 's3://basins-origin/basin_shapefiles/basin_USA_camels_01414500.zip'
     mask, bbox = generate_bbox_from_shp(test_shp)
     time_start = '2022-01-03'
