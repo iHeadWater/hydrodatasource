@@ -123,7 +123,7 @@ def gen_grids(bbox, resolution, offset):
         + resolution * int((rx - int(rx)) / resolution + 0.5)
         - offset
         * (int(rx * 10) / 10 + offset - rx)
-        / abs(int(rx * 10) / 10 + offset - rx),
+        / abs(int(rx * 10) / 10 + offset - rx + 0.00001),
         3,
     )
 
