@@ -1,3 +1,12 @@
+import os
+import pathlib
+
+import pandas as pd
+
+from hydrodatasource.reader.spliter_grid import (
+    query_path_from_metadata,
+    generate_bbox_from_shp,
+)
 from hydrodatasource.reader.spliter_grid import (
     query_path_from_metadata,
     generate_bbox_from_shp,
@@ -5,6 +14,8 @@ from hydrodatasource.reader.spliter_grid import (
 )
 import xarray as xr
 import hydrodatasource.configs.config as conf
+import geopandas as gpd
+from dijkstra_conda import ig_path
 
 
 def test_query_path_from_metadata_gpm():
@@ -58,6 +69,26 @@ def test_split_grid_data_from_single_basin_gfs():
     return tile_list
 
 
+def test_read_topo_data():
+    dams_shp = gpd.read_file(
+        conf.FS.open("s3://reservoirs-origin/dams.zip"), engine="pyogrio"
+    )
+    network_shp = gpd.read_file(
+        os.path.join(
+            pathlib.Path(__file__).parent.parent,
+            "data/river_network/songliao_cut_single.shp",
+        ),
+        engine="pyogrio",
+    )
+    index = dams_shp.index[dams_shp["ID"] == "zq_CHN_songliao_10310500"]
+    paths = ig_path.find_edge_nodes(dams_shp, network_shp, index, "up")
+    for station in paths:
+        sta_id = dams_shp["ID"][dams_shp.index == station].to_list()[0]
+        rr_path = "s3://reservoirs-origin/rr_stations/" + sta_id + ".csv"
+        rr_df = pd.read_csv(rr_path, storage_options=conf.MINIO_PARAM)
+        print(rr_df)
+
+
 def merge_with_spatial_average():
     # 暂无数据 求某个流域gpm/gfs/smap面平均,并合并为mean_forcing.nc
     gpm_path = (
@@ -75,14 +106,3 @@ def merge_with_spatial_average():
     out_path = "basin-origin/hour_data/1h/mean_data/mean_data_forcing/mean_forcing_CHN_21401550.nc"
     merged_ds = merge_with_spatial_average(gpm_path, gfs_path, smap_path, out_path)
     print(merged_ds)
-
-def test_read_topo_data():
-    dams_shp = gpd.read_file(conf.FS.open("s3://reservoirs-origin/dams.zip"), engine='pyogrio')
-    network_shp = gpd.read_file(os.path.join(pathlib.Path(__file__).parent.parent, 'data/river_network/songliao_cut_single.shp'), engine='pyogrio')
-    index = dams_shp.index[dams_shp['ID'] == 'zq_CHN_songliao_10310500']
-    paths = ig_path.find_edge_nodes(dams_shp, network_shp, index, 'up')
-    for station in paths:
-        sta_id = dams_shp['ID'][dams_shp.index == station].to_list()[0]
-        rr_path = 's3://reservoirs-origin/rr_stations/'+sta_id+'.csv'
-        rr_df = pd.read_csv(rr_path, storage_options=conf.MINIO_PARAM)
-        print(rr_df)
