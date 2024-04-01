@@ -1,11 +1,11 @@
 import os
-
+import numpy as np
 import pandas as pd
 import xarray as xr
 from pandas.core.indexes.api import default_index
 from hydrodatasource.processor.mask import gen_single_mask
 import hydrodatasource.configs.config as conf
-
+from hydrodatasource.reader import access_fs
 
 def query_path_from_metadata(time_start=None, time_end=None, bbox=None, data_source='gpm'):
     # query path from other columns from metadata.csv
@@ -92,3 +92,30 @@ def generate_bbox_from_shp(basin_shape_path):
     mask = gen_single_mask(basin_id=basin_id, shp_path=basin_shape_path, dataname='gfs', mask_path='temp_mask', minio=True)
     bbox = [mask['lon'].values.min(), mask['lon'].values.max(), mask['lat'].values.max(), mask['lat'].values.min()]
     return mask, bbox
+
+def merge_with_spatial_average(gpm_file, gfs_file, smap_file, output_file_path):
+    def calculate_and_rename(input_file_path, prefix):
+        ds = access_fs.spec_path(input_file_path, head="minio")
+        avg_ds = ds.mean(dim=["lat", "lon"], skipna=True).astype("float32")
+        new_names = {var_name: (f"{prefix}_tp" if var_name in ["tp", "__xarray_dataarray_variable__"] else f"{prefix}_{var_name}") for var_name in avg_ds.data_vars}
+        avg_ds_renamed = avg_ds.rename(new_names)
+        return avg_ds_renamed
+
+    basin_id = output_file_path.split('_')[-1].split('.')[0]
+    
+    gfs_avg_renamed = calculate_and_rename(gfs_file, "gfs")
+    gpm_avg_renamed = calculate_and_rename(gpm_file, "gpm")
+    smap_avg_renamed = calculate_and_rename(smap_file, "smap")
+
+    intersect_time = np.intersect1d(gfs_avg_renamed.time.values, gpm_avg_renamed.time.values, assume_unique=True)
+    intersect_time = np.intersect1d(intersect_time, smap_avg_renamed.time.values, assume_unique=True)
+
+    gfs_intersected = gfs_avg_renamed.sel(time=intersect_time)
+    gpm_intersected = gpm_avg_renamed.sel(time=intersect_time)
+    smap_intersected = smap_avg_renamed.sel(time=intersect_time)
+
+    merged_ds = xr.merge([gfs_intersected, gpm_intersected, smap_intersected])
+    merged_ds = merged_ds.assign_coords({"basin": basin_id}).expand_dims("basin")
+
+    conf.FS.write_bytes(output_file_path, merged_ds.to_netcdff())
+    return merged_ds

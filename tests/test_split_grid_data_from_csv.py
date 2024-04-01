@@ -1,45 +1,43 @@
-import os
-import pathlib
-
-import pandas as pd
-
-from hydrodatasource.reader.spliter_grid import query_path_from_metadata, generate_bbox_from_shp
+from hydrodatasource.reader.spliter_grid import (
+    query_path_from_metadata,
+    generate_bbox_from_shp,
+    merge_with_spatial_average,
+)
 import xarray as xr
 import hydrodatasource.configs.config as conf
-import geopandas as gpd
-from dijkstra_conda import ig_path
+
 
 def test_query_path_from_metadata_gpm():
-    time_start = '2018-06-05 01:00:00'
-    time_end = '2018-06-05 02:00:00'
+    time_start = "2018-06-05 01:00:00"
+    time_end = "2018-06-05 02:00:00"
     bbox = [-110, -69, 47, 26]
-    paths = query_path_from_metadata(time_start, time_end, bbox, data_source='gpm')
+    paths = query_path_from_metadata(time_start, time_end, bbox, data_source="gpm")
     return paths
 
 
 def test_query_path_from_metadata_gfs():
     # start_time (datetime, YY-mm-dd): The start date of the desired data.
     # end_time (datetime, YY-mm-dd): The end date of the desired data.
-    time_start = '2022-01-03'
-    time_end = '2022-01-03'
+    time_start = "2022-01-03"
+    time_end = "2022-01-03"
     bbox = [-110, -69, 47, 26]
-    paths = query_path_from_metadata(time_start, time_end, bbox, data_source='gfs')
+    paths = query_path_from_metadata(time_start, time_end, bbox, data_source="gfs")
     return paths
 
 
 def test_generate_bbox_from_shp():
-    basin_shp = 's3://basins-origin/basins_shp.zip'
+    basin_shp = "s3://basins-origin/basins_shp.zip"
     mask, bbox = generate_bbox_from_shp(basin_shape_path=basin_shp)
     # shutil.rmtree('temp_mask')
     return mask, bbox
 
 
 def test_split_grid_data_from_single_basin_gpm():
-    test_shp = 's3://basins-origin/basin_shapefiles/basin_USA_camels_12145500.zip'
+    test_shp = "s3://basins-origin/basin_shapefiles/basin_USA_camels_12145500.zip"
     mask, bbox = generate_bbox_from_shp(test_shp)
-    time_start = '2018-06-05 01:00:00'
-    time_end = '2018-06-05 02:00:00'
-    tile_list = query_path_from_metadata(time_start, time_end, bbox, data_source='gpm')
+    time_start = "2018-06-05 01:00:00"
+    time_end = "2018-06-05 02:00:00"
+    tile_list = query_path_from_metadata(time_start, time_end, bbox, data_source="gpm")
     data_list = []
     for tile in tile_list:
         data_list.append(xr.open_dataset(conf.FS.open(tile)))
@@ -48,16 +46,35 @@ def test_split_grid_data_from_single_basin_gpm():
 
 
 def test_split_grid_data_from_single_basin_gfs():
-    test_shp = 's3://basins-origin/basin_shapefiles/basin_USA_camels_01414500.zip'
+    test_shp = "s3://basins-origin/basin_shapefiles/basin_USA_camels_01414500.zip"
     mask, bbox = generate_bbox_from_shp(test_shp)
-    time_start = '2022-01-03'
-    time_end = '2022-01-03'
-    tile_list = query_path_from_metadata(time_start, time_end, bbox, data_source='gfs')
+    time_start = "2022-01-03"
+    time_end = "2022-01-03"
+    tile_list = query_path_from_metadata(time_start, time_end, bbox, data_source="gfs")
     data_list = []
     for tile in tile_list:
         data_list.append(xr.open_dataset(conf.FS.open(tile)))
     print(data_list)
     return tile_list
+
+
+def merge_with_spatial_average():
+    # 暂无数据 求某个流域gpm/gfs/smap面平均,并合并为mean_forcing.nc
+    gpm_path = (
+        "basin-origin/hour_data/1h/grid_data/grid_gpm_data/grid_gpm_CHN_21401550.nc"
+    )
+
+    gfs_path = (
+        "basin-origin/hour_data/1h/grid_data/grid_gfs_data/grid_gfs_CHN_21401550.nc"
+    )
+
+    smap_path = (
+        "basin-origin/hour_data/1h/grid_data/grid_smap_data/grid_smap_CHN_21401550.nc"
+    )
+
+    out_path = "basin-origin/hour_data/1h/mean_data/mean_data_forcing/mean_forcing_CHN_21401550.nc"
+    merged_ds = merge_with_spatial_average(gpm_path, gfs_path, smap_path, out_path)
+    print(merged_ds)
 
 def test_read_topo_data():
     dams_shp = gpd.read_file(conf.FS.open("s3://reservoirs-origin/dams.zip"), engine='pyogrio')

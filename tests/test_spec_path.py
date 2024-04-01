@@ -7,7 +7,6 @@ from hydrodatasource.reader import access_fs
 from hydrodatasource.reader.data_source import HydroBasins
 
 
-@pytest.fixture
 def test_read_spec():
     # access_fs.spec_path("st_rain_c.csv")
     mean_forcing_nc = access_fs.spec_path(
