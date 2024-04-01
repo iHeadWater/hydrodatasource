@@ -569,11 +569,18 @@ class HydroBasins(HydroData):
         return merged_dataset
 
     def read_grid_data(self, file_lst, basin):
-        for file_path in file_lst:
-            basin_id = file_path.split("_")[-1].split(".")[0]
-            if basin_id in basin:
-                grid_data = access_fs.spec_path(file_path, head="minio")
-                return grid_data
+        def get_basin_id(file_path):
+            return file_path.split("_")[-1].split(".")[0]
+
+        matched_path = next(
+            (path for path in file_lst if get_basin_id(path) in basin), None
+        )
+
+        if matched_path:
+            grid_data = access_fs.spec_path(matched_path, head="minio")
+            return grid_data
+
+        return None
 
     def read_file_lst(self, folder_path):
         url_path = "s3://" + folder_path
