@@ -4,9 +4,8 @@ import pytest
 import xarray as xr
 import hydrodatasource.configs.config as conf
 from hydrodatasource.reader import access_fs
+from hydrodatasource.cleaner import rain_anomaly 
 from hydrodatasource.reader.data_source import HydroBasins
-
-
 def test_read_spec():
     # access_fs.spec_path("st_rain_c.csv")
     mean_forcing_nc = access_fs.spec_path(
@@ -159,3 +158,45 @@ def test_df2ds():
     zq_ds = xr.Dataset().from_dataframe(zq_df)  # Coordinates: index
     # zq_dss = xr.Dataset(zq_df) # Coordinates: dim_0
     return zq_ds
+
+def list_csv_files(bucket_name, prefix=''):
+    """
+    列出指定S3桶中所有CSV文件的路径。
+    """
+    # 使用FS的glob方法查找匹配的文件
+    path = f'{bucket_name}/{prefix}' if prefix else f'{bucket_name}'
+    files = conf.FS.glob(f'{path}/*.csv')
+    # s3fs glob方法返回的路径是完整的s3路径
+    return files
+
+def read_process_store_csv(src_bucket, dest_bucket, prefix=''):
+    """
+    读取源桶中的CSV文件，处理它们，并将结果存储到目标桶。
+    """
+    csv_files = list_csv_files(src_bucket, prefix)
+    total_files = len(csv_files)  # 总文件数
+    print(f"总共发现 {total_files} 个CSV文件。")
+    
+    for file_path in csv_files:
+        # 从S3读取CSV到DataFrame
+        with conf.FS.open(file_path, mode='rb') as f:
+            df = pd.read_csv(f,index_col = False)
+        
+        # 处理DataFrame 单步调用
+        df_processed = rain_anomaly.rainfall_format_normalization(df)
+        print(df_processed.head())
+        
+        # 从原始文件路径中提取文件名
+        file_name = file_path.split('/')[-1]
+        # 构建新的目标文件路径
+        dest_file_path = f"{dest_bucket}/{file_name}"
+        
+        # 将处理后的DataFrame写入新的目标文件路径
+        with conf.FS.open(dest_file_path, 'w') as f:
+            df.to_csv(f, index=False)
+
+
+def test_read_folder():
+    src_bucket = 's3://stations-interim/pp_stations/hour_data/1h'
+    dest_bucket = 's3://stations-interim/pp_stations/hour_data/1h'
+    read_process_store_csv(src_bucket, dest_bucket)
