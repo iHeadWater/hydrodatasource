@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from scipy.signal import cwt, morlet, butter, filtfilt
 from scipy.fft import fft, ifft, fftfreq
 from scipy.optimize import curve_fit
-import os
+
 
 class Cleaner:
     """
@@ -29,7 +29,28 @@ class Cleaner:
     - time_step: 时间步长，表示数据的时间步长。默认为 1.0。
     - iterations: 迭代次数，表示迭代的次数。默认为 3。
     """
-    def __init__(self, file_path, column_id='ID', ID_list=None, column_flow='INQ', column_time='Time', start_time=None, end_time=None, preprocess=True, method='moving_average', save_path=None, plot=True, window_size=5, cutoff_frequency=0.1, time_step=1.0, iterations=3, sampling_rate=1.0, order=5, cwt_row=1):
+
+    def __init__(
+        self,
+        file_path,
+        column_id="ID",
+        ID_list=None,
+        column_flow="INQ",
+        column_time="Time",
+        start_time=None,
+        end_time=None,
+        preprocess=True,
+        method="moving_average",
+        save_path=None,
+        plot=True,
+        window_size=5,
+        cutoff_frequency=0.1,
+        time_step=1.0,
+        iterations=3,
+        sampling_rate=1.0,
+        order=5,
+        cwt_row=1,
+    ):
         self.file_path = file_path
         self.column_id = column_id
         self.ID_list = ID_list
@@ -49,7 +70,7 @@ class Cleaner:
         self.time_step = time_step
         self.iterations = iterations
 
-    def data_balanced(self, origin_data,transform_data):
+    def data_balanced(self, origin_data, transform_data):
         """
         对一维流量数据进行总量平衡变换。
         :origin_data: 原始一维流量数据。
@@ -71,23 +92,25 @@ class Cleaner:
         :window_size: 滑动窗口大小
         :return: 平滑处理后的流量数据
         """
-        smoothed_data = np.convolve(streamflow_data, np.ones(window_size)/window_size, mode='same')
-        
+        smoothed_data = np.convolve(
+            streamflow_data, np.ones(window_size) / window_size, mode="same"
+        )
+
         # Apply non-negative constraints
         smoothed_data[smoothed_data < 0] = 0
-        return self.data_balanced(streamflow_data,smoothed_data)
+        return self.data_balanced(streamflow_data, smoothed_data)
 
     def kalman_filter(self, streamflow_data):
         """
         对流量数据应用卡尔曼滤波进行平滑处理，并保持流量总量平衡。
         :param streamflow_data: 原始流量数据
         """
-        A = np.array([[1]])  
-        H = np.array([[1]])  
-        Q = np.array([[0.01]])  
-        R = np.array([[0.01]])  
-        X_estimated = np.array([streamflow_data[0]])  
-        P_estimated = np.eye(1) * 0.01  
+        A = np.array([[1]])
+        H = np.array([[1]])
+        Q = np.array([[0.01]])
+        R = np.array([[0.01]])
+        X_estimated = np.array([streamflow_data[0]])
+        P_estimated = np.eye(1) * 0.01
         estimated_states = []
 
         for measurement in streamflow_data:
@@ -104,10 +127,10 @@ class Cleaner:
             estimated_states.append(X_estimated.item())
 
         estimated_states = np.array(estimated_states)
-        
+
         # Apply non-negative constraints
         estimated_states[estimated_states < 0] = 0
-        return self.data_balanced(streamflow_data,estimated_states)
+        return self.data_balanced(streamflow_data, estimated_states)
 
     def moving_average_difference(self, streamflow_data, window_size=20):
         """
@@ -116,21 +139,28 @@ class Cleaner:
         """
         streamflow_data_series = pd.Series(streamflow_data)
         # Calculate the forward moving average（MU）
-        forward_ma = streamflow_data_series.rolling(window=window_size, min_periods=1).mean()
+        forward_ma = streamflow_data_series.rolling(
+            window=window_size, min_periods=1
+        ).mean()
 
         # Calculate the backward moving average（MD）
-        backward_ma = streamflow_data_series.iloc[::-1].rolling(window=window_size, min_periods=1).mean().iloc[::-1]
+        backward_ma = (
+            streamflow_data_series.iloc[::-1]
+            .rolling(window=window_size, min_periods=1)
+            .mean()
+            .iloc[::-1]
+        )
 
         # Calculate the difference between the forward and backward sliding averages
         ma_difference = abs(forward_ma - backward_ma)
 
         # Apply non-negative constraints
         ma_difference[ma_difference < 0] = 0
-        return self.data_balanced(streamflow_data,ma_difference.to_numpy())
-    
+        return self.data_balanced(streamflow_data, ma_difference.to_numpy())
 
     def quadratic_function(self, x, a, b, c):
         return a * x**2 + b * x + c
+
     def robust_fitting(self, streamflow_data, k=1.5):
         """
         对流量数据应用抗差修正算法进行平滑处理，并保持流量总量平衡。
@@ -144,10 +174,14 @@ class Cleaner:
         sigma = np.sqrt(np.sum(residuals**2) / (m - 1))
 
         for _ in range(10):
-            weights = np.where(np.abs(residuals) <= k * sigma, 1, k * sigma / np.abs(residuals))
+            weights = np.where(
+                np.abs(residuals) <= k * sigma, 1, k * sigma / np.abs(residuals)
+            )
             sigma = np.sqrt(np.sum(weights * residuals**2) / (m - 1))
 
-        corrected_streamflow = weights * streamflow_data + (1 - weights) * smoothed_streamflow
+        corrected_streamflow = (
+            weights * streamflow_data + (1 - weights) * smoothed_streamflow
+        )
         corrected_streamflow[corrected_streamflow < 0] = 0
         return self.data_balanced(streamflow_data, corrected_streamflow)
 
@@ -158,16 +192,19 @@ class Cleaner:
         :sampling_rate: 数据的采样率。
         :order: 滤波器的阶数，默认为5。
         """
+
         def apply_low_pass_filter(signal, cutoff_frequency, sampling_rate, order=5):
             nyquist_frequency = 0.5 * sampling_rate
             normalized_cutoff = cutoff_frequency / nyquist_frequency
-            b, a = butter(order, normalized_cutoff, btype='low', analog=False)
+            b, a = butter(order, normalized_cutoff, btype="low", analog=False)
             filtered_signal = filtfilt(b, a, signal)
             return filtered_signal
-        
+
         # Apply a low-pass filter
-        low_pass_filtered_signal = apply_low_pass_filter(streamflow_data, self.cutoff_frequency, self.sampling_rate, self.order)
-        
+        low_pass_filtered_signal = apply_low_pass_filter(
+            streamflow_data, self.cutoff_frequency, self.sampling_rate, self.order
+        )
+
         # Apply non-negative constraints
         low_pass_filtered_signal[low_pass_filtered_signal < 0] = 0
 
@@ -186,16 +223,16 @@ class Cleaner:
             n = len(current_signal)
             yf = fft(current_signal)
             xf = fftfreq(n, d=self.time_step)
-            
+
             # Applied frequency filtering
             yf[np.abs(xf) > self.cutoff_frequency] = 0
-            
+
             # FFT and take the real part
             filtered_signal = ifft(yf).real
-            
+
             # Apply non-negative constraints
             filtered_signal[filtered_signal < 0] = 0
-            
+
             # Adjust the total flow to match the original flow
             current_signal = self.data_balanced(streamflow_data, filtered_signal)
 
@@ -207,65 +244,74 @@ class Cleaner:
         :cwt_row: 小波变换中使用的特定宽度。
         """
         # Expand the data edge by 24 lines on each side
-        extended_data = np.concatenate([
-            np.full(24, streamflow_data[0]),  # Expand the first 24 lines with the first element
-            streamflow_data,  
-            np.full(24, streamflow_data[-1])  # Expand the last 24 lines with the last element
-        ])
-        widths=np.arange(1, 31)
+        extended_data = np.concatenate(
+            [
+                np.full(
+                    24, streamflow_data[0]
+                ),  # Expand the first 24 lines with the first element
+                streamflow_data,
+                np.full(
+                    24, streamflow_data[-1]
+                ),  # Expand the last 24 lines with the last element
+            ]
+        )
+        widths = np.arange(1, 31)
         # Wavelet transform by Morlet wavelet directly
         extended_cwt = cwt(extended_data, morlet, widths)
         scaled_cwtmatr = np.abs(extended_cwt)
-        
+
         # Select a specific width for analysis (can be briefly understood as selecting a cutoff frequency)
-        cwt_row_extended = scaled_cwtmatr[self.cwt_row, :]  
-        
+        cwt_row_extended = scaled_cwtmatr[self.cwt_row, :]
+
         # Remove the extended part
-        adjusted_cwt_row = cwt_row_extended[24:-24]  
+        adjusted_cwt_row = cwt_row_extended[24:-24]
         adjusted_cwt_row[adjusted_cwt_row < 0] = 0
         return self.data_balanced(streamflow_data, adjusted_cwt_row)
-
 
     def streamflow_smooth(self, df):
         #  Fill missing values as the average of the previous 10 hours
         if self.preprocess:
-            df[self.column_flow] = df[self.column_flow].fillna(df[self.column_flow].rolling(window=11, min_periods=1).mean())
+            df[self.column_flow] = df[self.column_flow].fillna(
+                df[self.column_flow].rolling(window=11, min_periods=1).mean()
+            )
             # Populate the part that is still NaN with a fill value of 0
             df[self.column_flow] = df[self.column_flow].fillna(0)
-        #Record the generated data
+        # Record the generated data
         df[self.column_time] = pd.to_datetime(df[self.column_time])
 
         # Calibrate index range
-        start_idx = df.index[df[self.column_time] >= pd.to_datetime(self.start_time)].min()
+        start_idx = df.index[
+            df[self.column_time] >= pd.to_datetime(self.start_time)
+        ].min()
         end_idx = df.index[df[self.column_time] <= pd.to_datetime(self.end_time)].max()
-        
+
         # Apply the selected method
         # extract One-dimensional flow data
         streamflow_data = df.loc[start_idx:end_idx, self.column_flow]
         streamflow_data = streamflow_data.values.squeeze()
         print(streamflow_data)
 
-        if self.method == 'moving_average':
+        if self.method == "moving_average":
             filtered_data = self.moving_average(streamflow_data)
-        elif self.method == 'FFT':
+        elif self.method == "FFT":
             filtered_data = self.FFT(streamflow_data)
-        elif self.method == 'wavelet':
+        elif self.method == "wavelet":
             filtered_data = self.wavelet(streamflow_data)
-        elif self.method == 'kalman':
+        elif self.method == "kalman":
             filtered_data = self.kalman_filter(streamflow_data)
-        elif self.method == 'lowpass':
+        elif self.method == "lowpass":
             filtered_data = self.lowpass_filter(streamflow_data)
-        elif self.method == 'moving_average_difference':
+        elif self.method == "moving_average_difference":
             filtered_data = self.moving_average_difference(streamflow_data)
-        elif self.method == 'robust':
-            filtered_data = self.robust_fitting(streamflow_data)   
+        elif self.method == "robust":
+            filtered_data = self.robust_fitting(streamflow_data)
         else:
             raise ValueError("Unsupported method")
-        
+
         # Assume that filtered_data is the result of processing within the same start-stop time
         # Insert processed data into the corresponding position in the original data set
-        df.loc[start_idx:end_idx, self.method +'_INQ_Filtered'] = filtered_data
-        
+        df.loc[start_idx:end_idx, self.method + "_INQ_Filtered"] = filtered_data
+
         return df
 
     def time_filter(self, df):
@@ -287,59 +333,67 @@ class Cleaner:
         else:
             self.end_time = pd.to_datetime(self.end_time)
 
-        # An empty DataFrame is returned If the adjusted start time is greater than the end time 
+        # An empty DataFrame is returned If the adjusted start time is greater than the end time
         if self.start_time > self.end_time:
             raise ValueError("Capture data time error")
         return self.start_time, self.end_time
 
     def drawplot(self, df, id):
-        df = df[(df[self.column_time] > self.start_time) & (df[self.column_time] < self.end_time)]
+        df = df[
+            (df[self.column_time] > self.start_time)
+            & (df[self.column_time] < self.end_time)
+        ]
         plt.figure(figsize=(10, 6))
-        plt.plot(df[self.column_time], df[self.column_flow], label='Original')
-        plt.plot(df[self.column_time], df[self.method +'_INQ_Filtered'], label='Filtered', linestyle='--')
+        plt.plot(df[self.column_time], df[self.column_flow], label="Original")
+        plt.plot(
+            df[self.column_time],
+            df[self.method + "_INQ_Filtered"],
+            label="Filtered",
+            linestyle="--",
+        )
         plt.legend()
-        plt.xlabel('Time')
-        plt.ylabel('Flow')
+        plt.xlabel("Time")
+        plt.ylabel("Flow")
         if id:
             plt.title(f"BASIN ID: {id} Streamflow Data Processing")
         else:
-            plt.title(f"All Dataset Streamflow Data Processing")
+            plt.title("All Dataset Streamflow Data Processing")
         plt.gcf().autofmt_xdate()  # Automatically rotate date markers to prevent overlapping
         plt.grid(True)
         plt.show()
 
     def process_inq(self):
-        if self.file_path.endswith('.csv'):
-            df = pd.read_csv(self.file_path, dtype={self.column_id: str})    
+        if self.file_path.endswith(".csv"):
+            df = pd.read_csv(self.file_path, dtype={self.column_id: str})
 
-        elif self.file_path.endswith(('.nc', '.h5', '.netcdf')):
+        elif self.file_path.endswith((".nc", ".h5", ".netcdf")):
             ds = xr.open_dataset(self.file_path)
             # turn xarray into DataFrame
-            df = ds.to_dataframe()            
+            df = ds.to_dataframe()
 
-        elif self.file_path.endswith('.txt'):
+        elif self.file_path.endswith(".txt"):
             # Assuming .txt files are comma-delimited, if they are tab-delimited, use sep='\t'
-            df = pd.read_csv(self.file_path, sep=',', dtype={self.column_id: str})  
+            df = pd.read_csv(self.file_path, sep=",", dtype={self.column_id: str})
 
         else:
             raise ValueError("Unsupported file format")
-        
+
         # data processing
         print(df)
         df = df.reset_index(drop=True)
         original_df = df
-        df[self.column_flow] = pd.to_numeric(df[self.column_flow], errors='coerce')
+        df[self.column_flow] = pd.to_numeric(df[self.column_flow], errors="coerce")
 
         # time_filter
         df[self.column_time] = pd.to_datetime(df[self.column_time])
         self.start_time, self.end_time = self.time_filter(df)
 
         # add a new column and initialize as NaN if no exist
-        if (self.method + '_INQ_Filtered') not in df.columns:
-            df[self.method + '_INQ_Filtered'] = np.nan
+        if (self.method + "_INQ_Filtered") not in df.columns:
+            df[self.method + "_INQ_Filtered"] = np.nan
 
-        # group by-basin  
-        if self.column_id is not None:  
+        # group by-basin
+        if self.column_id is not None:
             grouped = df.groupby(self.column_id)
             filtered_groups = []
             for id, group in grouped:
@@ -358,7 +412,7 @@ class Cleaner:
                     print(f"处理流域编号: {id} 的数据时发生错误: {e}")
 
             # Merge the filtered grouped data into a new DataFrame
-            filtered_df = pd.concat(filtered_groups) 
+            filtered_df = pd.concat(filtered_groups)
         else:
             print("当前处理数据为整个数据集：")
             print(df)  # print all DataFrame
@@ -368,13 +422,17 @@ class Cleaner:
             if self.plot:
                 self.drawplot(df=filtered_df, id=None)
 
-        #save data
+        # save data
         if self.save_path:
-            if self.file_path.endswith(('.nc', '.h5', '.netcdf')):
+            if self.file_path.endswith((".nc", ".h5", ".netcdf")):
                 # the 'basin' column should be an eight-digit string
-                original_df[self.column_id] = original_df[self.column_id].astype(str).str.zfill(8)
+                original_df[self.column_id] = (
+                    original_df[self.column_id].astype(str).str.zfill(8)
+                )
 
-            original_df[self.method + '_INQ_Filtered'] = filtered_df[self.method + '_INQ_Filtered']
+            original_df[self.method + "_INQ_Filtered"] = filtered_df[
+                self.method + "_INQ_Filtered"
+            ]
             original_df.to_csv(self.save_path, index=False)
-        
+
         return filtered_df
