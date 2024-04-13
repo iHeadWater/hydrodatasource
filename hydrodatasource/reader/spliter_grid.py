@@ -21,12 +21,14 @@ def query_path_from_metadata(time_start=None, time_end=None, bbox=None, data_sou
         source_list = [x for x in metadata_df['path'] if 'SMAP' in x]
     elif data_source == 'gfs':
         source_list = [x for x in metadata_df['path'] if 'GFS' in x]
+    elif data_source == 'era5_land':
+        source_list = [x for x in metadata_df['path'] if 'era5_land' in x]
     paths = metadata_df[metadata_df['path'].isin(source_list)]
     if time_start is not None:
         paths = paths[paths['time_start'] >= time_start]
     if time_end is not None:
         paths = paths[paths['time_end'] <= time_end]
-    if (data_source == 'gpm') or (data_source == 'smap'):
+    if (data_source == 'gpm') or (data_source == 'smap') or (data_source == 'era5_land'):
         if bbox is not None:
             paths = paths[
                 (paths['bbox'].apply(lambda x: string_to_list(x)[0] <= bbox[0])) &
@@ -50,8 +52,11 @@ def query_path_from_metadata(time_start=None, time_end=None, bbox=None, data_sou
             cell_lon_e = np.argwhere(lon_array <= bbox[1])[-1][0]
             cell_lat_n = np.argwhere(lat_array <= bbox[2])[0][0]
             cell_lat_s = np.argwhere(lat_array >= bbox[3])[-1][0]
-            tile_da = path_ds['Geophysical_Data']['sm_surface'][cell_lat_n: cell_lat_s + 1, cell_lon_w: cell_lon_e + 1]
+            tile_da = path_ds['Geophysical_ndData']['sm_surface'][cell_lat_n: cell_lat_s + 1, cell_lon_w: cell_lon_e + 1]
             tile_ds = xr.DataArray(tile_da).to_dataset(name='sm_surface')
+        elif data_source == 'era5_land':
+            path_ds = access_fs.spec_path(path.lstrip('s3://'), head='minio')
+            tile_ds = path_ds.sel(time=slice(time_start, time_end),longitude=slice(bbox[0], bbox[1]), latitude=slice(bbox[2], bbox[3]))
         else:
             # 会扰乱桶，注意
             path_ds = xr.open_dataset(conf.FS.open(path))
@@ -74,10 +79,14 @@ def query_path_from_metadata(time_start=None, time_end=None, bbox=None, data_sou
             temp_df = pd.DataFrame(
                 {'bbox': str(bbox), 'time_start': time_start, 'time_end': time_end, 'res_lon': 0.08, 'res_lat': 0.08,
                  'path': tile_path}, index=default_index(1))
+        elif data_source == 'era5_land':
+            temp_df = pd.DataFrame(
+                {'bbox': str(bbox), 'time_start': time_start, 'time_end': time_end, 'res_lon': 0.1, 'res_lat': 0.1,
+                 'path': tile_path}, index=default_index(1))
         else:
             temp_df = pd.DataFrame()
         metadata_df = pd.concat([metadata_df, temp_df], axis=0)
-        if (data_source == 'gpm') or (data_source == 'smap'):
+        if (data_source == 'gpm') or (data_source == 'smap') or (data_source == 'era5_land'):
             conf.FS.write_bytes(tile_path, tile_ds.to_netcdf())
         elif data_source == 'gfs':
             tile_ds.to_netcdf('temp.nc4')

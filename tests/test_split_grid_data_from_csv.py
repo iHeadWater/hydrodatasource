@@ -1,21 +1,17 @@
 import os
 import pathlib
 
+import geopandas as gpd
 import pandas as pd
+import xarray as xr
+from dijkstra_conda import ig_path
 
-from hydrodatasource.reader.spliter_grid import (
-    query_path_from_metadata,
-    generate_bbox_from_shp,
-)
+import hydrodatasource.configs.config as conf
 from hydrodatasource.reader.spliter_grid import (
     query_path_from_metadata,
     generate_bbox_from_shp,
     merge_with_spatial_average,
 )
-import xarray as xr
-import hydrodatasource.configs.config as conf
-import geopandas as gpd
-from dijkstra_conda import ig_path
 
 
 def test_query_path_from_metadata_gpm():
@@ -72,6 +68,32 @@ def test_split_grid_data_from_single_basin_gfs():
     time_start = "2022-01-03"
     time_end = "2022-01-03"
     tile_list = query_path_from_metadata(time_start, time_end, bbox, data_source="gfs")
+    data_list = []
+    for tile in tile_list:
+        data_list.append(xr.open_dataset(conf.FS.open(tile)))
+    print(data_list)
+    return tile_list
+
+
+def test_split_grid_data_from_single_basin_smap():
+    test_shp = "s3://basins-origin/basin_shapefiles/basin_USA_camels_01414500.zip"
+    mask, bbox = generate_bbox_from_shp(test_shp)
+    time_start = "2016-02-02"
+    time_end = "2016-02-02"
+    tile_list = query_path_from_metadata(time_start, time_end, bbox, data_source="smap")
+    data_list = []
+    for tile in tile_list:
+        data_list.append(xr.open_dataset(conf.FS.open(tile)))
+    print(data_list)
+    return tile_list
+
+
+def test_split_grid_data_from_single_basin_era5():
+    test_shp = "s3://basins-origin/basin_shapefiles/basin_CHN_songliao_10810201.zip"
+    mask, bbox = generate_bbox_from_shp(test_shp)
+    time_start = "2022-06-02"
+    time_end = "2022-06-02"
+    tile_list = query_path_from_metadata(time_start, time_end, bbox, data_source="era5_land")
     data_list = []
     for tile in tile_list:
         data_list.append(xr.open_dataset(conf.FS.open(tile)))

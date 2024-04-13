@@ -105,7 +105,7 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False, need_refer=
             data_obj = pd.read_fwf(obj, storage_options=storage_option)
             if (need_cache is True) & (storage_option is not None):
                 data_obj.to_csv(os.path.join(conf.LOCAL_DATA_PATH, cache_name))
-        elif ext_name == '.zarr':
+        elif ext_name == 'zarr':
             zarr_mapper = conf.FS.get_mapper(obj)
             # KVStore is introduced in zarr specification V3
             # https://zarr-specs.readthedocs.io/en/latest/v3/stores.html
