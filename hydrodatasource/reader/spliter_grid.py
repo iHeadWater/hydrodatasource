@@ -1,22 +1,32 @@
 import os
+
+import h5py
 import numpy as np
 import pandas as pd
 import xarray as xr
 from pandas.core.indexes.api import default_index
-from hydrodatasource.processor.mask import gen_single_mask
+
 import hydrodatasource.configs.config as conf
+from hydrodatasource.processor.mask import gen_single_mask
 from hydrodatasource.reader import access_fs
+
 
 def query_path_from_metadata(time_start=None, time_end=None, bbox=None, data_source='gpm'):
     # query path from other columns from metadata.csv
     metadata_df = pd.read_csv('metadata.csv')
-    tile_list = []
-    paths = metadata_df
+    source_list = []
+    if data_source == 'gpm':
+        source_list = [x for x in metadata_df['path'] if 'GPM' in x]
+    elif data_source == 'smap':
+        source_list = [x for x in metadata_df['path'] if 'SMAP' in x]
+    elif data_source == 'gfs':
+        source_list = [x for x in metadata_df['path'] if 'GFS' in x]
+    paths = metadata_df[metadata_df['path'].isin(source_list)]
     if time_start is not None:
         paths = paths[paths['time_start'] >= time_start]
     if time_end is not None:
         paths = paths[paths['time_end'] <= time_end]
-    if data_source == 'gpm':
+    if (data_source == 'gpm') or (data_source == 'smap'):
         if bbox is not None:
             paths = paths[
                 (paths['bbox'].apply(lambda x: string_to_list(x)[0] <= bbox[0])) &
@@ -29,24 +39,45 @@ def query_path_from_metadata(time_start=None, time_end=None, bbox=None, data_sou
                       (paths['bbox'].apply(lambda x: string_to_list(x)[1] >= bbox[1])) &
                       (paths['bbox'].apply(lambda x: string_to_list(x)[2] >= bbox[2])) &
                       (paths['bbox'].apply(lambda x: string_to_list(x)[3] <= bbox[3]))]
+    tile_list = []
     for path in paths['path']:
-        path_ds = xr.open_dataset(conf.FS.open(path))
-        if data_source == 'gpm':
-            tile_ds = path_ds.sel(time=slice(time_start, time_end), lon=slice(bbox[0], bbox[1]),
-                                  lat=slice(bbox[3], bbox[2]))
-        # 会扰乱桶，注意
-        elif data_source == 'gfs':
-            tile_ds = path_ds.sel(time=slice(time_start, time_end), longitude=slice(bbox[0], bbox[1]),
-                                  latitude=slice(bbox[2], bbox[3]))
+        if data_source == 'smap':
+            path_ds = h5py.File(conf.FS.open(path))
+            # datetime.fromisoformat('2000-01-01T12:00:00') + timedelta(seconds=path_ds['time'][0])
+            lon_array = path_ds['cell_lon'][0]
+            lat_array = path_ds['cell_lat'][:, 0]
+            cell_lon_w = np.argwhere(lon_array >= bbox[0])[0][0]
+            cell_lon_e = np.argwhere(lon_array <= bbox[1])[-1][0]
+            cell_lat_n = np.argwhere(lat_array <= bbox[2])[0][0]
+            cell_lat_s = np.argwhere(lat_array >= bbox[3])[-1][0]
+            tile_da = path_ds['Geophysical_Data']['sm_surface'][cell_lat_n: cell_lat_s + 1, cell_lon_w: cell_lon_e + 1]
+            tile_ds = xr.DataArray(tile_da).to_dataset(name='sm_surface')
         else:
-            tile_ds = path_ds
+            # 会扰乱桶，注意
+            path_ds = xr.open_dataset(conf.FS.open(path))
+            if data_source == 'gpm':
+                tile_ds = path_ds.sel(time=slice(time_start, time_end), lon=slice(bbox[0], bbox[1]),
+                                      lat=slice(bbox[3], bbox[2]))
+            # 会扰乱桶，注意
+            elif data_source == 'gfs':
+                tile_ds = path_ds.sel(time=slice(time_start, time_end), longitude=slice(bbox[0], bbox[1]),
+                                      latitude=slice(bbox[2], bbox[3]))
+            else:
+                tile_ds = path_ds
         tile_path = path.rstrip('.nc4') + '_tile.nc4'
         tile_list.append(tile_path)
-        temp_df = pd.DataFrame(
-            {'bbox': str(bbox), 'time_start': time_start, 'time_end': time_end, 'res_lon': 0.25, 'res_lat': 0.25,
-             'path': tile_path}, index=default_index(1))
+        if (data_source == 'gpm') or (data_source == 'gfs'):
+            temp_df = pd.DataFrame(
+                {'bbox': str(bbox), 'time_start': time_start, 'time_end': time_end, 'res_lon': 0.25, 'res_lat': 0.25,
+                 'path': tile_path}, index=default_index(1))
+        elif data_source == 'smap':
+            temp_df = pd.DataFrame(
+                {'bbox': str(bbox), 'time_start': time_start, 'time_end': time_end, 'res_lon': 0.08, 'res_lat': 0.08,
+                 'path': tile_path}, index=default_index(1))
+        else:
+            temp_df = pd.DataFrame()
         metadata_df = pd.concat([metadata_df, temp_df], axis=0)
-        if data_source == 'gpm':
+        if (data_source == 'gpm') or (data_source == 'smap'):
             conf.FS.write_bytes(tile_path, tile_ds.to_netcdf())
         elif data_source == 'gfs':
             tile_ds.to_netcdf('temp.nc4')
@@ -89,20 +120,24 @@ def string_to_list(x: str):
 
 def generate_bbox_from_shp(basin_shape_path):
     basin_id = basin_shape_path.split('/')[-1].split('.')[0]
-    mask = gen_single_mask(basin_id=basin_id, shp_path=basin_shape_path, dataname='gfs', mask_path='temp_mask', minio=True)
+    mask = gen_single_mask(basin_id=basin_id, shp_path=basin_shape_path, dataname='gfs', mask_path='temp_mask',
+                           minio=True)
     bbox = [mask['lon'].values.min(), mask['lon'].values.max(), mask['lat'].values.max(), mask['lat'].values.min()]
     return mask, bbox
+
 
 def merge_with_spatial_average(gpm_file, gfs_file, smap_file, output_file_path):
     def calculate_and_rename(input_file_path, prefix):
         ds = access_fs.spec_path(input_file_path, head="minio")
         avg_ds = ds.mean(dim=["lat", "lon"], skipna=True).astype("float32")
-        new_names = {var_name: (f"{prefix}_tp" if var_name in ["tp", "__xarray_dataarray_variable__"] else f"{prefix}_{var_name}") for var_name in avg_ds.data_vars}
+        new_names = {var_name: (
+            f"{prefix}_tp" if var_name in ["tp", "__xarray_dataarray_variable__"] else f"{prefix}_{var_name}") for
+            var_name in avg_ds.data_vars}
         avg_ds_renamed = avg_ds.rename(new_names)
         return avg_ds_renamed
 
     basin_id = output_file_path.split('_')[-1].split('.')[0]
-    
+
     gfs_avg_renamed = calculate_and_rename(gfs_file, "gfs")
     gpm_avg_renamed = calculate_and_rename(gpm_file, "gpm")
     smap_avg_renamed = calculate_and_rename(smap_file, "smap")

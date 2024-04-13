@@ -36,6 +36,16 @@ def test_query_path_from_metadata_gfs():
     return paths
 
 
+def test_query_path_from_metadata_smap():
+    # start_time (datetime, YY-mm-dd): The start date of the desired data.
+    # end_time (datetime, YY-mm-dd): The end date of the desired data.
+    time_start = "2016-02-02"
+    time_end = "2016-02-02"
+    bbox = [-110, -69, 47, 26]
+    paths = query_path_from_metadata(time_start, time_end, bbox, data_source="smap")
+    return paths
+
+
 def test_generate_bbox_from_shp():
     basin_shp = "s3://basins-origin/basins_shp.zip"
     mask, bbox = generate_bbox_from_shp(basin_shape_path=basin_shp)
