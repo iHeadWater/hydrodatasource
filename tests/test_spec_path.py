@@ -1,6 +1,7 @@
 import geopandas as gpd
 import pandas as pd
 import pytest
+import numpy as np
 import xarray as xr
 import hydrodatasource.configs.config as conf
 from hydrodatasource.reader import access_fs
@@ -160,43 +161,46 @@ def test_df2ds():
     return zq_ds
 
 def list_csv_files(bucket_name, prefix=''):
-    """
-    列出指定S3桶中所有CSV文件的路径。
-    """
-    # 使用FS的glob方法查找匹配的文件
-    path = f'{bucket_name}/{prefix}' if prefix else f'{bucket_name}'
-    files = conf.FS.glob(f'{path}/*.csv')
-    # s3fs glob方法返回的路径是完整的s3路径
-    return files
+    """List paths of all CSV files in the specified S3 bucket."""
+    path = f'{bucket_name}/{prefix}' if prefix else bucket_name
+    csv_files = conf.FS.glob(f'{path}*.csv')
+    return csv_files
 
-def read_process_store_csv(src_bucket, dest_bucket, prefix=''):
+def process_store_csvs(source_bucket, destination_bucket, prefix=''):
     """
-    读取源桶中的CSV文件，处理它们，并将结果存储到目标桶。
+    Read CSV files from the source bucket, process them, and store the results in the destination bucket.
     """
-    csv_files = list_csv_files(src_bucket, prefix)
-    total_files = len(csv_files)  # 总文件数
-    print(f"总共发现 {total_files} 个CSV文件。")
-    
+    csv_files = list_csv_files(source_bucket, prefix)
+
     for file_path in csv_files:
-        # 从S3读取CSV到DataFrame
-        with conf.FS.open(file_path, mode='rb') as f:
-            df = pd.read_csv(f,index_col = False)
-        
-        # 处理DataFrame 单步调用
-        df_processed = rain_anomaly.rainfall_format_normalization(df)
-        print(df_processed.head())
-        
-        # 从原始文件路径中提取文件名
-        file_name = file_path.split('/')[-1]
-        # 构建新的目标文件路径
-        dest_file_path = f"{dest_bucket}/{file_name}"
-        
-        # 将处理后的DataFrame写入新的目标文件路径
-        with conf.FS.open(dest_file_path, 'w') as f:
-            df.to_csv(f, index=False)
+        df = read_csv_to_dataframe(file_path)
+        df = process_dataframe(df)
+        store_dataframe_to_bucket(df, destination_bucket, file_path)
+
+
+def read_csv_to_df(file_path):
+    """Read CSV file from file_path and return as pandas DataFrame."""
+    with conf.FS.open(file_path, mode='rb') as csv_file:
+        df = pd.read_csv(csv_file, index_col=None)
+    return df
+
+
+def process_dataframe(df):
+    df = rain_anomaly.normalize_rainfall_format(df)
+    df = rain_anomaly.filter_rainfall_extremes(df)
+    df = rain_anomaly.filter_rainfall_gradients(df)
+    df = df[['station_code', 'time', 'daily_rainfall', 'interval', 'precipitation', 'daily_change', 'wetness']]
+    return df
+
+
+def store_dataframe_to_bucket(df, bucket, file_path):
+    file_name = file_path.split('/')[-1]
+    destination_file_path = f"{bucket}/{file_name}"
+    with conf.FS.open(destination_file_path, mode='w') as file:
+        df.to_csv(file, index=False)
 
 
 def test_read_folder():
-    src_bucket = 's3://stations-interim/pp_stations/hour_data/1h'
-    dest_bucket = 's3://stations-interim/pp_stations/hour_data/1h'
-    read_process_store_csv(src_bucket, dest_bucket)
+    source_bucket = 's3://stations-origin/pp_stations/hour_data/1h'
+    destination_bucket = 's3://stations-interim/pp_stations/hour_data/1h'
+    process_store_csvs(source_bucket, destination_bucket)
