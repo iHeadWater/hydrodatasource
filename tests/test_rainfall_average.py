@@ -1,7 +1,6 @@
 import os
 
 import geopandas as gpd
-import pandas as pd
 
 import hydrodatasource.configs.config as hdscc
 from hydrodatasource.processor.basin_mean_rainfall import calculate_voronoi_polygons, calculate_weighted_rainfall, \

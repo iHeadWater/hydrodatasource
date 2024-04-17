@@ -2,7 +2,8 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 from scipy.spatial import Voronoi
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Polygon
+
 import hydrodatasource.configs.config as hdscc
 
 

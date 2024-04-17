@@ -287,11 +287,6 @@ def mean_by_mask(src, var, mask):
     """
     计算流域平均
 
-    Todo:
-        - 根据grid数据生成网格mask
-        - 根据mask提取数据
-        - 以流域为单位计算流域内加权值
-
     Args:
         src (dataset): 必选，流域的网格数据，通过xarray读取
         var (str): 必选，表示网格数据中需要计算的变量名称
@@ -299,17 +294,11 @@ def mean_by_mask(src, var, mask):
 
     Returns
         m (float): 平均值
-
     """
-
     src_array = src[var].to_numpy()
     mask_array = mask["w"].to_numpy()
-
-    src_array = da.from_array(src_array, chunks=(20, 10, 10))
-    mask_array = da.from_array(mask_array, chunks=(10, 10))
-
+    src_array = da.from_array(src_array, chunks='auto')
+    mask_array = da.from_array(mask_array, chunks='auto')
     mask_array_expand = np.expand_dims(mask_array, 0).repeat(src_array.shape[0], 0)
-
     s = np.multiply(mask_array_expand, src_array)
-
     return np.nansum(s, axis=(1, 2)) / np.sum(mask_array)
