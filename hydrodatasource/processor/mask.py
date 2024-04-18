@@ -220,8 +220,8 @@ def gen_mask(basin_id, watershed, dataname, save_dir="."):
 
 
     Args:
+        basin_id: 流域号
         watershed (GeoDataframe): 必选，流域的矢量数据，通过geopandas读取
-        filedname (str): 必选，表示流域编号的字段名称
         dataname (DataArray): 必选，表示流域mask数据名称
         save_dir (str): 必选，表示流域mask文件生成路径
 
@@ -266,7 +266,7 @@ def gen_mask(basin_id, watershed, dataname, save_dir="."):
 def gen_single_mask(basin_id, shp_path, dataname, mask_path, minio=False):
     if os.path.isfile(mask_path):
         return xr.open_dataset(mask_path)
-    elif dataname in ["gpm", "gfs"]:
+    elif dataname in ["gpm", "gfs", "era5"]:
         if minio == False:
             shp_path = os.path.join(shp_path, basin_id, f"{basin_id}.shp")
             watershed = gpd.read_file(shp_path)
@@ -296,7 +296,10 @@ def mean_by_mask(src, var, mask):
         m (float): 平均值
     """
     src_array = src[var].to_numpy()
-    mask_array = mask["w"].to_numpy()
+    if 'tp' in src.data_vars:
+        mask_array = mask["w"].to_numpy().T
+    else:
+        mask_array = mask["w"].to_numpy()
     src_array = da.from_array(src_array, chunks='auto')
     mask_array = da.from_array(mask_array, chunks='auto')
     mask_array_expand = np.expand_dims(mask_array, 0).repeat(src_array.shape[0], 0)
