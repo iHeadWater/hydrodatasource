@@ -10,7 +10,6 @@ import hydrodatasource.configs.config as conf
 from hydrodatasource.reader.spliter_grid import (
     query_path_from_metadata,
     generate_bbox_from_shp,
-    merge_with_spatial_average,
 )
 
 
@@ -120,22 +119,3 @@ def test_read_topo_data():
         rr_path = "s3://reservoirs-origin/rr_stations/" + sta_id + ".csv"
         rr_df = pd.read_csv(rr_path, storage_options=conf.MINIO_PARAM)
         print(rr_df)
-
-
-def merge_with_spatial_average():
-    # 暂无数据 求某个流域gpm/gfs/smap面平均,并合并为mean_forcing.nc
-    gpm_path = (
-        "basin-origin/hour_data/1h/grid_data/grid_gpm_data/grid_gpm_CHN_21401550.nc"
-    )
-
-    gfs_path = (
-        "basin-origin/hour_data/1h/grid_data/grid_gfs_data/grid_gfs_CHN_21401550.nc"
-    )
-
-    smap_path = (
-        "basin-origin/hour_data/1h/grid_data/grid_smap_data/grid_smap_CHN_21401550.nc"
-    )
-
-    out_path = "basin-origin/hour_data/1h/mean_data/mean_data_forcing/mean_forcing_CHN_21401550.nc"
-    merged_ds = merge_with_spatial_average(gpm_path, gfs_path, smap_path, out_path)
-    print(merged_ds)
