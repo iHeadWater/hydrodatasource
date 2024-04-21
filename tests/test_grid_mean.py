@@ -1,3 +1,4 @@
+import h5py
 import numpy as np
 
 import hydrodatasource.processor.mask as hpm
@@ -9,39 +10,55 @@ import xarray as xr
 def test_grid_mean_mask():
     # 21401550, 碧流河
     test_shp = 's3://basins-origin/basin_shapefiles/basin_CHN_songliao_21401550.zip'
-    mask, bbox = generate_bbox_from_shp(test_shp, 'gpm')
+    bbox, basin = generate_bbox_from_shp(test_shp)
     time_start = "2023-06-06 00:00:00"
     time_end = "2023-06-06 02:00:00"
     test_gpm_paths = query_path_from_metadata(time_start, time_end, bbox, data_source="gpm")
     result_arr_list = []
     for path in test_gpm_paths:
         test_gpm = xr.open_dataset(hdscc.FS.open(path))
+        mask = hpm.gen_single_mask(basin, 'gpm')
         result_arr = hpm.mean_by_mask(test_gpm, var='precipitationCal', mask=mask)
         result_arr_list.append(result_arr)
     return result_arr_list
 
+
 def test_grid_mean_era5_land():
     # 21401550, 碧流河
     test_shp = 's3://basins-origin/basin_shapefiles/basin_CHN_songliao_21401550.zip'
-    mask, bbox = generate_bbox_from_shp(test_shp, 'era5')
+    bbox, basin = generate_bbox_from_shp(test_shp)
     time_start = "2022-06-02"
     time_end = "2022-06-02"
     test_era5_land_paths = query_path_from_metadata(time_start, time_end, bbox, data_source="era5_land")
     result_arr_list = []
     for path in test_era5_land_paths:
         test_era5_land = xr.open_dataset(hdscc.FS.open(path))
+        mask = hpm.gen_single_mask(basin, 'era5_land')
         result_arr = hpm.mean_by_mask(test_era5_land, var='tp', mask=mask)
         result_arr_list.append(result_arr)
     return result_arr_list
 
+def test_smap_mean():
+    test_shp = 's3://basins-origin/basin_shapefiles/basin_CHN_songliao_21401550.zip'
+    bbox, basin = generate_bbox_from_shp(test_shp)
+    time_start = "2016-02-02"
+    time_end = "2016-02-02"
+    test_smap_paths = query_path_from_metadata(time_start, time_end, bbox, data_source='smap')
+    result_arr_list = []
+    for path in test_smap_paths:
+        test_smap = xr.open_dataset(hdscc.FS.open(path))
+        mask = hpm.gen_single_mask(basin, 'smap')
+        result_arr = hpm.mean_by_mask(test_smap, 'sm_surface', mask)
+        result_arr_list.append(result_arr)
+    return result_arr_list
 
 def test_concat_gpm_average():
     basin_id = 'CHN_21401550'
     result_arr_list = test_grid_mean_mask()
     gpm_hour_array = []
-    xr_ds = xr.Dataset(coords={'prcpCal_aver':[]})
+    xr_ds = xr.Dataset(coords={'prcpCal_aver': []})
     for i in np.arange(0, len(result_arr_list), 2):
-        gpm_hour_i = np.add(result_arr_list[i], result_arr_list[i+1])
+        gpm_hour_i = np.add(result_arr_list[i], result_arr_list[i + 1])
         gpm_hour_array.append(gpm_hour_i)
         temp_ds = xr.Dataset({'prcpCal_aver': gpm_hour_i})
         xr_ds = xr.concat([xr_ds, temp_ds], 'prcpCal_aver')
@@ -53,7 +70,7 @@ def test_concat_gpm_average():
 def test_concat_era5_land_average():
     basin_id = 'CHN_21401550'
     result_arr_list = test_grid_mean_era5_land()
-    xr_ds = xr.Dataset(coords={'tp_aver':[]})
+    xr_ds = xr.Dataset(coords={'tp_aver': []})
     # xr_ds是24小时的24个雨量平均值
     for i in np.arange(0, len(result_arr_list)):
         temp_ds = xr.Dataset({'tp_aver': result_arr_list[i]})

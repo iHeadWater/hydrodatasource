@@ -8,16 +8,13 @@
 
 """
 
-
-import os
 import numpy as np
 import xarray as xr
 import geopandas as gpd
 import dask.array as da
 import itertools
+from geopandas import GeoDataFrame
 from shapely.geometry import Polygon
-
-import hydrodatasource.configs.config as conf
 
 
 def mean_over_basin(basin, basin_id, dataset, data_name, lon="lon", lat="lat"):
@@ -103,7 +100,6 @@ def grid_to_gdf(dataset, data_name, lon, lat):
     data["HBlat"] = HBlats
     data[data_name] = values
     # data['geometry']=geometry
-
     return data
 
 
@@ -199,7 +195,7 @@ def gen_grids(bbox, resolution, offset):
 
 
 def get_para(data_name):
-    if data_name.lower() in ["era5"]:
+    if (data_name.lower() in ["era5_land"]) or (data_name.lower() in ["era5"]):
         return 0.1, 0
     elif data_name.lower() in ["gpm"]:
         return 0.1, 0.05
@@ -209,78 +205,88 @@ def get_para(data_name):
         raise Exception("未支持的数据产品")
 
 
-def gen_mask(basin_id, watershed, dataname, save_dir="."):
+def gen_mask(watershed, dataname):
     """
     计算流域平均
-
-    Todo:
-        - 根据grid数据生成网格
-        - 网格与流域相交
-        - 以流域为单位计算流域内加权值
-
-
     Args:
-        basin_id: 流域号
         watershed (GeoDataframe): 必选，流域的矢量数据，通过geopandas读取
         dataname (DataArray): 必选，表示流域mask数据名称
         save_dir (str): 必选，表示流域mask文件生成路径
 
     Returns
         data (Dataframe): 流域编号和对应的平均值
-
     """
-
     for index, row in watershed.iterrows():
         # wid = row[filedname]
-        wid = basin_id
+        # wid = basin_id
         geo = row["geometry"]
         bbox = geo.bounds
-        # print(geo.bounds)
         res, offset = get_para(dataname)
-
         grid = gen_grids(bbox, res, offset)
         grid = grid.to_crs(epsg=3857)
         grid["GRID_AREA"] = grid.area
         grid = grid.to_crs(epsg=4326)
-
         gs = gpd.GeoSeries.from_wkt([geo.wkt])
         sub = gpd.GeoDataFrame(crs="EPSG:4326", geometry=gs)
-
         intersects = gpd.overlay(grid, sub, how="intersection")
         intersects = intersects.to_crs(epsg=3857)
         intersects["BASIN_AREA"] = intersects.area
         intersects = intersects.to_crs(epsg=4326)
         intersects["w"] = intersects["BASIN_AREA"] / intersects["GRID_AREA"]
-
         grids = grid.set_index(["lon", "lat"]).join(
             intersects.set_index(["lon", "lat"]), lsuffix="_left", rsuffix="_right"
         )
         grids = grids.loc[:, ["w"]]
         grids.loc[grids.w.isnull(), "w"] = 0
-
         wds = grids.to_xarray()
-        wds.to_netcdf(os.path.join(save_dir, f"mask-{wid}-{dataname}.nc"))
+        # wds.to_netcdf(os.path.join(save_dir, f"mask-{wid}-{dataname}.nc"))
         return wds
 
+def gen_mask_smap(smap_cell_array, basin_gdf):
+    poly_list = []
+    for i in range(0, smap_cell_array.shape[0]-1):
+        for j in range(0, smap_cell_array.shape[1]-1):
+            lon_half = (smap_cell_array[i][j+1][0] - smap_cell_array[i][j][0]) / 2
+            lat_half = (smap_cell_array[i][j][1] - smap_cell_array[i+1][j][1]) / 2
+            corner1 = (smap_cell_array[i][j][0] - lon_half, smap_cell_array[i][j][1] - lat_half)
+            corner2 = (smap_cell_array[i][j][0] + lon_half, smap_cell_array[i][j][1] - lat_half)
+            corner3 = (smap_cell_array[i][j][0] - lon_half, smap_cell_array[i][j][1] + lat_half)
+            corner4 = (smap_cell_array[i][j][0] + lon_half, smap_cell_array[i][j][1] + lat_half)
+            geom = Polygon((corner1, corner2, corner4, corner3, corner1))
+            poly_list.append(geom)
+    grid_gdf = GeoDataFrame(geometry=poly_list)
+    intersects = gpd.overlay(grid_gdf, basin_gdf, how="intersection")
+    intersects["w"] = intersects.area / grid_gdf.geometry.area
+    wds = intersects.to_xarray()
+    return wds
 
-def gen_single_mask(basin_id, shp_path, dataname, mask_path, minio=False):
-    if os.path.isfile(mask_path):
-        return xr.open_dataset(mask_path)
-    elif dataname in ["gpm", "gfs", "era5"]:
-        if minio == False:
-            shp_path = os.path.join(shp_path, basin_id, f"{basin_id}.shp")
-            watershed = gpd.read_file(shp_path)
-        else:
-            watershed = gpd.read_file(conf.FS.open(shp_path))
-        if not os.path.exists(mask_path):
-            os.makedirs(mask_path)
-        gen_mask(basin_id, watershed, dataname, save_dir=mask_path)
-        mask_file_name = f"mask-{basin_id}-{dataname}.nc"
-        mask_file_path = os.path.join(mask_path, mask_file_name)
-        print(f"Mask file is generated in {mask_path}")
-        return xr.open_dataset(mask_file_path)
-    elif dataname != "merge":
-        raise NotImplementedError("Only 'gpm', 'gfs' or 'merge' dataname is available.")
+def gen_single_mask(watershed, dataname):
+    if dataname in ['gpm', 'gfs','era5_land', 'era5']:
+        mask = gen_mask(watershed, dataname)
+    elif dataname == 'smap':
+        # w,e,n,s
+        bounds_array = watershed.bounds.to_numpy()[0]
+        bbox = [bounds_array[0], bounds_array[2], bounds_array[3], bounds_array[1]]
+        # 不管什么时间，同一个bbox下，得到的smap数据和网格总是一致
+        lon_array = np.load('smap_lon.npy')
+        lat_array = np.load('smap_lat.npy')
+        w_index = np.argwhere(lon_array >= bbox[0])[0][0]
+        e_index = np.argwhere(lon_array <= bbox[1])[-1][0]
+        n_index = np.argwhere(lat_array <= bbox[2])[0][0]
+        s_index = np.argwhere(lat_array >= bbox[3])[-1][0]
+        lon_slice = lon_array[w_index: e_index+2]
+        lat_slice = lat_array[n_index: s_index+2]
+        smap_cell_array = np.ndarray((lat_slice.shape[0], lon_slice.shape[0]), dtype=object)
+        for lat in range(0, lat_slice.shape[0]):
+            for lon in range(0, lon_slice.shape[0]):
+                smap_cell_array[lat, lon] = (lon_slice[lon], lat_slice[lat])
+        mask = gen_mask_smap(smap_cell_array, watershed)
+    # mask_file_name = f"mask-{basin_id}-{dataname}.nc"
+    # mask_file_path = os.path.join(mask_path, mask_file_name)
+    # print(f"Mask file is generated in {mask_path}")
+    else:
+        mask = xr.Dataset()
+    return mask
 
 
 def mean_by_mask(src, var, mask):
@@ -298,10 +304,14 @@ def mean_by_mask(src, var, mask):
     src_array = src[var].to_numpy()
     if 'tp' in src.data_vars:
         mask_array = mask["w"].to_numpy().T
+        mask_array_expand = np.expand_dims(mask_array, 0).repeat(src_array.shape[0], 0)
+    elif 'sm_surface' in src.data_vars:
+        mask_array = mask["w"].to_numpy().reshape(src_array.shape)
+        mask_array_expand = np.expand_dims(mask_array, 0)
     else:
         mask_array = mask["w"].to_numpy()
-    src_array = da.from_array(src_array, chunks='auto')
-    mask_array = da.from_array(mask_array, chunks='auto')
-    mask_array_expand = np.expand_dims(mask_array, 0).repeat(src_array.shape[0], 0)
+        mask_array_expand = np.expand_dims(mask_array, 0).repeat(src_array.shape[0], 0)
+    # src_array = da.from_array(src_array, chunks='auto')
+    # mask_array = da.from_array(mask_array, chunks='auto')
     s = np.multiply(mask_array_expand, src_array)
     return np.nansum(s, axis=(1, 2)) / np.sum(mask_array)

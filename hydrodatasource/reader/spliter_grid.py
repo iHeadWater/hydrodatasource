@@ -1,5 +1,6 @@
 import os
 
+import geopandas as gpd
 import h5py
 import numpy as np
 import pandas as pd
@@ -7,7 +8,6 @@ import xarray as xr
 from pandas.core.indexes.api import default_index
 
 import hydrodatasource.configs.config as conf
-from hydrodatasource.processor.mask import gen_single_mask
 from hydrodatasource.reader import access_fs
 
 
@@ -54,7 +54,7 @@ def query_path_from_metadata(time_start=None, time_end=None, bbox=None, data_sou
                 cell_lon_e = np.argwhere(lon_array <= bbox[1])[-1][0]
                 cell_lat_n = np.argwhere(lat_array <= bbox[2])[0][0]
                 cell_lat_s = np.argwhere(lat_array >= bbox[3])[-1][0]
-                tile_da = path_ds['Geophysical_ndData']['sm_surface'][cell_lat_n: cell_lat_s + 1,
+                tile_da = path_ds['Geophysical_Data']['sm_surface'][cell_lat_n: cell_lat_s + 1,
                           cell_lon_w: cell_lon_e + 1]
                 tile_ds = xr.DataArray(tile_da).to_dataset(name='sm_surface')
             elif data_source == 'era5_land':
@@ -75,7 +75,7 @@ def query_path_from_metadata(time_start=None, time_end=None, bbox=None, data_sou
                     tile_ds = path_ds
             tile_path = path.rstrip('.nc4') + '_tile.nc4'
             tile_list.append(tile_path)
-            if  data_source == 'gfs':
+            if data_source == 'gfs':
                 temp_df = pd.DataFrame(
                     {'bbox': str(bbox), 'time_start': time_start, 'time_end': time_end, 'res_lon': 0.25,
                      'res_lat': 0.25,
@@ -133,13 +133,16 @@ def string_to_list(x: str):
     return list(map(float, x[1:-1].split(',')))
 
 
-def generate_bbox_from_shp(basin_shape_path, dataname):
-    # dataname should be: era5, gfs, gpm
-    basin_id = basin_shape_path.split('/')[-1].split('.')[0]
-    mask = gen_single_mask(basin_id=basin_id, shp_path=basin_shape_path, dataname=dataname, mask_path='temp_mask',
-                           minio=True)
-    bbox = [mask['lon'].values.min(), mask['lon'].values.max(), mask['lat'].values.max(), mask['lat'].values.min()]
-    return mask, bbox
+def generate_bbox_from_shp(basin_shape_path, minio=True):
+    # 只考虑单个流域
+    if minio:
+        basin_gpd = access_fs.spec_path(basin_shape_path.lstrip('s3://'), head="minio")
+    else:
+        basin_gpd = gpd.read_file(basin_shape_path)
+    # 西，东，北，南
+    bounds_array = basin_gpd.bounds.to_numpy()[0]
+    bbox = [bounds_array[0], bounds_array[2], bounds_array[3], bounds_array[1]]
+    return bbox, basin_gpd
 
 
 def merge_with_spatial_average(gpm_file, gfs_file, smap_file, output_file_path):

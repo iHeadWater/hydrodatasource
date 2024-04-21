@@ -20,9 +20,7 @@ from hydrodatasource.utils.utils import generate_time_intervals
 def test_gen_mask():
     mask = gen_single_mask(
         basin_id="1_02051500",
-        shp_path=os.path.join(LOCAL_DATA_PATH, "datasets-origin", "shp"),
         dataname="gpm",
-        mask_path=os.path.join(LOCAL_DATA_PATH, "datasets-origin", "mask"),
     )
     assert mask is not None
     return mask
@@ -31,7 +29,6 @@ def test_gen_mask():
 def test_gen_mask_minio():
     mask = gen_single_mask(
         basin_id="10310500",
-        shp_path="s3://basins-origin/basin_shapefiles/rr_CHN_songliao_10310500_basin.zip",
         dataname="gpm",
         mask_path=os.path.join(LOCAL_DATA_PATH, "datasets-origin", "mask"),
         minio=True,
