@@ -1,3 +1,11 @@
+'''
+Author: liutiaxqabs 1498093445@qq.com
+Date: 2024-04-22 13:38:07
+LastEditors: liutiaxqabs 1498093445@qq.com
+LastEditTime: 2024-04-24 13:32:34
+FilePath: /hydrodatasource/tests/test_streamflow_cleaner.py
+Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+'''
 import pytest
 from hydrodatasource.cleaner.streamflow_cleaner import StreamflowCleaner  # 确保引入你的类
 import pandas as pd
@@ -12,21 +20,3 @@ def test_anomaly_process():
     print(cleaner.origin_df)
     print(cleaner.processed_df)
     cleaner.processed_df.to_csv("/home/liutianxv1/径流sampledatatest.csv")
-    
-    # df = cleaner.processed_df
-    # df['TM'] = pd.to_datetime(df['TM'])  # 确保'TM'列是 datetime 类型
-    # filtered_df = df[(df['TM'] >= '2019-07-01') & (df['TM'] <= '2019-09-30')]
-
-    # # 绘图
-    # plt.figure(figsize=(10, 6))
-    # plt.plot(filtered_df['TM'], filtered_df['INQ'], label='INQ', color='blue')
-    # plt.plot(filtered_df['TM'], filtered_df[str(methods)], label=str(methods), color='red')
-    # plt.xlabel('Time')
-    # plt.ylabel('Values')
-    # plt.title('INQ and INQ_Filter')
-    # plt.legend()
-    # plt.grid(True)
-
-    # # 保存图像
-    # plt.savefig('/home/liutianxv1/plot.png')
-    # plt.show()
