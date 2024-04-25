@@ -1,3 +1,4 @@
+import datetime
 import os
 
 import geopandas as gpd
@@ -6,8 +7,8 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 from pandas.core.indexes.api import default_index
-
-import hydrodatasource.configs.config as conf
+import hydrodatasource.processor.mask as hpm
+import hydrodatasource.configs.config as hdscc
 from hydrodatasource.reader import access_fs
 
 
@@ -46,7 +47,7 @@ def query_path_from_metadata(time_start=None, time_end=None, bbox=None, data_sou
     if len(tile_list) == 0:
         for path in paths['path']:
             if data_source == 'smap':
-                path_ds = h5py.File(conf.FS.open(path))
+                path_ds = h5py.File(hdscc.FS.open(path))
                 # datetime.fromisoformat('2000-01-01T12:00:00') + timedelta(seconds=path_ds['time'][0])
                 lon_array = path_ds['cell_lon'][0]
                 lat_array = path_ds['cell_lat'][:, 0]
@@ -63,7 +64,7 @@ def query_path_from_metadata(time_start=None, time_end=None, bbox=None, data_sou
                                       latitude=slice(bbox[2], bbox[3]))
             else:
                 # 会扰乱桶，注意
-                path_ds = xr.open_dataset(conf.FS.open(path))
+                path_ds = xr.open_dataset(hdscc.FS.open(path))
                 if data_source == 'gpm':
                     tile_ds = path_ds.sel(time=slice(time_start, time_end), lon=slice(bbox[0], bbox[1]),
                                           lat=slice(bbox[3], bbox[2]))
@@ -93,10 +94,10 @@ def query_path_from_metadata(time_start=None, time_end=None, bbox=None, data_sou
                 temp_df = pd.DataFrame()
             metadata_df = pd.concat([metadata_df, temp_df], axis=0)
             if (data_source == 'gpm') or (data_source == 'smap') or (data_source == 'era5_land'):
-                conf.FS.write_bytes(tile_path, tile_ds.to_netcdf())
+                hdscc.FS.write_bytes(tile_path, tile_ds.to_netcdf())
             elif data_source == 'gfs':
                 tile_ds.to_netcdf('temp.nc4')
-                conf.FS.put_file('temp.nc4', tile_path)
+                hdscc.FS.put_file('temp.nc4', tile_path)
                 os.remove('temp.nc4')
         metadata_df.to_csv('metadata.csv', index=False)
     return tile_list
@@ -145,6 +146,80 @@ def generate_bbox_from_shp(basin_shape_path, minio=True):
     return bbox, basin_gpd
 
 
+def grid_mean_mask(basin_id, times: list, data_source):
+    # basin_id: basin_CHN_songliao_21401550, 碧流河
+    # times: [[2023-06-06 00:00:00, 2023-06-06 02:00:00], [2023-06-07 00:00:00, 2023-06-07 02:00:00]]
+    basin_shp = f's3://basins-origin/basin_shapefiles/{basin_id}.zip'
+    bbox, basin = generate_bbox_from_shp(basin_shp)
+    aoi_data_paths = []
+    for time_slice in times:
+        time_start = time_slice[0]
+        time_end = time_slice[1]
+        aoi_path = query_path_from_metadata(time_start, time_end, bbox, data_source=data_source)
+        aoi_data_paths.append(aoi_path)
+    result_arr_list = []
+    for path in aoi_data_paths:
+        aoi_dataset = xr.open_dataset(hdscc.FS.open(path))
+        mask = hpm.gen_single_mask(basin, data_source)
+        if data_source == 'gpm':
+            result_arr = hpm.mean_by_mask(aoi_dataset, var='precipitationCal', mask=mask)
+        elif (data_source == 'era5_land') | (data_source == 'era5'):
+            result_arr = hpm.mean_by_mask(aoi_dataset, var='tp', mask=mask)
+        elif data_source == 'smap':
+            result_arr = hpm.mean_by_mask(aoi_dataset, var='sm_surface', mask=mask)
+        elif data_source == 'gfs':
+            # gfs降水字段不一定是lev_surface, 仅作演示
+            result_arr = hpm.mean_by_mask(aoi_dataset, var='lev_surface', mask=mask)
+        else:
+            result_arr = []
+        result_arr_list.append(result_arr)
+    return result_arr_list, basin
+
+
+def concat_gpm_average(basin_id, times: list):
+    result_arr_list, basin = grid_mean_mask(basin_id, times, 'gpm')
+    gpm_hour_array = []
+    xr_ds = xr.Dataset(coords={'time': times}, data_vars={'prcpCal_aver': []})
+    for i in np.arange(0, len(result_arr_list), 2):
+        gpm_hour_i = np.add(result_arr_list[i], result_arr_list[i + 1])
+        gpm_hour_array.append(gpm_hour_i)
+        temp_ds = xr.Dataset({'prcpCal_aver': gpm_hour_i})
+        xr_ds = xr.concat([xr_ds, temp_ds], 'prcpCal_aver')
+    tile_path = f's3://basins-origin/hour_data/1h/grid_data/grid_gpm_data/grid_gpm_{basin_id}.nc'
+    hdscc.FS.write_bytes(tile_path, xr_ds.to_netcdf())
+    return xr_ds, basin
+
+
+def concat_gpm_smap_mean_data(basin_ids: list, times: list):
+    # pp_stations = pd.read_csv(hdscc.FS.open('s3://stations-origin/pp_stations.csv'), engine='c')
+    # pps = pp_stations[pp_stations['ID'].isin(basin_ids)]
+    pp_sta_gdf = gpd.read_file(hdscc.FS.open('s3://stations-origin/stations_list/pp_stations.zip'))
+    merge_list = []
+    for basin_id in basin_ids:
+        gpm_mean = concat_gpm_average(basin_id, times)
+        smap_mean_mask, basin_gdf = grid_mean_mask(basin_id, times, 'smap')[0]
+        pp_stas_basin = gpd.overlay(pp_sta_gdf, basin_gdf, 'inner')
+        for pp_sta in pp_stas_basin['ID'].to_list():
+            pp_sta_csv = pd.read_csv('stations-origin/pp_stations/hour_data/1h' + pp_sta, parse_dates=['TM'],
+                                     storage_options=hdscc.MINIO_PARAM)
+            pp_sta_csv_slice = pp_sta_csv.loc[pp_sta_csv['TM'].isin(times)]
+            pp_drp = pp_sta_csv_slice['DRP']
+            pp_drp_ds = xr.Dataset.from_dataframe(pp_drp)
+            merged_ds = xr.concat(objs=[gpm_mean, smap_mean_mask, pp_drp_ds], dim='time')
+            merge_list.append(merged_ds)
+            merged_ds.to_netcdf(f'test_merged_{basin_id}.nc')
+    return merge_list
+
+
+def convert_time_slice_to_range(time_slice_list):
+    time_range_list = []
+    for time_slice in time_slice_list:
+        pd_time_slice = pd.date_range(time_slice[0], time_slice[1], freq='H').to_list()
+        time_range_list.extend(pd_time_slice)
+    return time_range_list
+
+
+'''
 def merge_with_spatial_average(gpm_file, gfs_file, smap_file, output_file_path):
     def calculate_and_rename(input_file_path, prefix):
         ds = access_fs.spec_path(input_file_path, head="minio")
@@ -171,5 +246,6 @@ def merge_with_spatial_average(gpm_file, gfs_file, smap_file, output_file_path):
     merged_ds = xr.merge([gfs_intersected, gpm_intersected, smap_intersected])
     merged_ds = merged_ds.assign_coords({"basin": basin_id}).expand_dims("basin")
 
-    conf.FS.write_bytes(output_file_path, merged_ds.to_netcdff())
+    conf.FS.write_bytes(output_file_path, merged_ds.to_netcdf())
     return merged_ds
+'''

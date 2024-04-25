@@ -1,10 +1,10 @@
-import h5py
 import numpy as np
-
-import hydrodatasource.processor.mask as hpm
-from hydrodatasource.reader.spliter_grid import generate_bbox_from_shp, query_path_from_metadata
-import hydrodatasource.configs.config as hdscc
 import xarray as xr
+
+import hydrodatasource.configs.config as hdscc
+import hydrodatasource.processor.mask as hpm
+from hydrodatasource.reader.spliter_grid import generate_bbox_from_shp, query_path_from_metadata, \
+    concat_gpm_smap_mean_data
 
 
 def test_grid_mean_mask():
@@ -38,6 +38,7 @@ def test_grid_mean_era5_land():
         result_arr_list.append(result_arr)
     return result_arr_list
 
+
 def test_smap_mean():
     test_shp = 's3://basins-origin/basin_shapefiles/basin_CHN_songliao_21401550.zip'
     bbox, basin = generate_bbox_from_shp(test_shp)
@@ -52,6 +53,8 @@ def test_smap_mean():
         result_arr_list.append(result_arr)
     return result_arr_list
 
+
+'''
 def test_concat_gpm_average():
     basin_id = 'CHN_21401550'
     result_arr_list = test_grid_mean_mask()
@@ -78,3 +81,8 @@ def test_concat_era5_land_average():
     tile_path = f's3://basins-origin/hour_data/1h/grid_data/grid_era5_land_data/grid_era5_land_{basin_id}.nc'
     hdscc.FS.write_bytes(tile_path, xr_ds.to_netcdf())
     return xr_ds
+'''
+
+
+def test_concat_variables():
+    concat_gpm_smap_mean_data(['basin_CHN_songliao_21401550'], [['2020-07-01 00:00:00', '2023-07-31 23:00:00']])
