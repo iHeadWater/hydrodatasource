@@ -1,10 +1,12 @@
-"""
+'''
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-19 13:58:31
 LastEditors: liutiaxqabs 1498093445@qq.com
-LastEditTime: 2024-04-19 14:00:47
-FilePath: /liutianxv1/hydrodatasource/hydrodatasource/cleaner/cleaner.py
-Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE‘’
+LastEditTime: 2024-04-22 13:31:41
+FilePath: /hydrodatasource/hydrodatasource/cleaner/cleaner.py
+Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+'''
+"""
 cleaner/
 │
 ├── __init__.py
@@ -14,18 +16,24 @@ cleaner/
 └── waterlevel_cleaner.py # 包含 WaterlevelCleaner 类
 """
 
-
+import xarray as xr
+import pandas as pd
+import numpy as np
 class Cleaner:
-    def __init__(self, filepath):
-        self.filepath = filepath
+    def __init__(self,data_path, *args, **kwargs):
+        self.data_path = data_path
+        self.origin_df = None
+        self.processed_df = None
+        self.read_data()
 
     def read_data(self):
-        # 实现读取数据的方法
-        pass
+        # 读取数据并存储在origin_df中
+        self.origin_df = pd.read_csv(self.data_path)
+        self.processed_df = self.origin_df.copy()
 
     def save_data(self, data, output_path):
-        # 实现保存数据的方法
-        pass
+        # 保存数据到CSV
+        data.to_csv(output_path)
 
     def anomaly_process(self, methods=None):
         if methods is None:
