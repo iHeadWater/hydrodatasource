@@ -10,7 +10,7 @@ from hydrodatasource.reader.spliter_grid import generate_bbox_from_shp, query_pa
 def test_grid_mean_mask():
     # 21401550, 碧流河
     test_shp = 's3://basins-origin/basin_shapefiles/basin_CHN_songliao_21401550.zip'
-    bbox, basin = generate_bbox_from_shp(test_shp)
+    bbox, basin = generate_bbox_from_shp(test_shp, 'gpm')
     time_start = "2023-06-06 00:00:00"
     time_end = "2023-06-06 02:00:00"
     test_gpm_paths = query_path_from_metadata(time_start, time_end, bbox, data_source="gpm")
@@ -26,7 +26,7 @@ def test_grid_mean_mask():
 def test_grid_mean_era5_land():
     # 21401550, 碧流河
     test_shp = 's3://basins-origin/basin_shapefiles/basin_CHN_songliao_21401550.zip'
-    bbox, basin = generate_bbox_from_shp(test_shp)
+    bbox, basin = generate_bbox_from_shp(test_shp, 'era5_land')
     time_start = "2022-06-02"
     time_end = "2022-06-02"
     test_era5_land_paths = query_path_from_metadata(time_start, time_end, bbox, data_source="era5_land")
@@ -41,7 +41,7 @@ def test_grid_mean_era5_land():
 
 def test_smap_mean():
     test_shp = 's3://basins-origin/basin_shapefiles/basin_CHN_songliao_21401550.zip'
-    bbox, basin = generate_bbox_from_shp(test_shp)
+    bbox, basin = generate_bbox_from_shp(test_shp, 'smap')
     time_start = "2016-02-02"
     time_end = "2016-02-02"
     test_smap_paths = query_path_from_metadata(time_start, time_end, bbox, data_source='smap')
@@ -85,4 +85,4 @@ def test_concat_era5_land_average():
 
 
 def test_concat_variables():
-    concat_gpm_smap_mean_data(['basin_CHN_songliao_21401550'], [['2020-07-01 00:00:00', '2023-07-31 23:00:00']])
+    concat_gpm_smap_mean_data(['basin_CHN_songliao_21401550'], [['2020-07-01 00:00:00', '2020-07-31 23:00:00']])

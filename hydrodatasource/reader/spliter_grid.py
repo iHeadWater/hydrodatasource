@@ -14,7 +14,7 @@ from hydrodatasource.reader import access_fs
 
 def query_path_from_metadata(time_start=None, time_end=None, bbox=None, data_source='gpm'):
     # query path from other columns from metadata.csv
-    metadata_df = pd.read_csv('metadata.csv')
+    metadata_df = pd.read_csv(f's3://grids-origin/{data_source}_metadata.csv', storage_options=hdscc.MINIO_PARAM)
     source_list = []
     if data_source == 'gpm':
         source_list = [x for x in metadata_df['path'] if 'GPM' in x]
@@ -99,7 +99,9 @@ def query_path_from_metadata(time_start=None, time_end=None, bbox=None, data_sou
                 tile_ds.to_netcdf('temp.nc4')
                 hdscc.FS.put_file('temp.nc4', tile_path)
                 os.remove('temp.nc4')
-        metadata_df.to_csv('metadata.csv', index=False)
+        metadata_df.to_csv(f'{data_source}_metadata.csv', index=False)
+        hdscc.FS.put_file(f'{data_source}_metadata.csv', f's3://grids-origin/{data_source}_metadata.csv')
+        os.remove(f'{data_source}_metadata.csv')
     return tile_list
 
 
@@ -134,15 +136,19 @@ def string_to_list(x: str):
     return list(map(float, x[1:-1].split(',')))
 
 
-def generate_bbox_from_shp(basin_shape_path, minio=True):
+def generate_bbox_from_shp(basin_shape_path, data_source, minio=True):
     # 只考虑单个流域
     if minio:
         basin_gpd = access_fs.spec_path(basin_shape_path.lstrip('s3://'), head="minio")
     else:
         basin_gpd = gpd.read_file(basin_shape_path)
-    # 西，东，北，南
-    bounds_array = basin_gpd.bounds.to_numpy()[0]
-    bbox = [bounds_array[0], bounds_array[2], bounds_array[3], bounds_array[1]]
+    if data_source == 'smap':
+        # 西，东，北，南
+        bounds_array = basin_gpd.bounds.to_numpy()[0]
+        bbox = [bounds_array[0], bounds_array[2], bounds_array[3], bounds_array[1]]
+    else:
+        mask = hpm.gen_single_mask(basin_gpd, dataname=data_source)
+        bbox = [mask['lon'].values.min(), mask['lon'].values.max(), mask['lat'].values.max(), mask['lat'].values.min()]
     return bbox, basin_gpd
 
 
@@ -150,7 +156,7 @@ def grid_mean_mask(basin_id, times: list, data_source):
     # basin_id: basin_CHN_songliao_21401550, 碧流河
     # times: [[2023-06-06 00:00:00, 2023-06-06 02:00:00], [2023-06-07 00:00:00, 2023-06-07 02:00:00]]
     basin_shp = f's3://basins-origin/basin_shapefiles/{basin_id}.zip'
-    bbox, basin = generate_bbox_from_shp(basin_shp)
+    bbox, basin = generate_bbox_from_shp(basin_shp, data_source=data_source)
     aoi_data_paths = []
     for time_slice in times:
         time_start = time_slice[0]
@@ -158,21 +164,23 @@ def grid_mean_mask(basin_id, times: list, data_source):
         aoi_path = query_path_from_metadata(time_start, time_end, bbox, data_source=data_source)
         aoi_data_paths.append(aoi_path)
     result_arr_list = []
-    for path in aoi_data_paths:
-        aoi_dataset = xr.open_dataset(hdscc.FS.open(path))
-        mask = hpm.gen_single_mask(basin, data_source)
-        if data_source == 'gpm':
-            result_arr = hpm.mean_by_mask(aoi_dataset, var='precipitationCal', mask=mask)
-        elif (data_source == 'era5_land') | (data_source == 'era5'):
-            result_arr = hpm.mean_by_mask(aoi_dataset, var='tp', mask=mask)
-        elif data_source == 'smap':
-            result_arr = hpm.mean_by_mask(aoi_dataset, var='sm_surface', mask=mask)
-        elif data_source == 'gfs':
-            # gfs降水字段不一定是lev_surface, 仅作演示
-            result_arr = hpm.mean_by_mask(aoi_dataset, var='lev_surface', mask=mask)
-        else:
-            result_arr = []
-        result_arr_list.append(result_arr)
+    for time_paths in aoi_data_paths:
+        for path in time_paths:
+            aoi_dataset = xr.open_dataset(hdscc.FS.open(path))
+            mask = hpm.gen_single_mask(basin, data_source)
+            if data_source == 'gpm':
+                # 按照mask出来的四至和get_para()有关，全是.0或.5，直接输入四至就会破坏这样的性质
+                result_arr = hpm.mean_by_mask(aoi_dataset, var='precipitationCal', mask=mask)
+            elif (data_source == 'era5_land') | (data_source == 'era5'):
+                result_arr = hpm.mean_by_mask(aoi_dataset, var='tp', mask=mask)
+            elif data_source == 'smap':
+                result_arr = hpm.mean_by_mask(aoi_dataset, var='sm_surface', mask=mask)
+            elif data_source == 'gfs':
+                # gfs降水字段不一定是lev_surface, 仅作演示
+                result_arr = hpm.mean_by_mask(aoi_dataset, var='lev_surface', mask=mask)
+            else:
+                result_arr = []
+            result_arr_list.append(result_arr)
     return result_arr_list, basin
 
 
