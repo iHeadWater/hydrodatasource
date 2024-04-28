@@ -84,6 +84,7 @@ def test_concat_era5_land_average():
 
 
 def test_concat_variables():
+    # '3B-HHR-E.MS.MRG.3IMERG.20200701-S000000-E002959.0000.V06B.HDF5_tile.nc4'未区分流域，导致前面的数据被后面的数据覆盖
     concat_gpm_smap_mean_data(['basin_CHN_songliao_21401550'], [['2020-07-01 00:00:00', '2020-07-31 23:00:00']])
 
 

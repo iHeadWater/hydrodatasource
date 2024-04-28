@@ -12,7 +12,7 @@ from hydrodatasource.processor.basin_mean_rainfall import rainfall_average
 from hydrodatasource.reader import access_fs
 
 
-def query_path_from_metadata(time_start=None, time_end=None, bbox=None, data_source='gpm'):
+def query_path_from_metadata(basin_id, time_start=None, time_end=None, bbox=None, data_source='gpm'):
     # query path from other columns from metadata.csv
     metadata_df = pd.read_csv(f's3://grids-origin/{data_source}_metadata.csv', storage_options=hdscc.MINIO_PARAM)
     source_list = []
@@ -42,7 +42,7 @@ def query_path_from_metadata(time_start=None, time_end=None, bbox=None, data_sou
                       (paths['bbox'].apply(lambda x: string_to_list(x)[1] >= bbox[1])) &
                       (paths['bbox'].apply(lambda x: string_to_list(x)[2] >= bbox[2])) &
                       (paths['bbox'].apply(lambda x: string_to_list(x)[3] <= bbox[3]))]
-    candidate_tile_list = paths[paths['path'].apply(lambda x: '_tile' in x)]
+    candidate_tile_list = paths[paths['path'].apply(lambda x: ('_tile' in x) & (basin_id in x))]
     tile_list = candidate_tile_list['path'][candidate_tile_list['bbox'].apply(lambda x: str(bbox) == x)].to_list()
     if len(tile_list) == 0:
         for path in paths['path']:
@@ -74,7 +74,7 @@ def query_path_from_metadata(time_start=None, time_end=None, bbox=None, data_sou
                                           latitude=slice(bbox[2], bbox[3]))
                 else:
                     tile_ds = path_ds
-            tile_path = path.rstrip('.nc4') + '_tile.nc4'
+            tile_path = path.rstrip('.nc4') + f'{basin_id}_tile.nc4'
             tile_list.append(tile_path)
             if data_source == 'gfs':
                 temp_df = pd.DataFrame(
@@ -161,7 +161,7 @@ def grid_mean_mask(basin_id, times: list, data_source):
     for time_slice in times:
         time_start = time_slice[0]
         time_end = time_slice[1]
-        aoi_path = query_path_from_metadata(time_start, time_end, bbox, data_source=data_source)
+        aoi_path = query_path_from_metadata(basin_id, time_start, time_end, bbox, data_source=data_source)
         aoi_data_paths.append(aoi_path)
     result_arr_list = []
     for time_paths in aoi_data_paths:
