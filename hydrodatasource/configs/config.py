@@ -33,7 +33,7 @@ def read_setting(setting_path):
         "local_data_path:\n"
         "  root: 'D:\\data\\waterism' # Update with your root data directory\n"
         "  datasets-origin: 'D:\\data\\waterism\\datasets-origin'\n"
-        "  datasets-interim: 'D:\\data\\waterism\\datasets-interim'"
+        "  datasets-interim: 'D:\\data\\waterism\\datasets-interim'\n"
         "postgres:\n"
         "  server_url: your_postgres_server_url\n"
         "  port: 5432\n"
