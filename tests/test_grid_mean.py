@@ -1,16 +1,15 @@
-import h5py
-import numpy as np
-
-import hydrodatasource.processor.mask as hpm
-from hydrodatasource.reader.spliter_grid import generate_bbox_from_shp, query_path_from_metadata
-import hydrodatasource.configs.config as hdscc
 import xarray as xr
+
+import hydrodatasource.configs.config as hdscc
+import hydrodatasource.processor.mask as hpm
+from hydrodatasource.reader.spliter_grid import generate_bbox_from_shp, query_path_from_metadata, \
+    concat_gpm_smap_mean_data
 
 
 def test_grid_mean_mask():
     # 21401550, 碧流河
     test_shp = 's3://basins-origin/basin_shapefiles/basin_CHN_songliao_21401550.zip'
-    bbox, basin = generate_bbox_from_shp(test_shp)
+    bbox, basin = generate_bbox_from_shp(test_shp, 'gpm')
     time_start = "2023-06-06 00:00:00"
     time_end = "2023-06-06 02:00:00"
     test_gpm_paths = query_path_from_metadata(time_start, time_end, bbox, data_source="gpm")
@@ -26,7 +25,7 @@ def test_grid_mean_mask():
 def test_grid_mean_era5_land():
     # 21401550, 碧流河
     test_shp = 's3://basins-origin/basin_shapefiles/basin_CHN_songliao_21401550.zip'
-    bbox, basin = generate_bbox_from_shp(test_shp)
+    bbox, basin = generate_bbox_from_shp(test_shp, 'era5_land')
     time_start = "2022-06-02"
     time_end = "2022-06-02"
     test_era5_land_paths = query_path_from_metadata(time_start, time_end, bbox, data_source="era5_land")
@@ -38,9 +37,10 @@ def test_grid_mean_era5_land():
         result_arr_list.append(result_arr)
     return result_arr_list
 
+
 def test_smap_mean():
     test_shp = 's3://basins-origin/basin_shapefiles/basin_CHN_songliao_21401550.zip'
-    bbox, basin = generate_bbox_from_shp(test_shp)
+    bbox, basin = generate_bbox_from_shp(test_shp, 'smap')
     time_start = "2016-02-02"
     time_end = "2016-02-02"
     test_smap_paths = query_path_from_metadata(time_start, time_end, bbox, data_source='smap')
@@ -52,6 +52,8 @@ def test_smap_mean():
         result_arr_list.append(result_arr)
     return result_arr_list
 
+
+'''
 def test_concat_gpm_average():
     basin_id = 'CHN_21401550'
     result_arr_list = test_grid_mean_mask()
@@ -78,3 +80,15 @@ def test_concat_era5_land_average():
     tile_path = f's3://basins-origin/hour_data/1h/grid_data/grid_era5_land_data/grid_era5_land_{basin_id}.nc'
     hdscc.FS.write_bytes(tile_path, xr_ds.to_netcdf())
     return xr_ds
+'''
+
+
+def test_concat_variables():
+    # '3B-HHR-E.MS.MRG.3IMERG.20200701-S000000-E002959.0000.V06B.HDF5_tile.nc4'未区分流域，导致前面的数据被后面的数据覆盖
+    concat_gpm_smap_mean_data(['basin_CHN_songliao_21401550'], [['2020-07-01 00:00:00', '2020-07-31 23:00:00']])
+
+
+def test_concat_basins_variables():
+    basin_ids = ['basin_CHN_songliao_21401550', 'basin_CHN_songliao_21100150', 'basin_CHN_songliao_21110150',
+                 'basin_CHN_songliao_21110400', 'basin_CHN_songliao_21113800']
+    concat_gpm_smap_mean_data(basin_ids, [['2020-07-01 00:00:00', '2020-07-31 23:00:00']])

@@ -11,7 +11,7 @@
 import numpy as np
 import xarray as xr
 import geopandas as gpd
-import dask.array as da
+# import dask.array as da
 import itertools
 from geopandas import GeoDataFrame
 from shapely.geometry import Polygon
@@ -20,12 +20,6 @@ from shapely.geometry import Polygon
 def mean_over_basin(basin, basin_id, dataset, data_name, lon="lon", lat="lat"):
     """
     计算流域平均
-
-    Todo:
-        - 根据grid数据生成网格
-        - 网格与流域相交
-        - 以流域为单位计算流域内加权值
-
 
     Args:
         basin (GeoDataframe): 必选，流域的矢量数据，通过geopandas读取
@@ -41,12 +35,10 @@ def mean_over_basin(basin, basin_id, dataset, data_name, lon="lon", lat="lat"):
     """
 
     grid = grid_to_gdf(dataset, data_name, lon=lon, lat=lat)
-
     intersects = gpd.overlay(grid, basin, how="intersection")
     intersects = intersects.to_crs(epsg=3857)
     intersects["Area"] = intersects.area
     intersects = intersects.to_crs(epsg=4326)
-
     return intersects.groupby(basin_id).apply(wavg, data_name, "Area")
 
 
@@ -122,7 +114,6 @@ def gen_grids(bbox, resolution, offset):
         / abs(int(rx * 10) / 10 + offset - rx + 0.00001),
         3,
     )
-
     by = bbox[1]
     ty = bbox[3]
     BLAT = round(
@@ -141,29 +132,19 @@ def gen_grids(bbox, resolution, offset):
         / abs(int(ty * 10) / 10 + offset - ty),
         3,
     )
-
-    # print(LLON,BLAT,RLON,TLAT)
-
     xsize = round((RLON - LLON) / resolution) + 1
     ysize = round((TLAT - BLAT) / resolution) + 1
-
-    # print(xsize, ysize)
-
     lons = np.linspace(LLON, RLON, xsize)
     lats = np.linspace(TLAT, BLAT, ysize)
-
     geometry = []
     HBlons = []
     HBlats = []
-
     for i in range(xsize):
         for j in range(ysize):
             HBLON = lons[i]
             HBLAT = lats[j]
-
             HBlons.append(HBLON)
             HBlats.append(HBLAT)
-
             geometry.append(
                 Polygon(
                     [
@@ -186,11 +167,9 @@ def gen_grids(bbox, resolution, offset):
                     ]
                 )
             )
-
     data = gpd.GeoDataFrame(crs="EPSG:4326", geometry=geometry)
     data["lon"] = HBlons
     data["lat"] = HBlats
-
     return data
 
 
@@ -211,8 +190,6 @@ def gen_mask(watershed, dataname):
     Args:
         watershed (GeoDataframe): 必选，流域的矢量数据，通过geopandas读取
         dataname (DataArray): 必选，表示流域mask数据名称
-        save_dir (str): 必选，表示流域mask文件生成路径
-
     Returns
         data (Dataframe): 流域编号和对应的平均值
     """
@@ -242,12 +219,13 @@ def gen_mask(watershed, dataname):
         # wds.to_netcdf(os.path.join(save_dir, f"mask-{wid}-{dataname}.nc"))
         return wds
 
+
 def gen_mask_smap(smap_cell_array, basin_gdf):
     poly_list = []
-    for i in range(0, smap_cell_array.shape[0]-1):
-        for j in range(0, smap_cell_array.shape[1]-1):
-            lon_half = (smap_cell_array[i][j+1][0] - smap_cell_array[i][j][0]) / 2
-            lat_half = (smap_cell_array[i][j][1] - smap_cell_array[i+1][j][1]) / 2
+    for i in range(0, smap_cell_array.shape[0] - 1):
+        for j in range(0, smap_cell_array.shape[1] - 1):
+            lon_half = (smap_cell_array[i][j + 1][0] - smap_cell_array[i][j][0]) / 2
+            lat_half = (smap_cell_array[i][j][1] - smap_cell_array[i + 1][j][1]) / 2
             corner1 = (smap_cell_array[i][j][0] - lon_half, smap_cell_array[i][j][1] - lat_half)
             corner2 = (smap_cell_array[i][j][0] + lon_half, smap_cell_array[i][j][1] - lat_half)
             corner3 = (smap_cell_array[i][j][0] - lon_half, smap_cell_array[i][j][1] + lat_half)
@@ -260,8 +238,9 @@ def gen_mask_smap(smap_cell_array, basin_gdf):
     wds = intersects.to_xarray()
     return wds
 
+
 def gen_single_mask(watershed, dataname):
-    if dataname in ['gpm', 'gfs','era5_land', 'era5']:
+    if dataname in ['gpm', 'gfs', 'era5_land', 'era5']:
         mask = gen_mask(watershed, dataname)
     elif dataname == 'smap':
         # w,e,n,s
@@ -274,8 +253,8 @@ def gen_single_mask(watershed, dataname):
         e_index = np.argwhere(lon_array <= bbox[1])[-1][0]
         n_index = np.argwhere(lat_array <= bbox[2])[0][0]
         s_index = np.argwhere(lat_array >= bbox[3])[-1][0]
-        lon_slice = lon_array[w_index: e_index+2]
-        lat_slice = lat_array[n_index: s_index+2]
+        lon_slice = lon_array[w_index: e_index + 2]
+        lat_slice = lat_array[n_index: s_index + 2]
         smap_cell_array = np.ndarray((lat_slice.shape[0], lon_slice.shape[0]), dtype=object)
         for lat in range(0, lat_slice.shape[0]):
             for lon in range(0, lon_slice.shape[0]):
