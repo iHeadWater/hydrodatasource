@@ -2,7 +2,7 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-19 13:58:31
 LastEditors: liutiaxqabs 1498093445@qq.com
-LastEditTime: 2024-04-22 13:31:41
+LastEditTime: 2024-04-26 17:09:33
 FilePath: /hydrodatasource/hydrodatasource/cleaner/cleaner.py
 Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
 '''
@@ -28,7 +28,7 @@ class Cleaner:
 
     def read_data(self):
         # 读取数据并存储在origin_df中
-        self.origin_df = pd.read_csv(self.data_path)
+        self.origin_df = pd.read_csv(self.data_path, dtype={"STCD": str})
         self.processed_df = self.origin_df.copy()
 
     def save_data(self, data, output_path):
