@@ -17,6 +17,14 @@ def query_path_from_metadata(basin_id, time_start=None, time_end=None, bbox=None
     metadata_df = pd.read_csv(f's3://grids-origin/{data_source}_metadata.csv', storage_options=hdscc.MINIO_PARAM)
     source_list = []
     if data_source == 'gpm':
+        start_end_len = len(pd.date_range(time_start, time_end, freq='30min').to_list())
+    elif data_source == 'smap':
+        start_end_len = len(pd.date_range(time_start, time_end, freq='3h').to_list())
+    elif (data_source == 'gfs') | (data_source == 'era5_land') | (data_source == 'era5'):
+        start_end_len = len(pd.date_range(time_start, time_end, freq='h').to_list())
+    else:
+        start_end_len = len(pd.date_range(time_start, time_end, freq='d').to_list())
+    if data_source == 'gpm':
         source_list = [x for x in metadata_df['path'] if 'GPM' in x]
     elif data_source == 'smap':
         source_list = [x for x in metadata_df['path'] if 'SMAP' in x]
@@ -24,12 +32,14 @@ def query_path_from_metadata(basin_id, time_start=None, time_end=None, bbox=None
         source_list = [x for x in metadata_df['path'] if 'GFS' in x]
     elif data_source == 'era5_land':
         source_list = [x for x in metadata_df['path'] if 'era5_land' in x]
+    elif data_source == 'era5':
+        source_list = [x for x in metadata_df['path'] if 'era5' in x]
     paths = metadata_df[metadata_df['path'].isin(source_list)]
     if time_start is not None:
         paths = paths[paths['time_start'] >= time_start]
     if time_end is not None:
         paths = paths[paths['time_end'] <= time_end]
-    if (data_source == 'gpm') or (data_source == 'smap') or (data_source == 'era5_land'):
+    if (data_source == 'gpm') or (data_source == 'smap') or (data_source == 'era5_land') or (data_source == 'era5'):
         if bbox is not None:
             paths = paths[
                 (paths['bbox'].apply(lambda x: string_to_list(x)[0] <= bbox[0])) &
@@ -44,7 +54,7 @@ def query_path_from_metadata(basin_id, time_start=None, time_end=None, bbox=None
                       (paths['bbox'].apply(lambda x: string_to_list(x)[3] <= bbox[3]))]
     candidate_tile_list = paths[paths['path'].apply(lambda x: ('_tile' in x) & (basin_id in x))]
     tile_list = candidate_tile_list['path'][candidate_tile_list['bbox'].apply(lambda x: str(bbox) == x)].to_list()
-    if len(tile_list) == 0:
+    if len(tile_list) < start_end_len - 1:
         for path in paths['path']:
             if data_source == 'smap':
                 path_ds = h5py.File(hdscc.FS.open(path))
@@ -58,7 +68,7 @@ def query_path_from_metadata(basin_id, time_start=None, time_end=None, bbox=None
                 tile_da = path_ds['Geophysical_Data']['sm_surface'][cell_lat_n: cell_lat_s + 1,
                           cell_lon_w: cell_lon_e + 1]
                 tile_ds = xr.DataArray(tile_da).to_dataset(name='sm_surface')
-            elif data_source == 'era5_land':
+            elif (data_source == 'era5_land') | (data_source == 'era5'):
                 path_ds = access_fs.spec_path(path.lstrip('s3://'), head='minio')
                 tile_ds = path_ds.sel(time=slice(time_start, time_end), longitude=slice(bbox[0], bbox[1]),
                                       latitude=slice(bbox[2], bbox[3]))
@@ -86,14 +96,15 @@ def query_path_from_metadata(basin_id, time_start=None, time_end=None, bbox=None
                     {'bbox': str(bbox), 'time_start': time_start, 'time_end': time_end, 'res_lon': 0.08,
                      'res_lat': 0.08,
                      'path': tile_path}, index=default_index(1))
-            elif (data_source == 'gpm') or (data_source == 'era5_land'):
+            elif (data_source == 'gpm') or (data_source == 'era5_land') or (data_source == 'era5'):
                 temp_df = pd.DataFrame(
                     {'bbox': str(bbox), 'time_start': time_start, 'time_end': time_end, 'res_lon': 0.1, 'res_lat': 0.1,
                      'path': tile_path}, index=default_index(1))
             else:
                 temp_df = pd.DataFrame()
             metadata_df = pd.concat([metadata_df, temp_df], axis=0)
-            if (data_source == 'gpm') or (data_source == 'smap') or (data_source == 'era5_land'):
+            if (data_source == 'gpm') or (data_source == 'smap') or (data_source == 'era5_land') or (
+                data_source == 'era5'):
                 hdscc.FS.write_bytes(tile_path, tile_ds.to_netcdf())
             elif data_source == 'gfs':
                 tile_ds.to_netcdf('temp.nc4')
@@ -212,8 +223,10 @@ def concat_gpm_smap_mean_data(basin_ids: list, times: list):
             smap_mean = np.pad(smap_mean, (0, diff), 'edge')
         else:
             smap_mean = smap_mean[:gpm_mean.shape[0]]
+        streamflow_arr = read_streamflow_from_minio(times, basin_id.lstrip('basin_'))
         temp_df = pd.DataFrame({'time': convert_time_slice_to_range(times), 'gpm_tp': gpm_mean, 'smap': smap_mean,
-                                'sta_tp': average_rainfall_times['weighted_rainfall'].to_numpy()}).set_index(keys=['time'])
+                                'sta_tp': average_rainfall_times['weighted_rainfall'].to_numpy(),
+                                'streamflow': streamflow_arr}).set_index(keys=['time'])
         merge_ds = xr.Dataset.from_dataframe(temp_df.astype('float64'))
         merge_list.append(merge_ds)
     return merge_list
@@ -225,6 +238,23 @@ def convert_time_slice_to_range(time_slice_list):
         pd_time_slice = pd.date_range(time_slice[0], time_slice[1], freq='H').to_list()
         time_range_list.extend(pd_time_slice)
     return time_range_list
+
+
+def read_streamflow_from_minio(times: list, sta_id=''):
+    # sta_id: CHN_songliao_21401550
+    zq_path = f's3://stations-origin/zq_stations/hour_data/1h/zq_{sta_id}.csv'
+    zz_1h_path = f's3://stations-origin/zz_stations/hour_data/1h/zz_{sta_id}.csv'
+    zz_6h_path = f's3://stations-origin/zz_stations/hour_data/6h/zz_{sta_id}.csv'
+    if hdscc.FS.exists(zq_path):
+        streamflow_df = pd.read_csv(hdscc.FS.open(zq_path), index_col=None, parse_dates=['TM'])
+    elif hdscc.FS.exists(zz_1h_path):
+        streamflow_df = pd.read_csv(hdscc.FS.open(zz_1h_path), index_col=None, parse_dates=['TM'])
+    elif hdscc.FS.exists(zz_6h_path):
+        streamflow_df = pd.read_csv(hdscc.FS.open(zz_6h_path), index_col=None, parse_dates=['TM'])
+    else:
+        streamflow_df = pd.DataFrame
+    streamflow_df = streamflow_df[streamflow_df['TM'].isin(convert_time_slice_to_range(times))]
+    return streamflow_df['Q'].to_numpy()
 
 
 '''

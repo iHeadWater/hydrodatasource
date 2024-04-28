@@ -85,10 +85,18 @@ def test_concat_era5_land_average():
 
 def test_concat_variables():
     # '3B-HHR-E.MS.MRG.3IMERG.20200701-S000000-E002959.0000.V06B.HDF5_tile.nc4'未区分流域，导致前面的数据被后面的数据覆盖
-    concat_gpm_smap_mean_data(['basin_CHN_songliao_21401550'], [['2020-07-01 00:00:00', '2020-07-31 23:00:00']])
+    basin_ids = ['basin_CHN_songliao_21401550']
+    merge_list = concat_gpm_smap_mean_data(basin_ids, [['2020-06-01 00:00:00', '2020-09-30 23:00:00'],
+                 ['2021-06-01 00:00:00', '2021-09-30 23:00:00'], ['2022-06-01 00:00:00', '2022-07-31 23:00:00'],
+                 ['2022-09-01 00:00:00', '2022-09-30 23:00:00'], ['2023-06-01 00:00:00', '2022-08-31 23:00:00']])
+    for xr_ds in merge_list:
+        hdscc.FS.write_bytes(f's3://basins-origin/hour_data/1h/mean_data/mean_data_{basin_ids[0]}', xr_ds.to_netcdf())
 
 
 def test_concat_basins_variables():
-    basin_ids = ['basin_CHN_songliao_21401550', 'basin_CHN_songliao_21100150', 'basin_CHN_songliao_21110150',
+    basin_ids = ['basin_CHN_songliao_21100150', 'basin_CHN_songliao_21110150',
                  'basin_CHN_songliao_21110400', 'basin_CHN_songliao_21113800']
-    concat_gpm_smap_mean_data(basin_ids, [['2020-07-01 00:00:00', '2020-07-31 23:00:00']])
+    merge_list = concat_gpm_smap_mean_data(basin_ids, [['2020-07-01 00:00:00', '2020-07-31 23:00:00']])
+    for i in range(0, merge_list):
+        hdscc.FS.write_bytes(f's3://basins-origin/hour_data/1h/mean_data/mean_data_{basin_ids[i]}',
+                             merge_list[i].to_netcdf())

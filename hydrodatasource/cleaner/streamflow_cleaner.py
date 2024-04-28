@@ -240,7 +240,7 @@ class StreamflowCleaner(Cleaner):
 
     def anomaly_process(self, methods=None):
         super().anomaly_process(methods)
-        streamflow_data = self.origin_df["INQ"]
+        streamflow_data = self.origin_df["Q"]
         for method in methods:
             if method == "moving_average":
                 streamflow_data = self.moving_average(streamflow_data=streamflow_data)
