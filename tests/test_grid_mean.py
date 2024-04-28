@@ -1,4 +1,3 @@
-import numpy as np
 import xarray as xr
 
 import hydrodatasource.configs.config as hdscc
@@ -86,3 +85,9 @@ def test_concat_era5_land_average():
 
 def test_concat_variables():
     concat_gpm_smap_mean_data(['basin_CHN_songliao_21401550'], [['2020-07-01 00:00:00', '2020-07-31 23:00:00']])
+
+
+def test_concat_basins_variables():
+    basin_ids = ['basin_CHN_songliao_21401550', 'basin_CHN_songliao_21100150', 'basin_CHN_songliao_21110150',
+                 'basin_CHN_songliao_21110400', 'basin_CHN_songliao_21113800']
+    concat_gpm_smap_mean_data(basin_ids, [['2020-07-01 00:00:00', '2020-07-31 23:00:00']])

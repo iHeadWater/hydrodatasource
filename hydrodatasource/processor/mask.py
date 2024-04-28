@@ -190,8 +190,6 @@ def gen_mask(watershed, dataname):
     Args:
         watershed (GeoDataframe): 必选，流域的矢量数据，通过geopandas读取
         dataname (DataArray): 必选，表示流域mask数据名称
-        save_dir (str): 必选，表示流域mask文件生成路径
-
     Returns
         data (Dataframe): 流域编号和对应的平均值
     """
@@ -285,11 +283,13 @@ def mean_by_mask(src, var, mask):
     src_array = src[var].to_numpy()
     if 'tp' in src.data_vars:
         mask_array = mask["w"].to_numpy().T
+        mask_array_expand = np.expand_dims(mask_array, 0).repeat(src_array.shape[0], 0)
     elif 'sm_surface' in src.data_vars:
         mask_array = mask["w"].to_numpy().reshape(src_array.shape)
+        mask_array_expand = np.expand_dims(mask_array, 0)
     else:
         mask_array = mask["w"].to_numpy()
-    mask_array_expand = np.expand_dims(mask_array, 0).repeat(src_array.shape[0], 0)
+        mask_array_expand = np.expand_dims(mask_array, 0).repeat(src_array.shape[0], 0)
     # src_array = da.from_array(src_array, chunks='auto')
     # mask_array = da.from_array(mask_array, chunks='auto')
     s = np.multiply(mask_array_expand, src_array)

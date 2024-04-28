@@ -1,15 +1,16 @@
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+from geopandas import GeoDataFrame
 from scipy.spatial import Voronoi
 from shapely.geometry import Polygon
-
 import hydrodatasource.configs.config as hdscc
 
 
-def read_data(rainfall_data_paths: list, head='local'):
+def read_data(rainfall_data_paths: list, head='local', check_time=None):
     # Read rainfall CSV files
     rainfall_dfs = []
+    check_time = pd.to_datetime(check_time, format='%Y-%m-%d %H:%M:%S')
     latest_date = pd.Timestamp.min  # initialize latest date as minimum Timestamp
     # Find latest date in CSV files
     for file in rainfall_data_paths:
@@ -20,9 +21,9 @@ def read_data(rainfall_data_paths: list, head='local'):
         else:
             df = pd.DataFrame()
         first_row_date = pd.to_datetime(df.iloc[0]['TM'])
-        if first_row_date > latest_date:
+        if (first_row_date > latest_date) & (first_row_date <= check_time):
             latest_date = first_row_date
-        rainfall_dfs.append(df)
+            rainfall_dfs.append(df)
     # Convert rainfall data and filter by latest date
     rainfall_df = pd.concat(rainfall_dfs).drop_duplicates().reset_index(drop=True)
     rainfall_df['TM'] = pd.to_datetime(rainfall_df['TM'])
@@ -56,6 +57,18 @@ def calculate_weighted_rainfall(voronoi_polygons, rainfall_data):
     weighted_average_rainfall = merged_data.groupby('TM')['weighted_rainfall'].sum()
     return weighted_average_rainfall.reset_index()
 
+
+def rainfall_average(basin: GeoDataFrame, stations_gdf: GeoDataFrame, pp_ids: list, check_time):
+    rainfall_data_paths = [f's3://stations-origin/pp_stations/hour_data/1h/pp_{ppid}.csv' for ppid in pp_ids]
+    rainfall_df = read_data(rainfall_data_paths, head='minio', check_time=check_time)
+    stations_within_basin = gpd.sjoin(stations_gdf, basin)
+    voronoi_polygons = calculate_voronoi_polygons(stations_within_basin, basin.geometry[0])
+    average_rainfall = calculate_weighted_rainfall(voronoi_polygons, rainfall_df)
+    # basin_name = os.path.splitext(os.path.basename(basin_shp_path))[0]
+    # average_rainfall['basin_name'] = basin_name
+    return average_rainfall
+
+
 '''
 def plot_voronoi_polygons(original_polygons, clipped_polygons, basin):
     fig, (ax_original, ax_clipped) = plt.subplots(1, 2, figsize=(12, 6))
@@ -68,4 +81,3 @@ def plot_voronoi_polygons(original_polygons, clipped_polygons, basin):
     plt.tight_layout()
     plt.show()
 '''
-

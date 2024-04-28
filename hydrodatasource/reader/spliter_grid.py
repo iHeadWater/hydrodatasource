@@ -1,4 +1,3 @@
-import datetime
 import os
 
 import geopandas as gpd
@@ -9,6 +8,7 @@ import xarray as xr
 from pandas.core.indexes.api import default_index
 import hydrodatasource.processor.mask as hpm
 import hydrodatasource.configs.config as hdscc
+from hydrodatasource.processor.basin_mean_rainfall import rainfall_average
 from hydrodatasource.reader import access_fs
 
 
@@ -109,9 +109,9 @@ def choose_gfs(paths, start_time, end_time):
     """
         This function chooses GFS data within a specified time range and bounding box.
         Args:
+            paths (Dataframe): A list of GFS data paths.
             start_time (datetime, YY-mm-dd): The start time of the desired data.
             end_time (datetime, YY-mm-dd): The end time of the desired data.
-            bbox (list): A list of four coordinates representing the bounding box.
         Returns:
             list: A list of GFS data within the specified time range and bounding box.
         """
@@ -187,35 +187,35 @@ def grid_mean_mask(basin_id, times: list, data_source):
 def concat_gpm_average(basin_id, times: list):
     result_arr_list, basin = grid_mean_mask(basin_id, times, 'gpm')
     gpm_hour_array = []
-    xr_ds = xr.Dataset(coords={'time': times}, data_vars={'prcpCal_aver': []})
-    for i in np.arange(0, len(result_arr_list), 2):
+    for i in np.arange(0, len(result_arr_list) - 1, 2):
         gpm_hour_i = np.add(result_arr_list[i], result_arr_list[i + 1])
         gpm_hour_array.append(gpm_hour_i)
-        temp_ds = xr.Dataset({'prcpCal_aver': gpm_hour_i})
-        xr_ds = xr.concat([xr_ds, temp_ds], 'prcpCal_aver')
-    tile_path = f's3://basins-origin/hour_data/1h/grid_data/grid_gpm_data/grid_gpm_{basin_id}.nc'
-    hdscc.FS.write_bytes(tile_path, xr_ds.to_netcdf())
-    return xr_ds, basin
+    # temporarily fix
+    if len(gpm_hour_array) % 2 != 0:
+        gpm_hour_array.extend(gpm_hour_array[-1])
+    return np.array(gpm_hour_array, dtype=object)
 
 
 def concat_gpm_smap_mean_data(basin_ids: list, times: list):
-    # pp_stations = pd.read_csv(hdscc.FS.open('s3://stations-origin/pp_stations.csv'), engine='c')
-    # pps = pp_stations[pp_stations['ID'].isin(basin_ids)]
     pp_sta_gdf = gpd.read_file(hdscc.FS.open('s3://stations-origin/stations_list/pp_stations.zip'))
     merge_list = []
     for basin_id in basin_ids:
         gpm_mean = concat_gpm_average(basin_id, times)
-        smap_mean_mask, basin_gdf = grid_mean_mask(basin_id, times, 'smap')[0]
-        pp_stas_basin = gpd.overlay(pp_sta_gdf, basin_gdf, 'inner')
-        for pp_sta in pp_stas_basin['ID'].to_list():
-            pp_sta_csv = pd.read_csv('stations-origin/pp_stations/hour_data/1h' + pp_sta, parse_dates=['TM'],
-                                     storage_options=hdscc.MINIO_PARAM)
-            pp_sta_csv_slice = pp_sta_csv.loc[pp_sta_csv['TM'].isin(times)]
-            pp_drp = pp_sta_csv_slice['DRP']
-            pp_drp_ds = xr.Dataset.from_dataframe(pp_drp)
-            merged_ds = xr.concat(objs=[gpm_mean, smap_mean_mask, pp_drp_ds], dim='time')
-            merge_list.append(merged_ds)
-            merged_ds.to_netcdf(f'test_merged_{basin_id}.nc')
+        smap_mean_mask, basin_gdf = grid_mean_mask(basin_id, times, 'smap')
+        pp_stas_basin = gpd.overlay(pp_sta_gdf, basin_gdf, 'intersection')
+        # 如果新站对不上老时间，就会把老数据也砍掉
+        average_rainfall = rainfall_average(basin_gdf, pp_stas_basin, pp_stas_basin['ID'].to_list(), times[0][0])
+        average_rainfall_times = average_rainfall[average_rainfall['TM'].isin(convert_time_slice_to_range(times))]
+        smap_mean = np.repeat(smap_mean_mask, 3, axis=1).flatten()
+        if smap_mean.shape[0] < gpm_mean.shape[0]:
+            diff = gpm_mean.shape[0] - smap_mean.shape[0]
+            smap_mean = np.pad(smap_mean, (0, diff), 'edge')
+        else:
+            smap_mean = smap_mean[:gpm_mean.shape[0]]
+        temp_df = pd.DataFrame({'time': convert_time_slice_to_range(times), 'gpm_tp': gpm_mean, 'smap': smap_mean,
+                                'sta_tp': average_rainfall_times['weighted_rainfall'].to_numpy()}).set_index(keys=['time'])
+        merge_ds = xr.Dataset.from_dataframe(temp_df.astype('float64'))
+        merge_list.append(merge_ds)
     return merge_list
 
 
@@ -237,23 +237,17 @@ def merge_with_spatial_average(gpm_file, gfs_file, smap_file, output_file_path):
             var_name in avg_ds.data_vars}
         avg_ds_renamed = avg_ds.rename(new_names)
         return avg_ds_renamed
-
     basin_id = output_file_path.split('_')[-1].split('.')[0]
-
     gfs_avg_renamed = calculate_and_rename(gfs_file, "gfs")
     gpm_avg_renamed = calculate_and_rename(gpm_file, "gpm")
     smap_avg_renamed = calculate_and_rename(smap_file, "smap")
-
     intersect_time = np.intersect1d(gfs_avg_renamed.time.values, gpm_avg_renamed.time.values, assume_unique=True)
     intersect_time = np.intersect1d(intersect_time, smap_avg_renamed.time.values, assume_unique=True)
-
     gfs_intersected = gfs_avg_renamed.sel(time=intersect_time)
     gpm_intersected = gpm_avg_renamed.sel(time=intersect_time)
     smap_intersected = smap_avg_renamed.sel(time=intersect_time)
-
     merged_ds = xr.merge([gfs_intersected, gpm_intersected, smap_intersected])
     merged_ds = merged_ds.assign_coords({"basin": basin_id}).expand_dims("basin")
-
     conf.FS.write_bytes(output_file_path, merged_ds.to_netcdf())
     return merged_ds
 '''
