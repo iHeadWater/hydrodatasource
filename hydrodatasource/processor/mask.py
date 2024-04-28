@@ -11,6 +11,7 @@
 import numpy as np
 import xarray as xr
 import geopandas as gpd
+import pandas as pd
 # import dask.array as da
 import itertools
 from geopandas import GeoDataFrame
@@ -235,6 +236,11 @@ def gen_mask_smap(smap_cell_array, basin_gdf):
     grid_gdf = GeoDataFrame(geometry=poly_list)
     intersects = gpd.overlay(grid_gdf, basin_gdf, how="intersection")
     intersects["w"] = intersects.area / grid_gdf.geometry.area
+    if len(intersects) < len(grid_gdf):
+        zero_arr = np.append(np.array([intersects.iloc[len(intersects)-1].to_numpy()[:-2]], dtype=object), [np.nan, 0])
+        concat_df = pd.DataFrame(np.repeat(zero_arr, len(grid_gdf)-len(intersects)).
+                                 reshape((len(zero_arr), len(grid_gdf)-len(intersects))).T, columns=intersects.columns)
+        intersects = pd.concat([intersects, concat_df], ignore_index=True)
     wds = intersects.to_xarray()
     return wds
 

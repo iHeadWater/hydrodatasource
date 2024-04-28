@@ -25,9 +25,13 @@ def read_data(rainfall_data_paths: list, head='local', check_time=None):
             latest_date = first_row_date
             rainfall_dfs.append(df)
     # Convert rainfall data and filter by latest date
-    rainfall_df = pd.concat(rainfall_dfs).drop_duplicates().reset_index(drop=True)
-    rainfall_df['TM'] = pd.to_datetime(rainfall_df['TM'])
-    rainfall_df = rainfall_df[rainfall_df['TM'] >= latest_date]
+    if len(rainfall_dfs) > 0:
+        rainfall_df = pd.concat(rainfall_dfs).drop_duplicates().reset_index(drop=True)
+        rainfall_df['TM'] = pd.to_datetime(rainfall_df['TM'])
+        rainfall_df = rainfall_df[rainfall_df['TM'] >= latest_date]
+    else:
+        temp_range = pd.date_range('1990-01-01', '2038-12-31', freq='h')
+        rainfall_df = pd.DataFrame({'TM': temp_range, 'DRP': np.repeat(0, len(temp_range.to_list()))})
     return rainfall_df
 
 
@@ -51,7 +55,10 @@ def calculate_voronoi_polygons(stations, basin_geom):
 
 def calculate_weighted_rainfall(voronoi_polygons, rainfall_data):
     voronoi_polygons['station_id'] = voronoi_polygons['station_id'].astype(str)
-    rainfall_data['station_id'] = rainfall_data['STCD'].astype(str)
+    if 'STCD' in rainfall_data.columns:
+        rainfall_data['station_id'] = rainfall_data['STCD'].astype(str)
+    else:
+        rainfall_data['station_id'] = voronoi_polygons['station_id'].astype(str)
     merged_data = pd.merge(voronoi_polygons, rainfall_data, on='station_id')
     merged_data['weighted_rainfall'] = merged_data['DRP'] * merged_data['area_ratio']
     weighted_average_rainfall = merged_data.groupby('TM')['weighted_rainfall'].sum()

@@ -94,8 +94,9 @@ def test_concat_variables():
 
 
 def test_concat_basins_variables():
-    basin_ids = ['basin_CHN_songliao_21100150', 'basin_CHN_songliao_21110150',
-                 'basin_CHN_songliao_21110400', 'basin_CHN_songliao_21113800']
+    # 21100150、21110150、21110400、21113800
+    # (stations-origin/zz_stations/hour_data/1h/zz_CHN_songliao_{stcd}.csv)数据只有2021.4-2021.7，基本是废站
+    basin_ids = ['basin_CHN_songliao_21110150', 'basin_CHN_songliao_21110400', 'basin_CHN_songliao_21113800']
     merge_list = concat_gpm_smap_mean_data(basin_ids, [['2020-07-01 00:00:00', '2020-07-31 23:00:00']])
     for i in range(0, merge_list):
         hdscc.FS.write_bytes(f's3://basins-origin/hour_data/1h/mean_data/mean_data_{basin_ids[i]}',

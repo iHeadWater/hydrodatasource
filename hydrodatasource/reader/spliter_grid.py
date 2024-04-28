@@ -242,17 +242,20 @@ def convert_time_slice_to_range(time_slice_list):
 
 def read_streamflow_from_minio(times: list, sta_id=''):
     # sta_id: CHN_songliao_21401550
-    zq_path = f's3://stations-origin/zq_stations/hour_data/1h/zq_{sta_id}.csv'
+    zq_1h_path = f's3://stations-origin/zq_stations/hour_data/1h/zq_{sta_id}.csv'
+    zq_6h_path = f's3://stations-origin/zq_stations/hour_data/6h/zq_{sta_id}.csv'
     zz_1h_path = f's3://stations-origin/zz_stations/hour_data/1h/zz_{sta_id}.csv'
     zz_6h_path = f's3://stations-origin/zz_stations/hour_data/6h/zz_{sta_id}.csv'
-    if hdscc.FS.exists(zq_path):
-        streamflow_df = pd.read_csv(hdscc.FS.open(zq_path), index_col=None, parse_dates=['TM'])
+    if hdscc.FS.exists(zq_1h_path):
+        streamflow_df = pd.read_csv(hdscc.FS.open(zq_1h_path), index_col=None, parse_dates=['TM'])
+    elif hdscc.FS.exists(zq_6h_path):
+        streamflow_df = pd.read_csv(hdscc.FS.open(zq_6h_path), index_col=None, parse_dates=['TM'])
     elif hdscc.FS.exists(zz_1h_path):
         streamflow_df = pd.read_csv(hdscc.FS.open(zz_1h_path), index_col=None, parse_dates=['TM'])
     elif hdscc.FS.exists(zz_6h_path):
         streamflow_df = pd.read_csv(hdscc.FS.open(zz_6h_path), index_col=None, parse_dates=['TM'])
     else:
-        streamflow_df = pd.DataFrame
+        streamflow_df = pd.DataFrame()
     streamflow_df = streamflow_df[streamflow_df['TM'].isin(convert_time_slice_to_range(times))]
     return streamflow_df['Q'].to_numpy()
 
