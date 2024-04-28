@@ -28,12 +28,12 @@ class Cleaner:
 
     def read_data(self):
         # 读取数据并存储在origin_df中
-        self.origin_df = pd.read_csv(self.data_path, dtype={"STCD": str})
+        self.origin_df = pd.read_csv(self.data_path, dtype={"STCD": str}, index_col = False)
         self.processed_df = self.origin_df.copy()
 
     def save_data(self, data, output_path):
         # 保存数据到CSV
-        data.to_csv(output_path)
+        data.to_csv(output_path, index=False)
 
     def anomaly_process(self, methods=None):
         if methods is None:
