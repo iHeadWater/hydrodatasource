@@ -14,13 +14,14 @@ import boto3
 import s3fs
 import yaml
 from minio import Minio
+import psycopg2
 
 
 def read_setting(setting_path):
     if not os.path.exists(setting_path):
         raise FileNotFoundError(f"Configuration file not found: {setting_path}")
 
-    with open(setting_path, "r") as file:
+    with open(setting_path, 'r', encoding='utf-8') as file:  # 指定编码为 UTF-8
         setting = yaml.safe_load(file)
 
     example_setting = (
@@ -33,7 +34,13 @@ def read_setting(setting_path):
         "  root: 'D:\\data\\waterism' # Update with your root data directory\n"
         "  datasets-origin: 'D:\\data\\waterism\\datasets-origin'\n"
         "  datasets-interim: 'D:\\data\\waterism\\datasets-interim'"
-    )
+        "postgres:\n"
+        "  server_url: your_postgres_server_url\n"
+        "  port: 5432\n"
+        "  username: your_postgres_username\n"
+        "  password: your_postgres_secret_code\n"
+        "  database: your_postgres_database\n"
+        )
 
     if setting is None:
         raise ValueError(
@@ -44,6 +51,7 @@ def read_setting(setting_path):
     expected_structure = {
         "minio": ["server_url", "client_endpoint", "access_key", "secret"],
         "local_data_path": ["root", "datasets-origin", "datasets-interim"],
+        "postgres":["server_url", "port", "username", "password", "database"]
     }
 
     # Validate the structure
@@ -65,7 +73,6 @@ def read_setting(setting_path):
 
 
 SETTING_FILE = os.path.join(Path.home(), "hydro_setting.yml")
-SETTING = {}
 try:
     SETTING = read_setting(SETTING_FILE)
 except ValueError as e:
@@ -114,3 +121,11 @@ STATION_BUCKET = "stations"
 STATION_OBJECT = "sites.csv"
 
 GRID_INTERIM_BUCKET = "grids-interim"
+
+PS = psycopg2.connect(
+    database=SETTING["postgres"]["database"],
+    user=SETTING["postgres"]["username"],
+    password=SETTING["postgres"]["password"],
+    host=SETTING["postgres"]["server_url"],
+    port=SETTING["postgres"]["port"],
+)
