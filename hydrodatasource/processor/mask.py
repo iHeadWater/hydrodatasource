@@ -235,7 +235,8 @@ def gen_mask_smap(smap_cell_array, basin_gdf):
             geom = Polygon((corner1, corner2, corner4, corner3, corner1))
             poly_list.append(geom)
     grid_gdf = GeoDataFrame(geometry=poly_list)
-    intersects = gpd.overlay(grid_gdf, basin_gdf, how="intersection")
+    # intersects = gpd.overlay(grid_gdf, basin_gdf, how="intersection")
+    intersects = gpd.sjoin(grid_gdf, basin_gdf, how="inner")
     intersects["w"] = intersects.area / grid_gdf.geometry.area
     if len(intersects) < len(grid_gdf):
         zero_arr = np.append(np.array([intersects.iloc[len(intersects)-1].to_numpy()[:-2]], dtype=object), [np.nan, 0])

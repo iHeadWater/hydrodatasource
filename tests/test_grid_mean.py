@@ -54,21 +54,6 @@ def test_smap_mean():
 
 
 '''
-def test_concat_gpm_average():
-    basin_id = 'CHN_21401550'
-    result_arr_list = test_grid_mean_mask()
-    gpm_hour_array = []
-    xr_ds = xr.Dataset(coords={'prcpCal_aver': []})
-    for i in np.arange(0, len(result_arr_list), 2):
-        gpm_hour_i = np.add(result_arr_list[i], result_arr_list[i + 1])
-        gpm_hour_array.append(gpm_hour_i)
-        temp_ds = xr.Dataset({'prcpCal_aver': gpm_hour_i})
-        xr_ds = xr.concat([xr_ds, temp_ds], 'prcpCal_aver')
-    tile_path = f's3://basins-origin/hour_data/1h/grid_data/grid_gpm_data/grid_gpm_{basin_id}.nc'
-    hdscc.FS.write_bytes(tile_path, xr_ds.to_netcdf())
-    return xr_ds
-
-
 def test_concat_era5_land_average():
     basin_id = 'CHN_21401550'
     result_arr_list = test_grid_mean_era5_land()
