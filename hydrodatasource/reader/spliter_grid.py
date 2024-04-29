@@ -54,8 +54,8 @@ def generate_metadata(paths: DataFrame, data_source: str, bbox: list, time_start
     bbox_array = np.repeat(str(bbox), len(tile_list))
     time_start_array = np.repeat(str(time_start), len(tile_list))
     time_end_array = np.repeat(str(time_end), len(tile_list))
-    res_array = np.repeat(hpm.get_para(data_source)[0], len(tile_list))
     if data_source != 'smap':
+        res_array = np.repeat(hpm.get_para(data_source)[0], len(tile_list))
         temp_df = pd.DataFrame(
             {'bbox': bbox_array, 'time_start': time_start_array, 'time_end': time_end_array, 'res_lon': res_array,
              'res_lat': res_array, 'path': tile_list}, index=default_index(len(tile_list)))
@@ -179,7 +179,7 @@ def grid_mean_mask(basin_id, times: list, data_source):
     aver_npy = f'{basin_id}_{times}_{data_source}_hour_array.npy'
     s3_aver_npy_path = f's3://basins-origin/hour_data/1h/mean_data/{aver_npy}'
     if hdscc.FS.exists(s3_aver_npy_path):
-        result_arr_list = np.load(hdscc.FS.open(s3_aver_npy_path))
+        result_arr_list = np.load(hdscc.FS.open(s3_aver_npy_path), allow_pickle=True)
     else:
         aoi_data_paths = []
         for time_slice in times:
@@ -216,7 +216,7 @@ def concat_gpm_average(basin_id, times: list):
     gpm_aver_npy = f'{basin_id}_{times}_gpm_hour_array_concat.npy'
     s3_gpm_aver_path = 's3://basins-origin/hour_data/1h/mean_data/' + gpm_aver_npy
     if hdscc.FS.exists(s3_gpm_aver_path):
-        gpm_hour_array = np.load(hdscc.FS.open(s3_gpm_aver_path))
+        gpm_hour_array = np.load(hdscc.FS.open(s3_gpm_aver_path), allow_pickle=True)
     else:
         gpm_half_hour_array, basin = grid_mean_mask(basin_id, times, 'gpm')
         gpm_hour_array = []
