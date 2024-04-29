@@ -16,7 +16,7 @@ def test_grid_mean_mask():
     result_arr_list = []
     for path in test_gpm_paths:
         test_gpm = xr.open_dataset(hdscc.FS.open(path))
-        mask = hpm.gen_single_mask(basin, 'gpm')
+        mask = hpm.gen_single_mask('basin_CHN_songliao_21401550', basin, 'gpm')
         result_arr = hpm.mean_by_mask(test_gpm, var='precipitationCal', mask=mask)
         result_arr_list.append(result_arr)
     return result_arr_list
@@ -32,7 +32,7 @@ def test_grid_mean_era5_land():
     result_arr_list = []
     for path in test_era5_land_paths:
         test_era5_land = xr.open_dataset(hdscc.FS.open(path))
-        mask = hpm.gen_single_mask(basin, 'era5_land')
+        mask = hpm.gen_single_mask('basin_CHN_songliao_21401550', basin, 'era5_land')
         result_arr = hpm.mean_by_mask(test_era5_land, var='tp', mask=mask)
         result_arr_list.append(result_arr)
     return result_arr_list
@@ -47,7 +47,7 @@ def test_smap_mean():
     result_arr_list = []
     for path in test_smap_paths:
         test_smap = xr.open_dataset(hdscc.FS.open(path))
-        mask = hpm.gen_single_mask(basin, 'smap')
+        mask = hpm.gen_single_mask('basin_CHN_songliao_21401550', basin, 'smap')
         result_arr = hpm.mean_by_mask(test_smap, 'sm_surface', mask)
         result_arr_list.append(result_arr)
     return result_arr_list
