@@ -19,8 +19,10 @@ cleaner/
 import xarray as xr
 import pandas as pd
 import numpy as np
+
+
 class Cleaner:
-    def __init__(self,data_path, *args, **kwargs):
+    def __init__(self, data_path, *args, **kwargs):
         self.data_path = data_path
         self.origin_df = None
         self.processed_df = None
@@ -28,7 +30,7 @@ class Cleaner:
 
     def read_data(self):
         # 读取数据并存储在origin_df中
-        self.origin_df = pd.read_csv(self.data_path, dtype={"STCD": str}, index_col = False)
+        self.origin_df = pd.read_csv(self.data_path, dtype={"STCD": str}, index_col=False)
         self.processed_df = self.origin_df.copy()
 
     def save_data(self, data, output_path):

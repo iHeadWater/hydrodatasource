@@ -16,6 +16,7 @@ import pandas as pd
 import itertools
 from geopandas import GeoDataFrame
 from shapely.geometry import Polygon
+import hydrodatasource.configs.config as hdscc
 
 
 def mean_over_basin(basin, basin_id, dataset, data_name, lon="lon", lat="lat"):
@@ -245,32 +246,35 @@ def gen_mask_smap(smap_cell_array, basin_gdf):
     return wds
 
 
-def gen_single_mask(watershed, dataname):
-    if dataname in ['gpm', 'gfs', 'era5_land', 'era5']:
-        mask = gen_mask(watershed, dataname)
-    elif dataname == 'smap':
-        # w,e,n,s
-        bounds_array = watershed.bounds.to_numpy()[0]
-        bbox = [bounds_array[0], bounds_array[2], bounds_array[3], bounds_array[1]]
-        # 不管什么时间，同一个bbox下，得到的smap数据和网格总是一致
-        lon_array = np.load('smap_lon.npy')
-        lat_array = np.load('smap_lat.npy')
-        w_index = np.argwhere(lon_array >= bbox[0])[0][0]
-        e_index = np.argwhere(lon_array <= bbox[1])[-1][0]
-        n_index = np.argwhere(lat_array <= bbox[2])[0][0]
-        s_index = np.argwhere(lat_array >= bbox[3])[-1][0]
-        lon_slice = lon_array[w_index: e_index + 2]
-        lat_slice = lat_array[n_index: s_index + 2]
-        smap_cell_array = np.ndarray((lat_slice.shape[0], lon_slice.shape[0]), dtype=object)
-        for lat in range(0, lat_slice.shape[0]):
-            for lon in range(0, lon_slice.shape[0]):
-                smap_cell_array[lat, lon] = (lon_slice[lon], lat_slice[lat])
-        mask = gen_mask_smap(smap_cell_array, watershed)
-    # mask_file_name = f"mask-{basin_id}-{dataname}.nc"
-    # mask_file_path = os.path.join(mask_path, mask_file_name)
-    # print(f"Mask file is generated in {mask_path}")
+def gen_single_mask(basin_id, watershed, dataname):
+    mask_file_name = f"mask-{basin_id.rstrip('.zip')}-{dataname}.nc"
+    s3_mask_path = f"s3://basins-origin/hour_data/1h/grid_data/{mask_file_name}"
+    if hdscc.FS.exists(s3_mask_path):
+        mask = xr.open_dataset(hdscc.FS.open(s3_mask_path))
     else:
-        mask = xr.Dataset()
+        if dataname in ['gpm', 'gfs', 'era5_land', 'era5']:
+            mask = gen_mask(watershed, dataname)
+        elif dataname == 'smap':
+            # w,e,n,s
+            bounds_array = watershed.bounds.to_numpy()[0]
+            bbox = [bounds_array[0], bounds_array[2], bounds_array[3], bounds_array[1]]
+            # 不管什么时间，同一个bbox下，得到的smap数据和网格总是一致
+            lon_array = np.load('smap_lon.npy')
+            lat_array = np.load('smap_lat.npy')
+            w_index = np.argwhere(lon_array >= bbox[0])[0][0]
+            e_index = np.argwhere(lon_array <= bbox[1])[-1][0]
+            n_index = np.argwhere(lat_array <= bbox[2])[0][0]
+            s_index = np.argwhere(lat_array >= bbox[3])[-1][0]
+            lon_slice = lon_array[w_index: e_index + 2]
+            lat_slice = lat_array[n_index: s_index + 2]
+            smap_cell_array = np.ndarray((lat_slice.shape[0], lon_slice.shape[0]), dtype=object)
+            for lat in range(0, lat_slice.shape[0]):
+                for lon in range(0, lon_slice.shape[0]):
+                    smap_cell_array[lat, lon] = (lon_slice[lon], lat_slice[lat])
+            mask = gen_mask_smap(smap_cell_array, watershed)
+        else:
+            mask = xr.Dataset()
+        hdscc.FS.write_bytes(s3_mask_path, mask.to_netcdf())
     return mask
 
 

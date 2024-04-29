@@ -66,13 +66,19 @@ def calculate_weighted_rainfall(voronoi_polygons, rainfall_data):
 
 
 def rainfall_average(basin: GeoDataFrame, stations_gdf: GeoDataFrame, pp_ids: list, check_time):
-    rainfall_data_paths = [f's3://stations-origin/pp_stations/hour_data/1h/pp_{ppid}.csv' for ppid in pp_ids]
-    rainfall_df = read_data(rainfall_data_paths, head='minio', check_time=check_time)
-    stations_within_basin = gpd.sjoin(stations_gdf, basin)
-    voronoi_polygons = calculate_voronoi_polygons(stations_within_basin, basin.geometry[0])
-    average_rainfall = calculate_weighted_rainfall(voronoi_polygons, rainfall_df)
-    # basin_name = os.path.splitext(os.path.basename(basin_shp_path))[0]
-    # average_rainfall['basin_name'] = basin_name
+    check_time_path = f"{basin['ID'][0]}_{check_time}_rainfall_mean.csv"
+    s3_check_time_path = 's3://basins-origin/hour_data/1h/mean_data/' + check_time_path
+    if hdscc.FS.exists(s3_check_time_path):
+        return pd.read_csv(s3_check_time_path, storage_options=hdscc.MINIO_PARAM)
+    else:
+        rainfall_data_paths = [f's3://stations-origin/pp_stations/hour_data/1h/pp_{ppid}.csv' for ppid in pp_ids]
+        rainfall_df = read_data(rainfall_data_paths, head='minio', check_time=check_time)
+        stations_within_basin = gpd.sjoin(stations_gdf, basin)
+        voronoi_polygons = calculate_voronoi_polygons(stations_within_basin, basin.geometry[0])
+        average_rainfall = calculate_weighted_rainfall(voronoi_polygons, rainfall_df)
+        # basin_name = os.path.splitext(os.path.basename(basin_shp_path))[0]
+        # average_rainfall['basin_name'] = basin_name
+        average_rainfall.to_csv(s3_check_time_path, index=False, storage_options=hdscc.MINIO_PARAM)
     return average_rainfall
 
 
