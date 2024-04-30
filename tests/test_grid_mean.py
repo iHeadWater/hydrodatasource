@@ -94,6 +94,10 @@ def test_concat_usa_basins_variables():
     merge_list = concat_gpm_smap_mean_data(basin_usa_ids,
                                            [['2022-07-01 00:00:00', '2022-09-30 23:00:00'],
                                             ['2023-07-01 00:00:00', '2023-09-30 23:00:00']])
+    '''
     for i in range(0, merge_list):
         hdscc.FS.write_bytes(f's3://basins-origin/hour_data/1h/mean_data/mean_data_{basin_usa_ids[i]}',
                              merge_list[i].to_netcdf())
+    '''
+    return merge_list
+

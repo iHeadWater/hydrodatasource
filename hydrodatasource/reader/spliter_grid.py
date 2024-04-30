@@ -233,16 +233,13 @@ def concat_gpm_average(basin_id, times: list):
     return gpm_hour_array
 
 
-def concat_gpm_smap_mean_data(basin_ids: list, times: list):
+def concat_gpm_smap_mean_data(basin_ids: list, times: list, use_pp=False):
     pp_sta_gdf = gpd.read_file(hdscc.FS.open('s3://stations-origin/stations_list/pp_stations.zip'))
     merge_list = []
     for basin_id in basin_ids:
         gpm_mean = concat_gpm_average(basin_id, times)
         smap_mean_mask, basin_gdf = grid_mean_mask(basin_id, times, 'smap')
         pp_stas_basin = gpd.overlay(pp_sta_gdf, basin_gdf, 'intersection')
-        # 如果新站对不上老时间，就会把老数据也砍掉
-        average_rainfall = rainfall_average(basin_gdf, pp_stas_basin, pp_stas_basin['ID'].to_list(), times[0][0])
-        average_rainfall_times = average_rainfall[average_rainfall['TM'].isin(convert_time_slice_to_range(times))]
         smap_mean = np.repeat(smap_mean_mask, 3, axis=1).flatten()
         if smap_mean.shape[0] < gpm_mean.shape[0]:
             diff = gpm_mean.shape[0] - smap_mean.shape[0]
@@ -250,11 +247,22 @@ def concat_gpm_smap_mean_data(basin_ids: list, times: list):
         else:
             smap_mean = smap_mean[:gpm_mean.shape[0]]
         streamflow_arr = read_streamflow_from_minio(times, basin_id.lstrip('basin_'))
-        temp_df = pd.DataFrame({'time': convert_time_slice_to_range(times), 'gpm_tp': gpm_mean, 'smap': smap_mean,
-                                'sta_tp': average_rainfall_times['weighted_rainfall'].to_numpy(),
-                                'streamflow': streamflow_arr}).set_index(keys=['time'])
+        if streamflow_arr.shape[0] < gpm_mean.shape[0]:
+            diff = gpm_mean.shape[0] - streamflow_arr.shape[0]
+            streamflow_arr = np.pad(streamflow_arr, (0, diff), 'edge')
+        if use_pp:
+            average_rainfall = rainfall_average(basin_gdf, pp_stas_basin, pp_stas_basin['ID'].to_list(), times[0][0])
+            average_rainfall_times = average_rainfall[average_rainfall['TM'].isin(convert_time_slice_to_range(times))]
+            temp_df = pd.DataFrame({'time': convert_time_slice_to_range(times), 'gpm_tp': gpm_mean, 'smap': smap_mean,
+                                    'sta_tp': average_rainfall_times['weighted_rainfall'].to_numpy(),
+                                    'streamflow': streamflow_arr}).set_index(keys=['time'])
+        else:
+            temp_df = pd.DataFrame({'time': convert_time_slice_to_range(times), 'gpm_tp': gpm_mean, 'smap': smap_mean,
+                                    'streamflow': streamflow_arr}).set_index(keys=['time'])
         merge_ds = xr.Dataset.from_dataframe(temp_df.astype('float64'))
         merge_list.append(merge_ds)
+        hdscc.FS.write_bytes(f's3://basins-origin/hour_data/1h/mean_data/mean_data_merged/mean_data_{basin_id}.nc',
+                             merge_ds.to_netcdf())
     return merge_list
 
 
@@ -267,7 +275,10 @@ def convert_time_slice_to_range(time_slice_list):
 
 
 def read_streamflow_from_minio(times: list, sta_id=''):
-    # sta_id: CHN_songliao_21401550
+    # sta_id: CHN_songliao_21401550、USA_xxx_01301500
+    if 'camels' in sta_id:
+        stcd = sta_id.split('_')[-1]
+        sta_id = f'USA_usgs_{stcd}'
     zq_1h_path = f's3://stations-origin/zq_stations/hour_data/1h/zq_{sta_id}.csv'
     zq_6h_path = f's3://stations-origin/zq_stations/hour_data/6h/zq_{sta_id}.csv'
     zq_1d_path = f's3://stations-origin/zq_stations/day_data/1d/zq_{sta_id}.csv'

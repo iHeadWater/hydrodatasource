@@ -66,6 +66,7 @@ def calculate_weighted_rainfall(voronoi_polygons, rainfall_data):
 
 
 def rainfall_average(basin: GeoDataFrame, stations_gdf: GeoDataFrame, pp_ids: list, check_time):
+    # 如果新站对不上老时间，就会把老数据也砍掉
     check_time_path = f"{basin['BASIN_ID'][0]}_{check_time}_rainfall_mean.csv"
     s3_check_time_path = 's3://basins-origin/hour_data/1h/mean_data/' + check_time_path
     if hdscc.FS.exists(s3_check_time_path):
