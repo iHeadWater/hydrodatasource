@@ -43,8 +43,7 @@ def query_path_from_metadata(basin_id, time_start=None, time_end=None, bbox=None
         tile_list = candidate_tile_list['path'][candidate_tile_list['bbox'].apply(lambda x: str(bbox) == x)].to_list()
     should_length = standard_length(data_source, time_start, time_end)
     if len(tile_list) < should_length - 1:
-        tile_list = generate_tile_list(paths, data_source, bbox, time_start, time_end, basin_id)
-        generate_metadata(paths, data_source, bbox, time_start, time_end, basin_id)
+        tile_list = generate_metadata(paths, data_source, bbox, time_start, time_end, basin_id)[0]
     return tile_list
 
 
@@ -68,6 +67,7 @@ def generate_metadata(paths: DataFrame, data_source: str, bbox: list, time_start
     metadata_df.to_csv(f'{data_source}_metadata.csv', index=False)
     hdscc.FS.put_file(f'{data_source}_metadata.csv', f's3://grids-origin/{data_source}_metadata.csv')
     os.remove(f'{data_source}_metadata.csv')
+    return tile_list, metadata_df
 
 
 def generate_tile_list(paths: DataFrame, data_source, bbox, time_start, time_end, basin_id):
