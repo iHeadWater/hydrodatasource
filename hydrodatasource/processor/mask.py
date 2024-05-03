@@ -243,7 +243,7 @@ def gen_mask_smap(smap_cell_array, basin_gdf):
         concat_df = pd.DataFrame(np.repeat(zero_arr, len(grid_gdf)-len(intersects)).
                                  reshape((len(zero_arr), len(grid_gdf)-len(intersects))).T, columns=intersects.columns)
         intersects = pd.concat([intersects, concat_df], ignore_index=True)
-    wds = intersects.drop(columns=['geometry']).to_xarray()
+    wds = intersects.drop(columns=['AREA', 'index_right', 'geometry']).to_xarray()
     return wds
 
 

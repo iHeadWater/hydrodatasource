@@ -37,13 +37,12 @@ def query_path_from_metadata(basin_id, time_start=None, time_end=None, bbox=None
                       (paths['bbox'].apply(lambda x: string_to_list(x)[3] <= bbox[3]))]
     candidate_tile_list = paths[paths['path'].apply(lambda x: ('_tile' in x) & (basin_id in x))]
     if len(candidate_tile_list) == 0:
-        tile_list = generate_tile_list(paths, data_source, bbox, time_start, time_end, basin_id)
-        generate_metadata(paths, data_source, bbox, time_start, time_end, basin_id)
+        tile_list = generate_metadata(paths, data_source, bbox, time_start, time_end, basin_id)[0]
     else:
         tile_list = candidate_tile_list['path'][candidate_tile_list['bbox'].apply(lambda x: str(bbox) == x)].to_list()
-    should_length = standard_length(data_source, time_start, time_end)
-    if len(tile_list) < should_length - 1:
-        tile_list = generate_metadata(paths, data_source, bbox, time_start, time_end, basin_id)[0]
+        should_length = standard_length(data_source, time_start, time_end)
+        if len(tile_list) < should_length - 2:
+            tile_list = generate_metadata(paths, data_source, bbox, time_start, time_end, basin_id)[0]
     return tile_list
 
 
@@ -200,8 +199,7 @@ def grid_mean_mask(basin_id, times: list, data_source):
                 elif data_source == 'smap':
                     result_arr = hpm.mean_by_mask(aoi_dataset, var='sm_surface', mask=mask)
                 elif data_source == 'gfs':
-                    # gfs降水字段不一定是lev_surface, 仅作演示
-                    result_arr = hpm.mean_by_mask(aoi_dataset, var='lev_surface', mask=mask)
+                    result_arr = hpm.mean_by_mask(aoi_dataset, var='APCP', mask=mask)
                 else:
                     result_arr = []
                 result_arr_list.append(result_arr)
@@ -239,7 +237,6 @@ def concat_gpm_smap_mean_data(basin_ids: list, times: list, use_pp=False):
     for basin_id in basin_ids:
         gpm_mean = concat_gpm_average(basin_id, times)
         smap_mean_mask, basin_gdf = grid_mean_mask(basin_id, times, 'smap')
-        pp_stas_basin = gpd.overlay(pp_sta_gdf, basin_gdf, 'intersection')
         smap_mean = np.repeat(smap_mean_mask, 3, axis=1).flatten()
         if smap_mean.shape[0] < gpm_mean.shape[0]:
             diff = gpm_mean.shape[0] - smap_mean.shape[0]
@@ -251,14 +248,15 @@ def concat_gpm_smap_mean_data(basin_ids: list, times: list, use_pp=False):
             diff = gpm_mean.shape[0] - streamflow_arr.shape[0]
             streamflow_arr = np.pad(streamflow_arr, (0, diff), 'edge')
         if use_pp:
+            pp_stas_basin = gpd.overlay(pp_sta_gdf, basin_gdf, 'intersection')
             average_rainfall = rainfall_average(basin_gdf, pp_stas_basin, pp_stas_basin['ID'].to_list(), times[0][0])
             average_rainfall_times = average_rainfall[average_rainfall['TM'].isin(convert_time_slice_to_range(times))]
-            temp_df = pd.DataFrame({'time': convert_time_slice_to_range(times), 'gpm_tp': gpm_mean, 'smap': smap_mean,
-                                    'sta_tp': average_rainfall_times['weighted_rainfall'].to_numpy(),
-                                    'streamflow': streamflow_arr}).set_index(keys=['time'])
+            temp_df = pd.DataFrame({'time': convert_time_slice_to_range(times), 'gpm_tp(mm/h)': gpm_mean, 'smap(m3/m3)': smap_mean,
+                                    'sta_tp(mm/h)': average_rainfall_times['weighted_rainfall'].to_numpy(),
+                                    'streamflow(m3/s)': streamflow_arr}).set_index(keys=['time'])
         else:
-            temp_df = pd.DataFrame({'time': convert_time_slice_to_range(times), 'gpm_tp': gpm_mean, 'smap': smap_mean,
-                                    'streamflow': streamflow_arr}).set_index(keys=['time'])
+            temp_df = pd.DataFrame({'time': convert_time_slice_to_range(times), 'gpm_tp(mm/h)': gpm_mean, 'smap(m3/m3)': smap_mean,
+                                    'streamflow(m3/s)': streamflow_arr}).set_index(keys=['time'])
         merge_ds = xr.Dataset.from_dataframe(temp_df.astype('float64'))
         merge_list.append(merge_ds)
         hdscc.FS.write_bytes(f's3://basins-origin/hour_data/1h/mean_data/mean_data_merged/mean_data_{basin_id}.nc',
