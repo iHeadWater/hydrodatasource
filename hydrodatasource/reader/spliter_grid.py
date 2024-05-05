@@ -274,31 +274,44 @@ def convert_time_slice_to_range(time_slice_list):
 
 def read_streamflow_from_minio(times: list, sta_id=''):
     # sta_id: CHN_songliao_21401550、USA_xxx_01301500
-    if 'camels' in sta_id:
-        stcd = sta_id.split('_')[-1]
-        sta_id = f'USA_usgs_{stcd}'
-    zq_1h_path = f's3://stations-origin/zq_stations/hour_data/1h/zq_{sta_id}.csv'
-    zq_6h_path = f's3://stations-origin/zq_stations/hour_data/6h/zq_{sta_id}.csv'
-    zq_1d_path = f's3://stations-origin/zq_stations/day_data/1d/zq_{sta_id}.csv'
-    zz_1h_path = f's3://stations-origin/zz_stations/hour_data/1h/zz_{sta_id}.csv'
-    zz_6h_path = f's3://stations-origin/zz_stations/hour_data/6h/zz_{sta_id}.csv'
-    zz_1d_path = f's3://stations-origin/zz_stations/day_data/1d/zz_{sta_id}.csv'
-    if hdscc.FS.exists(zq_1h_path):
-        streamflow_df = pd.read_csv(hdscc.FS.open(zq_1h_path), index_col=None, parse_dates=['TM'])
-    elif hdscc.FS.exists(zq_6h_path):
-        streamflow_df = pd.read_csv(hdscc.FS.open(zq_6h_path), index_col=None, parse_dates=['TM'])
-    elif hdscc.FS.exists(zz_1h_path):
-        streamflow_df = pd.read_csv(hdscc.FS.open(zz_1h_path), index_col=None, parse_dates=['TM'])
-    elif hdscc.FS.exists(zz_6h_path):
-        streamflow_df = pd.read_csv(hdscc.FS.open(zz_6h_path), index_col=None, parse_dates=['TM'])
-    elif hdscc.FS.exists(zz_1d_path):
-        streamflow_df = pd.read_csv(hdscc.FS.open(zz_1d_path), index_col=None, parse_dates=['TM'])
-    elif hdscc.FS.exists(zq_1d_path):
-        streamflow_df = pd.read_csv(hdscc.FS.open(zq_1d_path), index_col=None, parse_dates=['TM'])
-    else:
-        streamflow_df = pd.DataFrame()
-    streamflow_df = streamflow_df[streamflow_df['TM'].isin(convert_time_slice_to_range(times))]
-    return streamflow_df['Q'].to_numpy()
+    stream_times_df = pd.DataFrame()
+    for time_slice in times:
+        if pd.to_datetime('2020-01-01') > pd.to_datetime(time_slice[1]):
+            sta_id = sta_id.split('_')[-1]
+            zq_1h_path = f'datasets-origin/camels-hourly/data/usgs_streamflow_csv/{sta_id}-usgs-hourly.csv'
+            if hdscc.FS.exists(zq_1h_path):
+                streamflow_df = pd.read_csv(hdscc.FS.open(zq_1h_path), index_col=None, parse_dates=['date'])
+                streamflow_df = streamflow_df[streamflow_df['date'].isin(pd.date_range(time_slice[0], time_slice[1], freq='H'))]
+                streamflow_df = streamflow_df.rename(columns={'QObs_CAMELS(mm/h)': 'Q'})
+            else:
+                streamflow_df = pd.DataFrame()
+        else:
+            if 'camels' in sta_id:
+                stcd = sta_id.split('_')[-1]
+                sta_id = f'USA_usgs_{stcd}'
+            zq_1h_path = f's3://stations-origin/zq_stations/hour_data/1h/zq_{sta_id}.csv'
+            zq_6h_path = f's3://stations-origin/zq_stations/hour_data/6h/zq_{sta_id}.csv'
+            zq_1d_path = f's3://stations-origin/zq_stations/day_data/1d/zq_{sta_id}.csv'
+            zz_1h_path = f's3://stations-origin/zz_stations/hour_data/1h/zz_{sta_id}.csv'
+            zz_6h_path = f's3://stations-origin/zz_stations/hour_data/6h/zz_{sta_id}.csv'
+            zz_1d_path = f's3://stations-origin/zz_stations/day_data/1d/zz_{sta_id}.csv'
+            if hdscc.FS.exists(zq_1h_path):
+                streamflow_df = pd.read_csv(hdscc.FS.open(zq_1h_path), index_col=None, parse_dates=['TM'])
+            elif hdscc.FS.exists(zq_6h_path):
+                streamflow_df = pd.read_csv(hdscc.FS.open(zq_6h_path), index_col=None, parse_dates=['TM'])
+            elif hdscc.FS.exists(zz_1h_path):
+                streamflow_df = pd.read_csv(hdscc.FS.open(zz_1h_path), index_col=None, parse_dates=['TM'])
+            elif hdscc.FS.exists(zz_6h_path):
+                streamflow_df = pd.read_csv(hdscc.FS.open(zz_6h_path), index_col=None, parse_dates=['TM'])
+            elif hdscc.FS.exists(zz_1d_path):
+                streamflow_df = pd.read_csv(hdscc.FS.open(zz_1d_path), index_col=None, parse_dates=['TM'])
+            elif hdscc.FS.exists(zq_1d_path):
+                streamflow_df = pd.read_csv(hdscc.FS.open(zq_1d_path), index_col=None, parse_dates=['TM'])
+            else:
+                streamflow_df = pd.DataFrame()
+            streamflow_df = streamflow_df[streamflow_df['TM'].isin(pd.date_range(time_slice[0], time_slice[1], freq='H'))]
+        stream_times_df = pd.concat([stream_times_df, streamflow_df])
+    return stream_times_df['Q'].to_numpy()
 
 
 '''
