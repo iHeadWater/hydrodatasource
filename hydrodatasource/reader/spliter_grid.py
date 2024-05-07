@@ -243,7 +243,7 @@ def concat_gpm_smap_mean_data(basin_ids: list, times: list, use_pp=False):
             smap_mean = np.pad(smap_mean, (0, diff), 'edge')
         else:
             smap_mean = smap_mean[:gpm_mean.shape[0]]
-        streamflow_arr = read_streamflow_from_minio(times, basin_id.lstrip('basin_'))
+        streamflow_arr = (read_streamflow_from_minio(times, basin_id.lstrip('basin_')))['Q'].to_numpy()
         if streamflow_arr.shape[0] < gpm_mean.shape[0]:
             diff = gpm_mean.shape[0] - streamflow_arr.shape[0]
             streamflow_arr = np.pad(streamflow_arr, (0, diff), 'edge')
@@ -276,13 +276,14 @@ def read_streamflow_from_minio(times: list, sta_id=''):
     # sta_id: CHN_songliao_21401550、USA_xxx_01301500
     stream_times_df = pd.DataFrame()
     for time_slice in times:
-        if pd.to_datetime('2020-01-01') > pd.to_datetime(time_slice[1]):
-            sta_id = sta_id.split('_')[-1]
-            zq_1h_path = f'datasets-origin/camels-hourly/data/usgs_streamflow_csv/{sta_id}-usgs-hourly.csv'
+        if (pd.to_datetime('2020-01-01') > pd.to_datetime(time_slice[1])) & ('camels' in sta_id):
+            stcd = sta_id.split('_')[-1]
+            zq_1h_path = f'datasets-origin/camels-hourly/data/usgs_streamflow_csv/{stcd}-usgs-hourly.csv'
             if hdscc.FS.exists(zq_1h_path):
                 streamflow_df = pd.read_csv(hdscc.FS.open(zq_1h_path), index_col=None, parse_dates=['date'])
                 streamflow_df = streamflow_df[streamflow_df['date'].isin(pd.date_range(time_slice[0], time_slice[1], freq='H'))]
-                streamflow_df = streamflow_df.rename(columns={'QObs_CAMELS(mm/h)': 'Q'})
+                streamflow_df = streamflow_df.rename(columns={'date': 'TM', 'QObs(mm/h)': 'Q'})
+                streamflow_df = streamflow_df[['TM', 'Q']]
             else:
                 streamflow_df = pd.DataFrame()
         else:
@@ -310,8 +311,9 @@ def read_streamflow_from_minio(times: list, sta_id=''):
             else:
                 streamflow_df = pd.DataFrame()
             streamflow_df = streamflow_df[streamflow_df['TM'].isin(pd.date_range(time_slice[0], time_slice[1], freq='H'))]
+            streamflow_df = streamflow_df[['TM', 'Q']]
         stream_times_df = pd.concat([stream_times_df, streamflow_df])
-    return stream_times_df['Q'].to_numpy()
+    return stream_times_df
 
 
 '''

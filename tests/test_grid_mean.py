@@ -89,8 +89,8 @@ def test_concat_basins_variables():
 
 
 def test_concat_usa_basins_variables():
-    basin_usa_ids = ['basin_USA_camels_14306500', 'basin_USA_camels_01439500', 'basin_USA_camels_01451800',
-                     'basin_USA_camels_01487000', 'basin_USA_camels_02298608']
+    basin_usa_ids = ['basin_USA_camels_01491000', 'basin_USA_camels_01548500', 'basin_USA_camels_02014000',
+                     'basin_USA_camels_02046000', 'basin_USA_camels_02051500']
     merge_list = concat_gpm_smap_mean_data(basin_usa_ids,
                                            [['2022-07-01 00:00:00', '2022-09-30 23:00:00'],
                                             ['2023-07-01 00:00:00', '2023-09-30 23:00:00']])
@@ -100,4 +100,3 @@ def test_concat_usa_basins_variables():
                              merge_list[i].to_netcdf())
     '''
     return merge_list
-
