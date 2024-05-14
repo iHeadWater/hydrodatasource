@@ -30,6 +30,7 @@ tox
 coverage
 Sphinx
 twine
+psycopg2
 
 pytest
 pytest-runner
