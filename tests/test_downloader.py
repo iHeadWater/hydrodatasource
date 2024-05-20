@@ -4,7 +4,7 @@ Date: 2023-10-13 20:50:01
 LastEditTime: 2024-03-28 08:42:28
 LastEditors: Wenyu Ouyang
 Description: Test downloading function
-FilePath: \hydrodata\tests\test_downloader.py
+FilePath: \hydrodatasource\tests\test_downloader.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 import os

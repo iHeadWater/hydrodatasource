@@ -4,7 +4,7 @@ Date: 2024-03-24 08:48:57
 LastEditTime: 2024-03-28 08:38:13
 LastEditors: Wenyu Ouyang
 Description: Check user's data format is correct (local and minio)
-FilePath: \hydrodata\hydrodatasource\processor\data_checker.py
+FilePath: \hydrodatasource\hydrodatasource\processor\data_checker.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 

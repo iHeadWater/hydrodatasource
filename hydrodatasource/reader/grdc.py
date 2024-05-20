@@ -4,7 +4,7 @@ Date: 2023-01-02 22:23:24
 LastEditTime: 2024-03-28 08:34:57
 LastEditors: Wenyu Ouyang
 Description: read the Global Runoff Data Centre (GRDC) daily data
-FilePath: \hydrodata\hydrodatasource\reader\grdc.py
+FilePath: \hydrodatasource\hydrodatasource\reader\grdc.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 # Global Runoff Data Centre module from ewatercycle: https://github.com/eWaterCycle/ewatercycle/blob/main/src/ewatercycle/observation/grdc.py

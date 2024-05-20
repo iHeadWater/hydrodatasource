@@ -4,7 +4,7 @@ Date: 2023-11-01 08:58:50
 LastEditTime: 2024-03-28 08:40:38
 LastEditors: Wenyu Ouyang
 Description: Test funcs for reader.py
-FilePath: \hydrodata\tests\test_reader.py
+FilePath: \hydrodatasource\tests\test_reader.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 

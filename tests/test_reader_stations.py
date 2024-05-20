@@ -4,7 +4,7 @@ Date: 2023-10-31 20:56:23
 LastEditTime: 2024-03-28 08:39:15
 LastEditors: Wenyu Ouyang
 Description: Test funcs for reading stations' data
-FilePath: \hydrodata\tests\test_reader_stations.py
+FilePath: \hydrodatasource\tests\test_reader_stations.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 

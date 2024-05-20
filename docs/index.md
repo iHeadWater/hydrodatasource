@@ -1,25 +1,25 @@
 <!--
  * @Author: Wenyu Ouyang
  * @Date: 2023-10-26 08:41:30
- * @LastEditTime: 2024-02-13 17:57:48
+ * @LastEditTime: 2024-05-20 20:48:23
  * @LastEditors: Wenyu Ouyang
  * @Description: 
- * @FilePath: \hydrodata\docs\index.md
+ * @FilePath: \hydrodatasource\docs\index.md
  * Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 -->
-# Welcome to hydrodata
+# Welcome to hydrodatasource
 
 
-[![image](https://img.shields.io/pypi/v/hydrodata.svg)](https://pypi.python.org/pypi/hydrodata)
+[![image](https://img.shields.io/pypi/v/hydrodatasource.svg)](https://pypi.python.org/pypi/hydrodatasource)
 
-[![image](https://pyup.io/repos/github/WenyuOuyang/hydrodata/shield.svg)](https://pyup.io/repos/github/WenyuOuyang/hydrodata)
+[![image](https://pyup.io/repos/github/WenyuOuyang/hydrodatasource/shield.svg)](https://pyup.io/repos/github/WenyuOuyang/hydrodatasource)
 
 
 **A python project to deal with internal datasources**
 
 
 -   Free software: BSD license
--   Documentation: <https://WenyuOuyang.github.io/hydrodata>
+-   Documentation: <https://WenyuOuyang.github.io/hydrodatasource>
     
 
 ## Features

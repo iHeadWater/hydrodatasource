@@ -4,7 +4,7 @@ Date: 2023-10-22 16:47:36
 LastEditTime: 2024-03-28 08:34:13
 LastEditors: Wenyu Ouyang
 Description: Reader class for grid data in minio
-FilePath: \hydrodata\hydrodatasource\reader\minio.py
+FilePath: \hydrodatasource\hydrodatasource\reader\minio.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 

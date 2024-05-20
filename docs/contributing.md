@@ -1,3 +1,12 @@
+<!--
+ * @Author: Wenyu Ouyang
+ * @Date: 2024-03-28 09:39:58
+ * @LastEditTime: 2024-05-20 20:46:44
+ * @LastEditors: Wenyu Ouyang
+ * @Description: 
+ * @FilePath: \hydrodatasource\docs\contributing.md
+ * Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
+-->
 # Contributing
 
 Contributions are welcome, and they are greatly appreciated! Every
@@ -29,14 +38,14 @@ Look through the GitHub issues for features. Anything tagged with
 
 ### Write Documentation
 
-hydrodata could always use more documentation,
-whether as part of the official hydrodata docs,
+hydrodatasource could always use more documentation,
+whether as part of the official hydrodatasource docs,
 in docstrings, or even on the web in blog posts, articles, and such.
 
 ### Submit Feedback
 
 The best way to send feedback is to file an issue at
-<https://github.com/WenyuOuyang/hydrodata/issues>.
+<https://github.com/WenyuOuyang/hydrodatasource/issues>.
 
 If you are proposing a feature:
 
@@ -46,14 +55,14 @@ If you are proposing a feature:
 
 ## Get Started!
 
-Ready to contribute? Here's how to set up hydrodata for local development.
+Ready to contribute? Here's how to set up hydrodatasource for local development.
 
-1.  Fork the hydrodata repo on GitHub.
+1.  Fork the hydrodatasource repo on GitHub.
 
 2.  Clone your fork locally:
 
     ```shell
-    $ git clone git@github.com:your_name_here/hydrodata.git
+    $ git clone git@github.com:your_name_here/hydrodatasource.git
     ```
 
 3.  Install your local copy into a virtualenv. Assuming you have
@@ -61,8 +70,8 @@ Ready to contribute? Here's how to set up hydrodata for local development.
     local development:
 
     ```shell
-    $ mkvirtualenv hydrodata
-    $ cd hydrodata/
+    $ mkvirtualenv hydrodatasource
+    $ cd hydrodatasource/
     $ python setup.py develop
     ```
 
@@ -78,7 +87,7 @@ Ready to contribute? Here's how to set up hydrodata for local development.
     and the tests, including testing other Python versions with tox:
 
     ```shell
-    $ flake8 hydrodata tests
+    $ flake8 hydrodatasource tests
     $ python setup.py test or pytest
     $ tox
     ```
@@ -104,5 +113,5 @@ Before you submit a pull request, check that it meets these guidelines:
     Put your new functionality into a function with a docstring, and add
     the feature to the list in README.rst.
 3.  The pull request should work for Python 3.5, 3.6, 3.7 and 3.8, and
-    for PyPy. Check <https://github.com/WenyuOuyang/hydrodata/pull_requests> and make sure that the tests pass for all
+    for PyPy. Check <https://github.com/WenyuOuyang/hydrodatasource/pull_requests> and make sure that the tests pass for all
     supported Python versions.

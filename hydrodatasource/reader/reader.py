@@ -4,7 +4,7 @@ Date: 2023-10-31 09:26:31
 LastEditTime: 2024-03-28 08:33:33
 LastEditors: Wenyu Ouyang
 Description: Interface for reader
-FilePath: \hydrodata\hydrodatasource\reader\reader.py
+FilePath: \hydrodatasource\hydrodatasource\reader\reader.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 

@@ -4,7 +4,7 @@ Date: 2023-10-25 18:49:02
 LastEditTime: 2024-02-15 21:08:19
 LastEditors: Wenyu Ouyang
 Description: Some configs for minio server
-FilePath: \hydrodata\hydrodata\configs\config.py
+FilePath: \hydrodatasource\hydrodatasource\configs\config.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 

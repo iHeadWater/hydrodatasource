@@ -1,3 +1,12 @@
+<!--
+ * @Author: Wenyu Ouyang
+ * @Date: 2024-03-28 09:39:58
+ * @LastEditTime: 2024-05-20 20:46:15
+ * @LastEditors: Wenyu Ouyang
+ * @Description: 
+ * @FilePath: \hydrodatasource\docs\changelog.md
+ * Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
+-->
 # 更新日志
 
 ## 20231011更新：
@@ -13,7 +22,7 @@
 
 ## 20230825更新：
 **更新内容：**
-1. 合并原wis-stac、wis-s3api、wis-downloader到hydrodata。
+1. 合并原wis-stac、wis-s3api、wis-downloader到hydrodatasource。
 
 ## 20230824更新：
 **更新内容：**

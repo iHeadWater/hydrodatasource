@@ -1,3 +1,12 @@
+<!--
+ * @Author: Wenyu Ouyang
+ * @Date: 2024-03-28 09:39:58
+ * @LastEditTime: 2024-05-20 20:49:07
+ * @LastEditors: Wenyu Ouyang
+ * @Description: 
+ * @FilePath: \hydrodatasource\docs\reader.md
+ * Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
+-->
 # Reader模块
 
 读取数据。
@@ -13,7 +22,7 @@
 - 读取era5数据
 
 ```python
-from hydrodata.reader.minio import ERA5LReader
+from hydrodatasource.reader.minio import ERA5LReader
 import numpy as np
 
 era5 = ERA5LReader()
@@ -38,7 +47,7 @@ ds3 = era5.from_aoi(data_variables=['Total precipitation'], start_time=start_tim
 - 读取gpm数据
 
 ```python
-from hydrodata.reader.minio import GPMReader
+from hydrodatasource.reader.minio import GPMReader
 import numpy as np
 
 # 指定数据集wis或camels
@@ -64,7 +73,7 @@ ds3 = gpm.from_aoi(start_time=start_time, end_time=end_time, dataset='wis', aoi=
 - 读取gpm数据
 
 ```python
-from hydrodata.reader.minio import GFSReader
+from hydrodatasource.reader.minio import GFSReader
 import numpy as np
 
 gfs = GFSReader()

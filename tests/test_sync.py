@@ -4,7 +4,7 @@ Date: 2023-11-02 14:52:08
 LastEditTime: 2024-03-28 08:39:39
 LastEditors: Wenyu Ouyang
 Description: 
-FilePath: \hydrodata\tests\test_sync.py
+FilePath: \hydrodatasource\tests\test_sync.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 

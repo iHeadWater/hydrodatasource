@@ -4,7 +4,7 @@ Date: 2023-10-06 21:17:17
 LastEditTime: 2024-03-28 08:22:54
 LastEditors: Wenyu Ouyang
 Description: Test reading according to AOI
-FilePath: \hydrodata\tests\test_aoi_reading.py
+FilePath: \hydrodatasource\tests\test_aoi_reading.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 

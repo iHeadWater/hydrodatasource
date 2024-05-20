@@ -1,7 +1,7 @@
 # Usage
 
-To use hydrodata in a project:
+To use hydrodatasource in a project:
 
 ```
-import hydrodata
+import hydrodatasource
 ```

@@ -1,3 +1,3 @@
 # common module
 
-::: hydrodata.common
+::: hydrodatasource.common

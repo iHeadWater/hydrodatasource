@@ -4,7 +4,7 @@ Date: 2023-11-03 09:16:41
 LastEditTime: 2024-02-20 19:53:03
 LastEditors: Wenyu Ouyang
 Description: Preprocess scripts for hydrostations data
-FilePath: \hydrodata\hydrodata\processor\preprocess_grdc.py
+FilePath: \hydrodatasource\hydrodatasource\processor\preprocess_grdc.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 

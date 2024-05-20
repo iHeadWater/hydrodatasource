@@ -1,3 +1,3 @@
 # MinIO
 
-::: hydrodata.catalog.minio
+::: hydrodatasource.catalog.minio

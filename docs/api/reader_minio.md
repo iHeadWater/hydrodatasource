@@ -1,3 +1,3 @@
 # Era5
 
-::: hydrodata.reader.minio
+::: hydrodatasource.reader.minio

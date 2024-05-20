@@ -1,10 +1,10 @@
 <!--
  * @Author: Wenyu Ouyang
  * @Date: 2023-10-26 08:41:30
- * @LastEditTime: 2024-02-13 17:58:25
+ * @LastEditTime: 2024-05-20 20:48:43
  * @LastEditors: Wenyu Ouyang
  * @Description: 
- * @FilePath: \hydrodata\docs\installation.md
+ * @FilePath: \hydrodatasource\docs\installation.md
  * Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 -->
 # Installation
@@ -17,16 +17,16 @@ To install hydroommand in your terminal:
 pip install hydro
 ```
 
-This is the preferred method to install hydrodata, as it will always install the most recent stable release.
+This is the preferred method to install hydrodatasource, as it will always install the most recent stable release.
 
 If you don't have [pip](https://pip.pypa.io) installed, this [Python installation guide](http://docs.python-guide.org/en/latest/starting/installation/) can guide you through the process.
 
 ## From sources
 
-To install hydrodata from sources, run this command in your terminal:
+To install hydrodatasource from sources, run this command in your terminal:
 
 ```
-pip install git+https://github.com/WenyuOuyang/hydrodata
+pip install git+https://github.com/WenyuOuyang/hydrodatasource
 ```
 
 # 安装与配置
@@ -36,18 +36,18 @@ pip install git+https://github.com/WenyuOuyang/hydrodata
 在命令行运行：
 
 ```shell
-pip install hydrodata
+pip install hydrodatasource
 ```
 
 ## 配置
 
-首次使用hydrodata时，如：
+首次使用 hydrodatasource 时，如：
 
 ```python
-from hydrodata.data.minio import GPM
+from hydrodatasource.data.minio import GPM
 ```
 
-会提示输入`access_key`和`secret_key`。由于目前hydrodata部分功能仅限于团队内部使用，所以使用前需要向管理员申请[minio](http://minio.waterism.com:9090/)账号。
+会提示输入`access_key`和`secret_key`。由于目前 hydrodatasource 部分功能仅限于团队内部使用，所以使用前需要向管理员申请[minio](http://minio.waterism.com:9090/)账号。
 
 1. 进入[minio网页客户端](http://minio.waterism.com:9090/)
 2. 点击左侧导航栏`Identity`进入`Service Accounts`

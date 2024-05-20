@@ -4,7 +4,7 @@ Date: 2024-02-15 16:40:34
 LastEditTime: 2024-03-28 08:42:05
 LastEditors: Wenyu Ouyang
 Description: Test cases for gpm and gfs data
-FilePath: \hydrodata\tests\test_gpm_gfs.py
+FilePath: \hydrodatasource\tests\test_gpm_gfs.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 

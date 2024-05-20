@@ -1,3 +1,3 @@
-__author__ = """Jianfeng Zhu"""
-__email__ = "zjf014@gmail.com"
+__author__ = """Wenyu Ouyang"""
+__email__ = "wenyuouyang@outlook.com"
 __version__ = '0.0.2'

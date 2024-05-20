@@ -1,3 +1,3 @@
 # DEM
 
-::: hydrodata.downloader.dem
+::: hydrodatasource.downloader.dem

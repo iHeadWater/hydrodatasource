@@ -1,10 +1,10 @@
 """
 Author: Jingyi Wang, Yang Wang, and Wenyu Ouyang
 Date: 2023-10-28 09:23:22
-LastEditTime: 2024-03-23 17:16:39
+LastEditTime: 2024-05-20 20:52:04
 LastEditors: Wenyu Ouyang
 Description: DMCA-ESR method (https://doi.org/10.1029/2021WR031283)
-FilePath: \hydrodata\hydrodata\cleaner\dmca_esr.py
+FilePath: \hydrodatasource\hydrodatasource\cleaner\dmca_esr.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 

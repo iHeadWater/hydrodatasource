@@ -12,7 +12,7 @@
 
 - 通过给定aoi获取可用数据列表
 ```python
-from hydrodata.catalog.minio import ERA5LCatalog, GPMCatalog, GFSCatalog
+from hydrodatasource.catalog.minio import ERA5LCatalog, GPMCatalog, GFSCatalog
 
 era5 = ERA5LCatalog()
 e = era5.search(aoi=aoi)
