@@ -1,8 +1,8 @@
-site_name: hydrodata
+site_name: hydrodatasource
 site_description: A python project to deal with internal datasources
 site_author: WenyuOuyang
-site_url: https://WenyuOuyang.github.io/hydrodata
-repo_url: https://github.com/WenyuOuyang/hydrodata
+site_url: https://WenyuOuyang.github.io/hydrodatasource
+repo_url: https://github.com/WenyuOuyang/hydrodatasource
 
 copyright: "Copyright &copy; 2023 - 2023 Wenyu Ouyang"
 
@@ -84,7 +84,7 @@ nav:
     - Contributing: contributing.md
     - FAQ: faq.md
     - Changelog: changelog.md
-    - Report Issues: https://github.com/iHeadWater/hydrodata/issues
+    - Report Issues: https://github.com/iHeadWater/hydrodatasource/issues
     - Examples:
         - modules/downloader.ipynb
         - modules/catalog.ipynb

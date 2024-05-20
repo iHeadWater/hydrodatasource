@@ -8,7 +8,7 @@ labels: bug
 
 ### Environment Information
 
--   hydrodata version:
+-   hydrodatasource version:
 -   Python version:
 -   Operating System:
 

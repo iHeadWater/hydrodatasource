@@ -4,7 +4,7 @@
  * @LastEditTime: 2024-03-28 08:53:21
  * @LastEditors: Wenyu Ouyang
  * @Description: Chinese version README
- * @FilePath: \hydrodata\README.zh.md
+ * @FilePath: \hydrodatasource\README.zh.md
  * Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 -->
 # hydrodatasource

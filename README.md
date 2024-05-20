@@ -1,10 +1,10 @@
 <!--
  * @Author: Wenyu Ouyang
  * @Date: 2023-10-24 21:30:40
- * @LastEditTime: 2024-03-28 09:01:10
+ * @LastEditTime: 2024-05-20 20:35:58
  * @LastEditors: Wenyu Ouyang
- * @Description: Readme for hydrodata
- * @FilePath: \hydrodata\README.md
+ * @Description: Readme for hydrodatasource
+ * @FilePath: \hydrodatasource\README.md
  * Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 -->
 # hydrodatasource
@@ -16,7 +16,7 @@
 [![image](https://pyup.io/repos/github/iHeadWater/hydrodatasource/shield.svg)](https://pyup.io/repos/github/iHeadWater/hydrodatasource)
 
 -   Free software: BSD license
--   Documentation: https://WenyuOuyang.github.io/hydrodata
+-   Documentation: https://WenyuOuyang.github.io/hydrodatasource
 
 📜 [中文文档](README.zh.md)
 
