@@ -508,25 +508,6 @@ class SelfMadeCamels(HydroDataset):
         """read mean precipitation of each basin/unit"""
         return self.read_attr_xrdataset(gage_id_lst, ["p_mean"])
 
-        if user in SETTING["trainer"]:
-            if path is not None:
-                data = xr.open_dataset(os.path.join(path, f"{basin}_soil.nc"))
-            else:
-                data_handler = DataHandler(
-                    aoi_type="basin",
-                    aoi_param=basin,
-                    dataname="gpm_gfs",  # hydrodata写好后修改
-                    minio_read=True,
-                )
-                data = data_handler.handle()
-
-        elif user in SETTING["tester"]:
-            data = path[gage_id_lst.index(basin)]
-
-        else:
-            raise NotImplementedError
-        return data
-
 
 class HydroBasins(HydroData):
     def __init__(self, data_path):
@@ -549,7 +530,7 @@ class HydroBasins(HydroData):
         mean_prep = access_fs.spec_path(path, head="minio")
         return mean_prep["pet_mm_syr"].sel(basin=gage_id_lst)
 
-    def merge_nc_minio_datasets(self, folder_path, basin, var_lst):
+    def merge_nc_minio_datasets(self, folder_path, basin, var_lst, gap="3h"):
         datasets = []
         basins = []
 
@@ -559,14 +540,34 @@ class HydroBasins(HydroData):
             basin_id = file_path.split("_")[-1].split(".")[0]
             if basin_id in basin:
                 basins.append(basin_id)
-                ds = access_fs.spec_path(file_path, head="minio")
+                if "ftproot" in file_path:
+                    ds = access_fs.spec_path(file_path)
+                else:
+                    ds = access_fs.spec_path(file_path, head="minio")
+                if gap != "1h":
+                    ds = self.aggeragate_dataset(ds, gap)
                 ds = ds.assign_coords({"basin": basin_id})
                 ds = ds.expand_dims("basin")
                 datasets.append(ds[var_lst])
 
-        merged_dataset = xr.concat(datasets, dim="basin")
+        return xr.concat(datasets, dim="basin")
 
-        return merged_dataset
+    def aggeragate_dataset(self, ds: xr.Dataset, gap):
+        df_res = ds.to_dataframe()
+        if "total_evaporation_hourly" in df_res.columns:
+            df_res["total_evaporation_hourly"] = (
+                df_res["total_evaporation_hourly"].resample(gap, origin="start").sum()
+            )
+            df_res["total_evaporation_hourly"] *= -1000
+            df_res["total_precipitation_hourly"] = (
+                df_res["total_precipitation_hourly"].resample(gap, origin="start").sum()
+            )
+            df_res["total_precipitation_hourly"] *= 1000
+        elif "gpm_tp" in df_res.columns:
+            df_res["gpm_tp"] = df_res["gpm_tp"].resample(gap, origin="start").sum()
+        df_res["streamflow"] = df_res["streamflow"].resample(gap, origin="start").sum()
+        df_res = df_res.resample(gap).mean()
+        return xr.Dataset.from_dataframe(df_res)
 
     def read_grid_data(self, file_lst, basin):
         def get_basin_id(file_path):
@@ -583,8 +584,7 @@ class HydroBasins(HydroData):
         return None
 
     def read_file_lst(self, folder_path):
+        if "ftproot" in folder_path:
+            return glob.glob(folder_path + "/*")[1:]
         url_path = "s3://" + folder_path
-        file_lst = conf.FS.glob(url_path + "/**")
-        if folder_path in file_lst:
-            file_lst.remove(folder_path)
-        return file_lst
+        return conf.FS.glob(url_path + "/**")[1:]
