@@ -4,7 +4,9 @@ import pathlib
 import geopandas as gpd
 import pandas as pd
 import xarray as xr
-from dijkstra_conda import ig_path
+
+# TODO: Wang, Yang should fix this import, pip package should be name hydrotopo
+# from dijkstra_conda import ig_path
 
 import hydrodatasource.configs.config as conf
 from hydrodatasource.reader.spliter_grid import (
@@ -15,13 +17,13 @@ from hydrodatasource.reader.spliter_grid import (
 
 def test_generate_bbox_from_shp():
     basin_shp = "s3://basins-origin/basins_shp.zip"
-    bbox = generate_bbox_from_shp(basin_shape_path=basin_shp, data_source='gpm')
+    bbox = generate_bbox_from_shp(basin_shape_path=basin_shp, data_source="gpm")
     return bbox
 
 
 def test_split_grid_data_from_single_basin_gpm():
     test_shp = "s3://basins-origin/basin_shapefiles/basin_USA_camels_12145500.zip"
-    bbox = generate_bbox_from_shp(test_shp, data_source='gpm')
+    bbox = generate_bbox_from_shp(test_shp, data_source="gpm")
     time_start = "2018-06-05 01:00:00"
     time_end = "2018-06-05 02:00:00"
     tile_list = query_path_from_metadata(time_start, time_end, bbox, data_source="gpm")
@@ -34,7 +36,7 @@ def test_split_grid_data_from_single_basin_gpm():
 
 def test_split_grid_data_from_single_basin_gfs():
     test_shp = "s3://basins-origin/basin_shapefiles/basin_USA_camels_01414500.zip"
-    bbox = generate_bbox_from_shp(test_shp, data_source='gfs')
+    bbox = generate_bbox_from_shp(test_shp, data_source="gfs")
     time_start = "2022-01-03"
     time_end = "2022-01-03"
     tile_list = query_path_from_metadata(time_start, time_end, bbox, data_source="gfs")
@@ -47,7 +49,7 @@ def test_split_grid_data_from_single_basin_gfs():
 
 def test_split_grid_data_from_single_basin_smap():
     test_shp = "s3://basins-origin/basin_shapefiles/basin_USA_camels_01414500.zip"
-    bbox = generate_bbox_from_shp(test_shp, data_source='smap')
+    bbox = generate_bbox_from_shp(test_shp, data_source="smap")
     time_start = "2016-02-02"
     time_end = "2016-02-02"
     tile_list = query_path_from_metadata(time_start, time_end, bbox, data_source="smap")
@@ -60,10 +62,12 @@ def test_split_grid_data_from_single_basin_smap():
 
 def test_split_grid_data_from_single_basin_era5():
     test_shp = "s3://basins-origin/basin_shapefiles/basin_CHN_songliao_10810201.zip"
-    bbox = generate_bbox_from_shp(test_shp, data_source='era5_land')
+    bbox = generate_bbox_from_shp(test_shp, data_source="era5_land")
     time_start = "2022-06-02"
     time_end = "2022-06-02"
-    tile_list = query_path_from_metadata(time_start, time_end, bbox, data_source="era5_land")
+    tile_list = query_path_from_metadata(
+        time_start, time_end, bbox, data_source="era5_land"
+    )
     data_list = []
     for tile in tile_list:
         data_list.append(xr.open_dataset(conf.FS.open(tile)))

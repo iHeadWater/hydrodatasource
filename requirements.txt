@@ -16,6 +16,7 @@ dataretrieval
 pygeohydro
 
 pykalman
+psycopg2
 
 # this part has been updated in hydroutils which will be installed as a dependency when installing hydrodataset
 # boto3>=1.34.34, <=1.34.51

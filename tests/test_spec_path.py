@@ -5,8 +5,10 @@ import numpy as np
 import xarray as xr
 import hydrodatasource.configs.config as conf
 from hydrodatasource.reader import access_fs
-from hydrodatasource.cleaner import rain_anomaly 
+from hydrodatasource.cleaner import rain_anomaly
 from hydrodatasource.reader.data_source import HydroBasins
+
+
 def test_read_spec():
     # access_fs.spec_path("st_rain_c.csv")
     mean_forcing_nc = access_fs.spec_path(
@@ -160,13 +162,15 @@ def test_df2ds():
     # zq_dss = xr.Dataset(zq_df) # Coordinates: dim_0
     return zq_ds
 
-def list_csv_files(bucket_name, prefix=''):
+
+def list_csv_files(bucket_name, prefix=""):
     """List paths of all CSV files in the specified S3 bucket."""
-    path = f'{bucket_name}/{prefix}' if prefix else bucket_name
-    csv_files = conf.FS.glob(f'{path}*.csv')
+    path = f"{bucket_name}/{prefix}" if prefix else bucket_name
+    csv_files = conf.FS.glob(f"{path}*.csv")
     return csv_files
 
-def process_store_csvs(source_bucket, destination_bucket, prefix=''):
+
+def process_store_csvs(source_bucket, destination_bucket, prefix=""):
     """
     Read CSV files from the source bucket, process them, and store the results in the destination bucket.
     """
@@ -180,7 +184,7 @@ def process_store_csvs(source_bucket, destination_bucket, prefix=''):
 
 def read_csv_to_df(file_path):
     """Read CSV file from file_path and return as pandas DataFrame."""
-    with conf.FS.open(file_path, mode='rb') as csv_file:
+    with conf.FS.open(file_path, mode="rb") as csv_file:
         df = pd.read_csv(csv_file, index_col=None)
     return df
 
@@ -189,24 +193,39 @@ def process_dataframe(df):
     df = rain_anomaly.normalize_rainfall_format(df)
     df = rain_anomaly.filter_rainfall_extremes(df)
     df = rain_anomaly.filter_rainfall_gradients(df)
-    df = df[['station_code', 'time', 'daily_rainfall', 'interval', 'precipitation', 'daily_change', 'wetness']]
+    df = df[
+        [
+            "station_code",
+            "time",
+            "daily_rainfall",
+            "interval",
+            "precipitation",
+            "daily_change",
+            "wetness",
+        ]
+    ]
     return df
 
 
 def store_dataframe_to_bucket(df, bucket, file_path):
-    file_name = file_path.split('/')[-1]
+    file_name = file_path.split("/")[-1]
     destination_file_path = f"{bucket}/{file_name}"
-    with conf.FS.open(destination_file_path, mode='w') as file:
+    with conf.FS.open(destination_file_path, mode="w") as file:
         df.to_csv(file, index=False)
 
 
 def test_read_folder():
-    source_bucket = 's3://stations-origin/pp_stations/hour_data/1h'
-    destination_bucket = 's3://stations-interim/pp_stations/hour_data/1h'
+    source_bucket = "s3://stations-origin/pp_stations/hour_data/1h"
+    destination_bucket = "s3://stations-interim/pp_stations/hour_data/1h"
     process_store_csvs(source_bucket, destination_bucket)
 
+
 def test_read_era5_land_csv():
-    era5_land_zarr_files = [file for file in conf.FS.glob('s3://grids-origin/era5_land/') if file.endswith('.zarr')]
+    era5_land_zarr_files = [
+        file
+        for file in conf.FS.glob("s3://grids-origin/era5_land/")
+        if file.endswith(".zarr")
+    ]
     bbox_list = []
     start_time = []
     end_list = []
@@ -214,20 +233,27 @@ def test_read_era5_land_csv():
     res_lat_list = []
     for i in range(0, len(era5_land_zarr_files)):
         test_ds_i = xr.open_dataset(conf.FS.open(era5_land_zarr_files[i]))
-        bbox = [np.min(test_ds_i['longitude'].to_numpy()), np.max(test_ds_i['longitude'].to_numpy()),
-                np.max(test_ds_i['latitude'].to_numpy()), np.min(test_ds_i['latitude'].to_numpy())]
+        bbox = [
+            np.min(test_ds_i["longitude"].to_numpy()),
+            np.max(test_ds_i["longitude"].to_numpy()),
+            np.max(test_ds_i["latitude"].to_numpy()),
+            np.min(test_ds_i["latitude"].to_numpy()),
+        ]
         bbox_list.append(bbox)
-        start_time.append(test_ds_i['time'].to_numpy()[0])
-        end_list.append(test_ds_i['time'].to_numpy()[-1])
-        lon_res = abs(np.diff(test_ds_i['longitude'].to_numpy())[0])
+        start_time.append(test_ds_i["time"].to_numpy()[0])
+        end_list.append(test_ds_i["time"].to_numpy()[-1])
+        lon_res = abs(np.diff(test_ds_i["longitude"].to_numpy())[0])
         res_lon_list.append(lon_res)
-        lat_res = abs(np.diff(test_ds_i['latitude'].to_numpy())[0])
+        lat_res = abs(np.diff(test_ds_i["latitude"].to_numpy())[0])
         res_lat_list.append(lat_res)
     test_pd = pd.DataFrame(
-        {'bbox': bbox_list, 'time_start': start_time, 'time_end': end_list, 'res_lon': lon_res, 'res_lat': lat_res,
-         'path': ['s3://' + file for file in era5_land_zarr_files]})
-    test_pd.to_csv('era5_land_metadata.csv')
-
-
-
-test_read_era5_land_csv()
+        {
+            "bbox": bbox_list,
+            "time_start": start_time,
+            "time_end": end_list,
+            "res_lon": lon_res,
+            "res_lat": lat_res,
+            "path": ["s3://" + file for file in era5_land_zarr_files],
+        }
+    )
+    test_pd.to_csv("era5_land_metadata.csv")
