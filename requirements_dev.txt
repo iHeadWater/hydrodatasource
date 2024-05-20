@@ -16,7 +16,7 @@ dataretrieval
 pygeohydro
 
 pykalman
-psycopg2
+psycopg2-binary
 
 hydrodataset
 
