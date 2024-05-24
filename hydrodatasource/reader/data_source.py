@@ -545,29 +545,93 @@ class HydroBasins(HydroData):
                 else:
                     ds = access_fs.spec_path(file_path, head="minio")
                 if gap != "1h":
-                    ds = self.aggeragate_dataset(ds, gap)
-                ds = ds.assign_coords({"basin": basin_id})
-                ds = ds.expand_dims("basin")
+                    ds = self.aggregate_dataset(ds, gap, basin_id)
+                    # ds = self.aggeragate_dataset(ds, gap)
+                # ds = ds.assign_coords({"basin": basin_id})
+                # ds = ds.expand_dims("basin")
                 datasets.append(ds[var_lst])
 
         return xr.concat(datasets, dim="basin")
 
-    def aggeragate_dataset(self, ds: xr.Dataset, gap):
-        df_res = ds.to_dataframe()
+    # def aggeragate_dataset(self, ds: xr.Dataset, gap):
+    #     df_res = ds.to_dataframe()
+    #     if "total_evaporation_hourly" in df_res.columns:
+    #         df_res["total_evaporation_hourly"] = (
+    #             df_res["total_evaporation_hourly"].resample(gap, origin="start").sum()
+    #         )
+    #         df_res["total_evaporation_hourly"] *= -1000
+    #         df_res["total_precipitation_hourly"] = (
+    #             df_res["total_precipitation_hourly"].resample(gap, origin="start").sum()
+    #         )
+    #         df_res["total_precipitation_hourly"] *= 1000
+    #     elif "gpm_tp" in df_res.columns:
+    #         df_res["gpm_tp"] = df_res["gpm_tp"].resample(gap, origin="start").sum()
+    #     df_res["streamflow"] = df_res["streamflow"].resample(gap, origin="start").sum()
+    #     df_res = df_res.resample(gap).mean()
+    #     return xr.Dataset.from_dataframe(df_res)
+
+    def aggregate_dataset(self, ds: xr.Dataset, gap, basin_id):
+        # TODO: other time scales and better way of clip data, it's because of smap data time, that's why we claim some numbers here
+        if gap == "3h":
+            gap = 3
+            # 确保时间索引从2/5/8/11/14/17/20/23点开始
+            start_times = [2, 5, 8, 11, 14, 17, 20, 23]
+            end_times = [1, 4, 7, 10, 13, 16, 19, 22]
+            time_index = ds.indexes["time"]
+
+            # 修剪开始时间
+            while time_index[0].hour not in start_times:
+                ds = ds.isel(time=slice(1, None))
+                time_index = ds.indexes["time"]
+
+            # 修剪结束时间
+            while time_index[-1].hour not in end_times:
+                ds = ds.isel(time=slice(None, -1))
+                time_index = ds.indexes["time"]
+
+        df_res = ds.to_dataframe().reset_index()
+        df_res.set_index("time", inplace=True)
+
+        numeric_cols = df_res.select_dtypes(include=[np.number]).columns
+        aggregated_data = {}
+
+        for col in numeric_cols:
+            data = df_res[col].values
+            aggregated_values = []
+            for start in range(0, len(data), gap):
+                chunk = data[start : start + gap]
+                if np.isnan(chunk).any():
+                    aggregated_values.append(np.nan)
+                else:
+                    aggregated_values.append(np.sum(chunk))
+
+            # 获取重采样后的时间索引
+            aggregated_times = df_res.index[gap - 1 :: gap][: len(aggregated_values)]
+            aggregated_data[col] = (
+                ("time", "basin"),
+                np.array(aggregated_values).reshape(-1, 1),
+            )
+
         if "total_evaporation_hourly" in df_res.columns:
-            df_res["total_evaporation_hourly"] = (
-                df_res["total_evaporation_hourly"].resample(gap, origin="start").sum()
+            aggregated_data["total_precipitation_hourly"] = (
+                aggregated_data["total_precipitation_hourly"] * 1000
             )
-            df_res["total_evaporation_hourly"] *= -1000
-            df_res["total_precipitation_hourly"] = (
-                df_res["total_precipitation_hourly"].resample(gap, origin="start").sum()
+            aggregated_data["total_evaporation_hourly"] = (
+                aggregated_data["total_evaporation_hourly"] * -1000
             )
-            df_res["total_precipitation_hourly"] *= 1000
-        elif "gpm_tp" in df_res.columns:
-            df_res["gpm_tp"] = df_res["gpm_tp"].resample(gap, origin="start").sum()
-        df_res["streamflow"] = df_res["streamflow"].resample(gap, origin="start").sum()
-        df_res = df_res.resample(gap).mean()
-        return xr.Dataset.from_dataframe(df_res)
+
+        # 确保删除现有的basin标量变量
+        if "basin" in ds.coords and ds.coords["basin"].size == 1:
+            ds = ds.drop_vars("basin")
+
+        result_ds = xr.Dataset(
+            aggregated_data,
+            coords={"time": aggregated_times, "basin": [basin_id]},
+        )
+
+        result_ds = result_ds.transpose("basin", "time")
+
+        return result_ds
 
     def read_grid_data(self, file_lst, basin):
         def get_basin_id(file_path):
