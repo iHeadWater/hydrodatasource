@@ -571,10 +571,8 @@ class HydroBasins(HydroData):
     #     return xr.Dataset.from_dataframe(df_res)
 
     def aggregate_dataset(self, ds: xr.Dataset, gap, basin_id):
-        # TODO: other time scales and better way of clip data, it's because of smap data time, that's why we claim some numbers here
         if gap == "3h":
             gap = 3
-            # 确保时间索引从2/5/8/11/14/17/20/23点开始
             start_times = [2, 5, 8, 11, 14, 17, 20, 23]
             end_times = [1, 4, 7, 10, 13, 16, 19, 22]
             time_index = ds.indexes["time"]
@@ -594,8 +592,13 @@ class HydroBasins(HydroData):
 
         numeric_cols = df_res.select_dtypes(include=[np.number]).columns
         aggregated_data = {}
+        sm_surface_data = []
+        sm_rootzone_data = []
 
         for col in numeric_cols:
+            if col in ["sm_surface", "sm_rootzone"]:
+                continue
+
             data = df_res[col].values
             aggregated_values = []
             for start in range(0, len(data), gap):
@@ -605,11 +608,25 @@ class HydroBasins(HydroData):
                 else:
                     aggregated_values.append(np.sum(chunk))
 
-            # 获取重采样后的时间索引
             aggregated_times = df_res.index[gap - 1 :: gap][: len(aggregated_values)]
             aggregated_data[col] = (
                 ("time", "basin"),
                 np.array(aggregated_values).reshape(-1, 1),
+            )
+
+        # 处理 sm_surface 和 sm_rootzone 变量
+        if "sm_surface" in df_res.columns:
+            sm_surface_data = df_res["sm_surface"].iloc[gap - 1 :: gap].values
+            aggregated_data["sm_surface"] = (
+                ("time", "basin"),
+                sm_surface_data.reshape(-1, 1),
+            )
+
+        if "sm_rootzone" in df_res.columns:
+            sm_rootzone_data = df_res["sm_rootzone"].iloc[gap - 1 :: gap].values
+            aggregated_data["sm_rootzone"] = (
+                ("time", "basin"),
+                sm_rootzone_data.reshape(-1, 1),
             )
 
         if "total_evaporation_hourly" in df_res.columns:
@@ -619,10 +636,6 @@ class HydroBasins(HydroData):
             aggregated_data["total_evaporation_hourly"] = (
                 aggregated_data["total_evaporation_hourly"] * -1000
             )
-
-        # 确保删除现有的basin标量变量
-        if "basin" in ds.coords and ds.coords["basin"].size == 1:
-            ds = ds.drop_vars("basin")
 
         result_ds = xr.Dataset(
             aggregated_data,
