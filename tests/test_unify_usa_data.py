@@ -40,7 +40,7 @@ def test_read_usa_streamflow():
         s3_basin_path = f's3://basins-origin/basin_shapefiles/{basin_id}.zip'
         basin_gpd = gpd.read_file(FS.open(s3_basin_path))
         basin_tz = tzfpy.get_tz(basin_gpd.geometry[0].centroid.x, basin_gpd.geometry[0].centroid.y)
-        q_array = read_streamflow_from_minio(times=[['2019-01-01 00:00:00', '2019-12-31 23:00:00'],
+        q_array = read_streamflow_from_minio(times=[['2014-12-31 17:00:00', '2019-12-31 23:00:00'],
                                           ['2020-01-01 00:00:00', '2023-12-31 23:00:00']],
                                    sta_id=basin_id.lstrip('basin_'))
         if basin_tz == 'America/Los_Angeles':
