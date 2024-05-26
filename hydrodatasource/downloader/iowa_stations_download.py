@@ -1,6 +1,5 @@
 # download data from usgs and iowa networks
 import io
-import logging
 from datetime import datetime
 
 import pandas as pd
