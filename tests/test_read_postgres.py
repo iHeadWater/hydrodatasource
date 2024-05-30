@@ -1,13 +1,17 @@
-from hydrodatasource.reader.postgres import read_forcing, get_forcing_dataframe
+from hydrodatasource.reader.postgres import (
+    read_forcing,
+    get_forcing_dataframe,
+    read_forcing_dataframe,
+)
 
 
 def test_read_gpm():
-    data = read_forcing("gpm", "21401550", "2024-05-24 00:00:00")
+    data = read_forcing("gpm_tp", "21401550", "2024-05-30 00:00:00")
     print(data)
 
 
 def test_read_gfs_tp():
-    data = read_forcing("gfs_tp", "21401550", "2024-05-24 00:00:00")
+    data = read_forcing("gfs_tp", "21401550", "2024-05-30 00:00:00")
     print(data)
 
 
@@ -22,5 +26,10 @@ def test_read_gfs_sm():
 
 
 def test_get_dataframe_gpm():
-    data = get_forcing_dataframe("gpm", "21401550", "2024-05-24 00:00:00")
+    data = get_forcing_dataframe("gpm_tp", "21401550", "2024-05-24 00:00:00")
+    print(data)
+
+
+def test_read_gpm_dataframe():
+    data = read_forcing_dataframe("gpm_tp", "21401550", "2024-05-24 00:00:00")
     print(data)
