@@ -43,7 +43,7 @@ def test_anomaly_process():
 def test_basins_polygon_mean():
     # 测试泰森多边形平均值，碧流河为例。测试结果见 /ftproot/tests_stations_anomaly_detection/plot
     basins_mean = RainfallAnalyzer(
-        stations_csv_path="/ftproot/tests_stations_anomaly_detection/stations/pp_stations_.csv",
+        stations_csv_path="/ftproot/tests_stations_anomaly_detection/stations/pp_stations_.csv",# 站点表，其中ID列带有前缀‘pp_’
         shp_folder="/ftproot/tests_stations_anomaly_detection/shapefiles/",
         rainfall_data_folder="/ftproot/tests_stations_anomaly_detection/rainfall_cleaner/",
         output_folder="/ftproot/tests_stations_anomaly_detection/basins_rainfall_mean/",

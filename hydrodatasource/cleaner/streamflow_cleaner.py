@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 from scipy.signal import cwt, morlet, butter, filtfilt
 from scipy.fft import fft, ifft, fftfreq
 from scipy.optimize import curve_fit
+import os
 
 
 class StreamflowCleaner(Cleaner):
@@ -336,7 +337,7 @@ class StreamflowCleaner(Cleaner):
     def EMA(self, streamflow_data):
         # 访问时间序列
         df = self.origin_df.copy()
-        
+
         # streamflow_data数据是插补过的
         df["INQQ"] = np.nan
         df["INQQ"] = streamflow_data
@@ -425,3 +426,253 @@ class StreamflowCleaner(Cleaner):
 
         # 去除提前插补的缺失值
         self.processed_df[methods[0]][self.origin_df["INQ"].isna()] = np.nan
+
+
+class StreamflowBacktrack:
+    def __init__(self, data_folder, output_folder,file_name = None):
+        self.data_folder = data_folder
+        self.output_folder = data_folder
+        self.file_name = file_name
+
+    def clean_W(self, file_path, output_folder):
+        data = pd.read_csv(file_path)
+        # 计算与前一行的差异
+        data["diff_prev"] = abs(data["W"] - data["W"].shift(1))
+
+        # 计算与后一行的差异
+        data["diff_next"] = abs(data["W"] - data["W"].shift(-1))
+
+        # 标记需要设置为 NaN 的行
+        data["set_nan"] = (data["diff_prev"] > 200) | (data["diff_next"] > 200)
+
+        # 如果与前一行或后一行的差异超过200，则设置为 NaN
+        data.loc[data["set_nan"], "W"] = np.nan
+
+        # 输出被设置为 NaN 的行
+        print(data[data["set_nan"]])
+
+        # 保存被设置为 NaN 的行到 CSV 文件
+        data[data["set_nan"]].to_csv(
+            os.path.join(output_folder, "库容异常的数据行.csv"), index=False
+        )
+        # 绘制图形
+        # plt.figure(figsize=(14, 7))
+        # plt.plot(data["TM"], data["W"], label="Water Level")
+        # plt.xlabel("Time")
+        # plt.ylabel("Water Level (W)")
+        # plt.title("Water Level Analysis with Outliers Removed")
+        # plt.legend()
+        # plt.show()
+
+        cleaned_path = os.path.join(output_folder, "去除库容异常的数据.csv")
+        data.to_csv(cleaned_path)
+        return cleaned_path
+
+    def back_calculation(self,data_path, file, output_folder):
+        # 反推数据
+        data = pd.read_csv(data_path)
+        data["TM"] = pd.to_datetime(data["TM"])
+        data["Time_Diff"] = data["TM"].diff().dt.total_seconds().fillna(0)
+        data["INQ_ACC"] = data["OTQ"] + (10**6 * (data["W"].diff() / data["Time_Diff"]))
+        data["INQ_CB"] = data["INQ"].fillna(data["INQ_ACC"])
+        data["Month"] = data["TM"].dt.month
+        print(data)
+        data["INQ"] = data["INQ_CB"]
+
+        back_calc_path = os.path.join(output_folder, file[:-4] + "_径流直接反推数据.csv")
+        data[
+            [
+                "STCD",
+                "TM",
+                "RZ",
+                "INQ",
+                "W",
+                "OTQ",
+                "RWCHRCD",
+                "RWPTN",
+                "INQDR",
+                "MSQMT",
+                "BLRZ",
+            ]
+        ].to_csv(back_calc_path)
+        return back_calc_path
+
+    def delete_nan_inq(self,data_path, file, output_folder):
+        # 读取CSV文件到DataFrame
+        df = pd.read_csv(data_path)
+        # 将'TM'列转换为日期时间格式并设置为索引
+        df["TM"] = pd.to_datetime(df["TM"])
+
+        # 设置调整后的时间为索引
+        df = df.set_index("TM")
+
+        print(df["INQ"].sum())
+        # 确保'INQ'列是数值类型
+        df["INQ"] = pd.to_numeric(df["INQ"], errors="coerce")
+
+        def adjust_window(window):
+            if window.count() == 0:
+                return window  # 如果窗口内全是NaN，返回原窗口
+
+            # 移除负值
+            positive_values = window[window > 0]
+            negative_values = window[window < 0]
+
+            # 计算正负值的总和
+            pos_sum = positive_values.sum()
+            neg_sum = abs(negative_values.sum())  # 负值的绝对值和
+
+            # 计算需要调整的比例
+            if pos_sum > 0:
+                adjust_factor = neg_sum / pos_sum
+                # 调整正值
+                adjusted_values = positive_values - (positive_values * adjust_factor)
+            else:
+                adjusted_values = positive_values  # 如果没有正值可用于调整，保持原样
+
+            # 更新窗口的值
+            window[window > 0] = adjusted_values
+            window[window <= 0] = 0
+
+            return window
+
+        def rolling_with_stride(df, column, window_size, stride, func):
+            # 遍历数据，步长为stride
+            for i in range(0, len(df) - window_size + 1, stride):
+                window_indices = range(i, i + window_size)
+                df.loc[df.index[window_indices], column] = func(
+                    df.loc[df.index[window_indices], column]
+                )
+
+        # 应用滚动窗口函数，这里设置步幅为4，窗口大小为7
+        rolling_with_stride(df, "INQ", window_size=7, stride=4, func=adjust_window)
+        path = os.path.join(output_folder, file[:-4] + "_水量平衡后的日尺度反推数据.csv")
+
+        df["TM"] = df.index.strftime("%Y-%m-%d %H:%M:%S")
+        df[
+            [
+                "STCD",
+                "TM",
+                "RZ",
+                "INQ",
+                "W",
+                "OTQ",
+                "RWCHRCD",
+                "RWPTN",
+                "INQDR",
+                "MSQMT",
+                "BLRZ",
+            ]
+        ].to_csv(path, index=False)
+        return path
+
+    def insert_inq(self,data_path, file, output_folder):
+        # 读取CSV文件到DataFrame
+        df = pd.read_csv(data_path)
+        # 将'TM'列转换为日期时间格式并设置为索引
+        df["TM"] = pd.to_datetime(df["TM"])
+        # 设置调整后的时间为索引
+        df = df.set_index("TM")
+        # 确保'INQ'列是数值类型
+        df["INQ"] = pd.to_numeric(df["INQ"], errors="coerce")
+
+        # 生成从开始日期到结束日期的完整时间序列，按小时
+        date_range = pd.date_range(start=df.index.min(), end=df.index.max(), freq="h")
+        complete_df = pd.DataFrame(index=date_range)
+
+        # 将原始数据与完整时间序列表格全连接
+        df = complete_df.join(df, how="outer")
+
+        # 使用线性插值
+        # 插值前检查连续缺失是否超过7天（7*24小时）
+        def linear_interpolate(df, column="INQ", threshold=168):
+            data = df[column]
+            start_index = None
+
+            for i in range(len(data)):
+                if not pd.isna(data.iloc[i]):
+                    if start_index is None:
+                        start_index = i
+                    else:
+                        # 检查当前点和上一个有数据点之间的间隔
+                        if i - start_index - 1 < threshold:
+                            # 如果间隔小于阈值，进行插值
+                            data.iloc[start_index : i + 1] = data.iloc[
+                                start_index : i + 1
+                            ].interpolate()
+                        # 更新起始点为当前点
+                        start_index = i
+
+            df[column] = data
+            return df
+
+        df = linear_interpolate(df)
+
+        # 确保INQ值不小于0
+        df["INQ"] = df["INQ"].clip(lower=0)
+
+        result_path = os.path.join(output_folder, file)
+
+        print("水量平衡的小时尺度滑动平均反推数据：输出行名称")
+        print(df.columns)
+        df["TM"] = df.index.strftime("%Y-%m-%d %H:%M:%S")
+        df["STCD"] = df["STCD"].dropna().iloc[0]
+        # 最后一步转换为整数再转换为字符串
+        df["STCD"] = df["STCD"].astype(int).astype(str)
+        print(df["STCD"])
+        df[
+            [
+                "STCD",
+                "TM",
+                "RZ",
+                "INQ",
+                "W",
+                "OTQ",
+                "RWCHRCD",
+                "RWPTN",
+                "INQDR",
+                "MSQMT",
+                "BLRZ",
+            ]
+        ].to_csv(result_path, index=False)
+        df[
+            [
+                "STCD",
+                "TM",
+                "RZ",
+                "INQ",
+                "W",
+                "OTQ",
+                "RWCHRCD",
+                "RWPTN",
+                "INQDR",
+                "MSQMT",
+                "BLRZ",
+            ]
+        ].to_csv(
+            os.path.join(
+                "/home/liutianxv1/水库流量数据小时插值并保持水量平衡版本", file
+            ),
+            index=False,
+        )
+
+        return result_path
+
+    def process_backtrack(self):
+        for file in os.listdir(self.data_folder):
+            if file.endswith(".csv"):
+                file_path = os.path.join(self.data_folder, file)
+                output_folder = os.path.join(self.output_folder, file[:-4])
+                if not os.path.exists(output_folder):
+                    os.makedirs(output_folder)
+                # Process each file step by step
+                # 去除库容异常
+                cleaned_data = self.clean_W(file_path, output_folder)
+                # 公式计算反推
+                back_data = self.back_calculation(cleaned_data, file, output_folder)
+                # 去除反推异常值
+                nonan_data = self.delete_nan_inq(back_data, file, output_folder)
+                # 插值平衡
+                insert_data = self.insert_inq(nonan_data, file, output_folder)
+                # 绘图
+                
