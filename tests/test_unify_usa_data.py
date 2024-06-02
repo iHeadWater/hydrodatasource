@@ -3,6 +3,7 @@ import os
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+import requests
 import xarray as xr
 import tzfpy
 import dataretrieval.nwis as nwis
@@ -65,13 +66,27 @@ def test_read_usa_streamflow():
 
 
 def test_download_from_usgs():
+    '''
     camels_hourly_csvs = '/ftproot/camels_hourly/data/usgs_streamflow_csv/'
     csv_paths = os.listdir(camels_hourly_csvs)
     minio_csv_paths = FS.glob('s3://basins-origin/basin_shapefiles/**')[1:]
     hourly_basin_ids = [path.split('-')[0] for path in csv_paths]
     minio_stcds = [csv.split('_')[-1].split('.')[0] for csv in minio_csv_paths]
     empty_stcds = [stcd for stcd in hourly_basin_ids if stcd not in minio_stcds]
+    '''
+    # usgs_basins = gpd.read_file("/ftproot/usgs_camels_hourly_flowdb_1373/concat_flow_camels_1373.zip")
+    # first_empty_stcds = usgs_basins['basin_id'].to_numpy()
+    usgs_gages = gpd.read_file("/ftproot/usgs_camels_hourly_flowdb_1373/concat_usa_usgs_all.shp")
+    empty_stcds = usgs_gages['GAGE_ID'].to_numpy()
+    # empty_stcds = np.union1d(first_empty_stcds, second_empty_stcds)
     for site in empty_stcds:
-        site_df = nwis.get_record(sites=site, service='iv', start='2020-01-01')
-        site_df.to_csv(f'/home/jiaxuwu/hydrodatasource/usgs_datas/zq_USA_usgs_{site}.csv')
+        site_path = f'/ftproot/usgs_camels_hourly_flowdb_1373/zq_USA_usgs_{site}.csv'
+        if not os.path.exists(site_path):
+            try:
+                site_df = nwis.get_record(sites=site, service='iv', start='2015-01-01')
+            except requests.exceptions.ConnectionError:
+                continue
+            except requests.exceptions.JSONDecodeError:
+                continue
+            site_df.to_csv(site_path)
 

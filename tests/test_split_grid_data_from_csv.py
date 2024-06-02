@@ -4,10 +4,7 @@ import pathlib
 import geopandas as gpd
 import pandas as pd
 import xarray as xr
-
-# TODO: Wang, Yang should fix this import, pip package should be name hydrotopo
-# from dijkstra_conda import ig_path
-
+from hydrotopo import ig_path
 import hydrodatasource.configs.config as conf
 from hydrodatasource.reader.spliter_grid import (
     query_path_from_metadata,

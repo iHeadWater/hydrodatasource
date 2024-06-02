@@ -176,11 +176,11 @@ def gen_grids(bbox, resolution, offset):
 
 
 def get_para(data_name):
-    if (data_name.lower() in ["era5_land"]) or (data_name.lower() in ["era5"]):
+    if data_name.lower() in ["era5_land"]:
         return 0.1, 0
     elif data_name.lower() in ["gpm"]:
         return 0.1, 0.05
-    elif data_name.lower() in ["gfs"]:
+    elif data_name.lower() in ["gfs", "era5"]:
         return 0.25, 0
     else:
         raise Exception("未支持的数据产品")

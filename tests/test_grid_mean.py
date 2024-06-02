@@ -1,3 +1,7 @@
+import time
+
+import fsspec
+import geopandas as gpd
 import xarray as xr
 
 import hydrodatasource.configs.config as hdscc
@@ -72,7 +76,7 @@ def test_concat_variables():
     # '3B-HHR-E.MS.MRG.3IMERG.20200701-S000000-E002959.0000.V06B.HDF5_tile.nc4'未区分流域，导致前面的数据被后面的数据覆盖
     basin_ids = ['basin_CHN_songliao_21401550']
     merge_list = concat_gpm_smap_mean_data(basin_ids, [['2022-06-01 00:00:00', '2022-07-31 23:00:00'],
-                 ['2022-09-01 00:00:00', '2022-09-30 23:00:00']])
+                                                       ['2022-09-01 00:00:00', '2022-09-30 23:00:00']])
     for xr_ds in merge_list:
         hdscc.FS.write_bytes(f's3://basins-origin/hour_data/1h/mean_data/mean_data_merged/mean_data_{basin_ids[0]}',
                              xr_ds.to_netcdf())
@@ -100,3 +104,43 @@ def test_concat_usa_basins_variables():
                              merge_list[i].to_netcdf())
     '''
     return merge_list
+
+
+def test_read_era5_by_basins():
+    data_name = 'era5'
+    chk_dir = 'single_levels_tp'
+    # era5中的经度是0-360°，对西经如美国会出问题
+    basin_ids = ['21401550']
+    test_chk_dir = f's3://era5-origin/era5/grib/{chk_dir}/2016/02/02/'
+    test_paths = hdscc.FS.glob(test_chk_dir + '**')[1:]
+    basin_tgdf = gpd.read_file(hdscc.FS.open('s3://basins-origin/basins_shp.zip'))
+    basin_gdfs = basin_tgdf[basin_tgdf['BASIN_ID'].isin(basin_ids)]
+    basin_mean_dict = {}
+    time_mean_list = []
+    start_cyc_time = time.time()
+    for basin_id in basin_ids:
+        for time_path in test_paths:
+            basin_part = basin_gdfs[basin_gdfs['BASIN_ID'] == basin_id]
+            mask = hpm.gen_single_mask(basin_id, basin_part, data_name)
+            bbox = [mask['lon'].values.min(), mask['lon'].values.max(), mask['lat'].values.max(),
+                    mask['lat'].values.min()]
+            time_path = f'simplecache::s3://{time_path}'
+            time_ds = xr.open_dataset(fsspec.open_local(time_path, s3=hdscc.MINIO_PARAM, filecache=
+                {'cache_storage': '/tmp/files'}), engine='cfgrib')
+            time_ds_split = time_ds.sel(longitude=slice(bbox[0], bbox[1]), latitude=slice(bbox[2], bbox[3]))
+            mean_res = hpm.mean_by_mask(src=time_ds_split, var='tp', mask=mask)
+            time_mean_list.append(mean_res)
+        basin_mean_dict[basin_id] = time_mean_list
+    use_time = time.time() - start_cyc_time
+    print(use_time)
+    return basin_mean_dict
+
+'''
+def split_dataset(time_path, bboxes: list):
+    time_path = f'simplecache::s3://{time_path}'
+    time_ds = xr.open_dataset(fsspec.open_local(time_path, s3=hdscc.MINIO_PARAM, filecache=
+    {'cache_storage': '/tmp/files'}), engine='cfgrib')
+    datasets = [time_ds.sel(longitude=slice(bbox[0], bbox[1]), latitude=slice(bbox[2], bbox[3])) for bbox in bboxes]
+    result = xr.concat(datasets, dim='time')
+    return result
+'''
