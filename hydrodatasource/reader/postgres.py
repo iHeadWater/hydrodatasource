@@ -12,39 +12,25 @@ def read_forcing_dataframe(var_type, basin, start_time):
     table_name = {
         "gpm_tp": "t_gpm_pre_data",
         "gfs_tp": "t_gfs_tp_pre_data",
-        "smap": "t_smap_pre_data",
-        "gfs_soil": "t_gfs_soil_pre_data",
+        "smap_sm_surface": "t_smap_pre_data",
+        "gfs_soilw": "t_gfs_soil_pre_data",
     }
 
     column_dataname = {
         "gpm_tp": "tp",
-        "smap": "sm_surface",
+        "smap_sm_surface": "sm_surface",
         "gfs_tp": "tp",
-        "gfs_soil": "soilw",
+        "gfs_soilw": "sm_surface",
     }
 
-    if var_type in ["gpm_tp", "smap"]:
-        columns_mapping = {
-            "basincode": "basincode",
-            "predictdate": "predictdate",
-            column_dataname[var_type]: column_dataname[var_type],
-            "raster_area": "raster_area",
-            "intersection_area": "intersection_area",
-        }
+    if var_type in ["gpm_tp", "smap_sm_surface"]:
         datetime_column = "predictdate"
-    elif var_type in ["gfs_tp", "gfs_soil"]:
-        columns_mapping = {
-            "basin_code": "basin_code",
-            "forecastdatetime": "forecastdatetime",
-            column_dataname[var_type]: column_dataname[var_type],
-            "raster_area": "raster_area",
-            "intersection_area": "intersection_area",
-        }
+    elif var_type in ["gfs_tp", "gfs_soilw"]:
         datetime_column = "forecastdatetime"
 
     if var_type not in table_name:
         raise ValueError(
-            "var_type must be one of 'gpm_tp', 'gfs_tp', 'smap', 'gfs_soil'"
+            "var_type must be one of 'gpm_tp', 'gfs_tp', 'smap_sm_surface', 'gfs_soilw'"
         )
 
     if var_type == "gpm_tp":
@@ -64,7 +50,7 @@ def read_forcing_dataframe(var_type, basin, start_time):
         ) {table_name[var_type]}
         WHERE predictdate >= '{start_time}' AND basincode = '{basin}'
         """
-    elif var_type == "smap":
+    elif var_type == "smap_sm_surface":
         sql = f"""
         SELECT 
             basincode, 
@@ -86,18 +72,18 @@ def read_forcing_dataframe(var_type, basin, start_time):
         select
             basin_code,
             forecastdatetime,
-            tp,
+            tp AS tp,
             raster_area,
             intersection_area 
         from {table_name[var_type]}
         where forecastdatetime >= '{start_time}' and basin_code = '{basin}'
         """
-    elif var_type == "gfs_soil":
+    elif var_type == "gfs_soilw":
         sql = f"""
         select
             basin_code,
             forecastdatetime,
-            soilw,
+            soilw AS sm_surface,
             raster_area,
             intersection_area 
         from {table_name[var_type]}
@@ -115,7 +101,6 @@ def read_forcing_dataframe(var_type, basin, start_time):
     # 执行查询数据SQL查询
     try:
         df = pd.read_sql(sql, engine)
-        df = df.rename(columns=columns_mapping)
         # 转换数据类型
         df[column_dataname[var_type]] = df[column_dataname[var_type]].astype(float)
         df["raster_area"] = df["raster_area"].astype(float)
@@ -124,6 +109,6 @@ def read_forcing_dataframe(var_type, basin, start_time):
         df = df.sort_values(by=datetime_column)
     except Exception as e:
         logger.error(e)
-        raise Exception()
+        raise Exception() from e
 
     return df
