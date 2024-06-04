@@ -5,9 +5,11 @@ from loguru import logger
 from sqlalchemy import create_engine
 
 
-def read_forcing_dataframe(var_type, basin, start_time):
+def read_forcing_dataframe(var_type, basin, time_period):
+    start_time = time_period[0]
+    end_time = time_period[1]
     if start_time is None:
-        raise ValueError("start_time cannot be None")
+        raise ValueError("the first element of the time_period cannot be None")
 
     table_name = {
         "gpm_tp": "t_gpm_pre_data",
@@ -48,8 +50,11 @@ def read_forcing_dataframe(var_type, basin, start_time):
                 jsonb_array_elements(data) AS data
             FROM {table_name[var_type]}
         ) {table_name[var_type]}
-        WHERE predictdate >= '{start_time}' AND basincode = '{basin}'
+        WHERE predictdate >= '{start_time}' 
         """
+        if end_time is not None:
+            sql += f" AND predictdate <= '{end_time}'"
+        sql += f" AND basincode = '{basin}'"
     elif var_type == "smap_sm_surface":
         sql = f"""
         SELECT 
@@ -65,8 +70,11 @@ def read_forcing_dataframe(var_type, basin, start_time):
                 jsonb_array_elements(data) AS data
             FROM {table_name[var_type]}
         ) {table_name[var_type]}
-        WHERE predictdate >= '{start_time}' AND basincode = '{basin}'
+        WHERE predictdate >= '{start_time}' 
         """
+        if end_time is not None:
+            sql += f" AND predictdate <= '{end_time}'"
+        sql += f" AND basincode = '{basin}'"
     elif var_type == "gfs_tp":
         sql = f"""
         select
@@ -76,8 +84,11 @@ def read_forcing_dataframe(var_type, basin, start_time):
             raster_area,
             intersection_area 
         from {table_name[var_type]}
-        where forecastdatetime >= '{start_time}' and basin_code = '{basin}'
+        WHERE forecastdatetime >= '{start_time}' 
         """
+        if end_time is not None:
+            sql += f" AND forecastdatetime <= '{end_time}'"
+        sql += f" AND basin_code = '{basin}'"
     elif var_type == "gfs_soilw":
         sql = f"""
         select
@@ -87,8 +98,11 @@ def read_forcing_dataframe(var_type, basin, start_time):
             raster_area,
             intersection_area 
         from {table_name[var_type]}
-        where forecastdatetime >= '{start_time}' and basin_code = '{basin}'
+        WHERE forecastdatetime >= '{start_time}' 
         """
+        if end_time is not None:
+            sql += f" AND forecastdatetime <= '{end_time}'"
+        sql += f" AND basin_code = '{basin}'"
 
     db_username = SETTING["postgres"]["username"]
     db_password = SETTING["postgres"]["password"]
