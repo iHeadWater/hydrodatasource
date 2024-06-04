@@ -2,6 +2,7 @@ import glob
 import logging
 import os
 
+import fsspec
 import geopandas as gpd
 import intake as intk
 import pandas as pd
@@ -47,8 +48,10 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False, need_refer=
     pip install intake-xarray intake-geopandas
 
     Parameters:
-    obj (str): The file path or URL of the data, format is 's3://bucket_name/file_name'.
-    storage_option (dict, optional): The storage options for accessing the data. Defaults to None.
+    obj (str): The file path or URL of the data, format is 's3://bucket_name/directory_name/file_name' in minio.
+    storage_option (dict, optional): The storage options for accessing the data. Defaults to None, if you want to
+                                     read from minio, storage_option should be minio login params.
+                                     See hydrodatasource.configs.config.MINIO_PARAM to get reference
     need_cache (bool, optional): Whether to cache the data. Defaults to False.
 
     Returns:
@@ -68,7 +71,7 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False, need_refer=
             data_obj = xr.Dataset(data_obj)
             if (need_cache is True) & (storage_option is not None):
                 data_obj.to_csv(path_or_buf=os.path.join(conf.LOCAL_DATA_PATH, cache_name))
-        elif (ext_name == 'nc') or (ext_name == 'nc4') or (ext_name == 'hdf5') or (ext_name == 'h5') or ('nc4' in obj):
+        elif (ext_name in ['nc', 'nc4', 'h5', 'hdf5']) or ('nc4' in obj):
             if need_refer is True:
                 data_obj = gen_refer_and_read_zarr(obj, storage_option=storage_option)
             else:
@@ -77,10 +80,16 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False, need_refer=
                 nc_src_reader = intk.readers.DaskHDF(nc_source).to_reader()
                 data_obj: xr.Dataset = nc_src_reader.read()
                 '''
-                if (ext_name == 'nc') or (ext_name == 'nc4') or ('nc4' in obj):
-                    data_obj = xr.open_dataset(conf.FS.open(obj), chunks='auto')
-                elif (ext_name == 'hdf5') or (ext_name == 'h5'):
-                    data_obj = xr.open_dataset(conf.FS.open(obj), engine='h5netcdf', chunks='auto', phony_dims='access')
+                if storage_option is not None:
+                    if (ext_name == 'nc') or (ext_name == 'nc4') or ('nc4' in obj):
+                        data_obj = xr.open_dataset(conf.FS.open(obj), chunks='auto')
+                    elif (ext_name == 'hdf5') or (ext_name == 'h5'):
+                        data_obj = xr.open_dataset(conf.FS.open(obj), engine='h5netcdf', chunks='auto', phony_dims='access')
+                else:
+                    if (ext_name == 'nc') or (ext_name == 'nc4') or ('nc4' in obj):
+                        data_obj = xr.open_dataset(obj, chunks='auto')
+                    elif (ext_name == 'hdf5') or (ext_name == 'h5'):
+                        data_obj = xr.open_dataset(obj, engine='h5netcdf', chunks='auto', phony_dims='access')
             if (need_cache is True) & (storage_option is not None):
                 data_obj.to_netcdf(path=os.path.join(conf.LOCAL_DATA_PATH, cache_name))
         elif ext_name == 'json':
@@ -91,14 +100,19 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False, need_refer=
             # Now zipfile is used to read shapefile
             # Can't read shapefile directly, see this: https://github.com/geopandas/geopandas/issues/3129
             # pip install pyogrio
-            data_obj = gpd.read_file(conf.FS.open(obj), engine='pyogrio')
+            if storage_option is not None:
+                data_obj = gpd.read_file(conf.FS.open(obj), engine='pyogrio')
+            else:
+                data_obj = gpd.read_file(obj)
             if (need_cache is True) & (storage_option is not None):
                 data_obj.to_file(path=os.path.join(conf.LOCAL_DATA_PATH, cache_name))
         elif 'grb2' in obj:
-            # ValueError: unrecognized engine cfgrib must be one of: ['netcdf4', 'h5netcdf', 'scipy', 'store', 'zarr']
-            # https://blog.csdn.net/weixin_44052055/article/details/108658464?spm=1001.2014.3001.5501
-            # 似乎只能用conda来装eccodes
-            grib_ds = xr.open_dataset(conf.FS.open(obj))
+            if storage_option is not None:
+                obj = f'simplecache::{obj}'
+                grib_ds = xr.open_dataset(fsspec.open_local(obj, s3=conf.MINIO_PARAM, filecache=
+                        {'cache_storage': '/tmp/files'}), engine='cfgrib')
+            else:
+                grib_ds = xr.open_dataset(obj)
             if (need_cache is True) & (storage_option is not None):
                 grib_ds.to_netcdf(path=os.path.join(conf.LOCAL_DATA_PATH, cache_name))
         elif ext_name == 'txt':
@@ -106,11 +120,14 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False, need_refer=
             if (need_cache is True) & (storage_option is not None):
                 data_obj.to_csv(os.path.join(conf.LOCAL_DATA_PATH, cache_name))
         elif ext_name == 'zarr':
-            zarr_mapper = conf.FS.get_mapper(obj)
-            # KVStore is introduced in zarr specification V3
-            # https://zarr-specs.readthedocs.io/en/latest/v3/stores.html
-            zarr_store = zarr.storage.KVStore(zarr_mapper)
-            data_obj = xr.open_zarr(zarr_store)
+            if storage_option is not None:
+                zarr_mapper = conf.FS.get_mapper(obj)
+                # KVStore is introduced in zarr specification V3
+                # https://zarr-specs.readthedocs.io/en/latest/v3/stores.html
+                zarr_store = zarr.storage.KVStore(zarr_mapper)
+                data_obj = xr.open_zarr(zarr_store)
+            else:
+                data_obj = xr.open_zarr(obj)
         else:
             logging.error(f'Unsupported file type: {ext_name}')
     else:
@@ -132,4 +149,3 @@ def gen_refer_and_read_zarr(obj_path, storage_option=None):
     data_reader_obj = intk.readers.XArrayDatasetReader(data_type_obj).to_reader()
     data_obj = data_reader_obj.read()
     return data_obj
-
