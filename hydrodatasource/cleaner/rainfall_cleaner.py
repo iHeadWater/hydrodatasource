@@ -311,14 +311,14 @@ class RainfallCleaner(Cleaner):
 class RainfallAnalyzer:
     def __init__(
         self,
-        stations_csv_path,
-        shp_folder,
-        rainfall_data_folder,
-        output_folder,
-        output_log,
-        output_plot,
-        lower_bound,
-        upper_bound,
+        stations_csv_path = None,
+        shp_folder= None,
+        rainfall_data_folder= None,
+        output_folder= None,
+        output_log= None,
+        output_plot= None,
+        lower_bound= None,
+        upper_bound= None,
     ):
         self.stations_csv_path = stations_csv_path
         self.shp_folder = shp_folder
@@ -697,3 +697,77 @@ class RainfallAnalyzer:
             if shp_file.endswith(".shp"):
                 basin_shp_path = os.path.join(self.shp_folder, shp_file)
                 self.process_basin(basin_shp_path, filtered_data)
+
+    # 添加时间一致性检验功能
+    def check_time_consistency(self, df, hours=24):
+        # 假设时间列为'TM'和降雨量列为'DRP'
+        datetime_col = 'TM'
+        rainfall_col = 'DRP'
+        
+        # 解析日期时间列
+        df[datetime_col] = pd.to_datetime(df[datetime_col])
+        
+        # 按时间排序
+        df = df.sort_values(by=datetime_col)
+        
+        # 添加一个布尔列来标记异常
+        df['is_anomaly'] = False
+        
+        # 检查是否有连续24小时降雨量完全一致且非零的情况
+        for i in range(len(df) - hours + 1):
+            window = df.iloc[i:i + hours]
+            # 过滤掉NaN值
+            if window[rainfall_col].isna().sum() == 0:
+                if len(window[rainfall_col].unique()) == 1 and window[rainfall_col].iloc[0] != 0:
+                    df.loc[window.index, 'is_anomaly'] = True
+        
+        return df
+
+    def time_consistency(self):
+        all_anomalies = pd.DataFrame()
+        
+        # 遍历rainfall_data_folder中的所有文件
+        for file_name in os.listdir(self.rainfall_data_folder):
+            file_path = os.path.join(self.rainfall_data_folder, file_name)
+            
+            if os.path.isfile(file_path) and file_name.endswith('.csv'):
+                # 读取CSV文件
+                df = pd.read_csv(file_path)
+                
+                # 检查时间一致性
+                df = self.check_time_consistency(df)
+                
+                # 提取标记为异常的记录
+                anomalies = df[df['is_anomaly']]
+                
+                # 将异常数据添加到总的DataFrame中
+                all_anomalies = pd.concat([all_anomalies, anomalies], ignore_index=True)
+        
+        # 将所有异常数据保存到一个txt文件中
+        output_file = os.path.join(self.output_folder, 'time_consistency_anomalies.txt')
+        with open(output_file, 'w') as f:
+            f.write(all_anomalies.to_string(index=False))
+        
+        print(f"异常数据已保存到 {output_file}")
+
+    # 添加空间一致性检验功能
+    def spatial_consistency(self):
+        """
+        主函数，执行整个数据处理流程。
+
+        参数：
+        stations_csv_path - 站点信息CSV文件路径。
+        shp_folder - 流域shapefile文件夹路径。
+        rainfall_data_folder - 降雨数据文件夹路径。
+        output_folder - 输出文件夹路径。
+        """
+        # 先筛选降雨数据，保留符合最低阈值的数据
+        self.lower_bound = -1
+        self.upper_bound = 50000
+        filtered_data = self.filter_and_save_csv()
+        for shp_file in os.listdir(self.shp_folder):
+            if shp_file.endswith(".shp"):
+                basin_shp_path = os.path.join(self.shp_folder, shp_file)
+                self.process_basin(basin_shp_path, filtered_data)
+        
+        

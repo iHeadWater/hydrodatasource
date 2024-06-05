@@ -1,11 +1,11 @@
-"""
+'''
 Author: liutiaxqabs 1498093445@qq.com
-Date: 2024-04-22 18:02:00
+Date: 2024-05-28 10:24:16
 LastEditors: liutiaxqabs 1498093445@qq.com
-LastEditTime: 2024-05-31 11:34:41
+LastEditTime: 2024-06-05 10:50:22
 FilePath: /hydrodatasource/tests/test_rainfall_cleaner.py
-Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE   
-"""
+Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+'''
 
 import pytest
 from hydrodatasource.cleaner.rainfall_cleaner import RainfallCleaner, RainfallAnalyzer
@@ -54,3 +54,19 @@ def test_basins_polygon_mean():
     )
     basins_mean.basins_polygon_mean()
 
+def test_time_consistency():
+    time_consistency_check = RainfallAnalyzer(
+        rainfall_data_folder="/ftproot/tests_stations_anomaly_detection/rainfall_cleaner/",
+        output_folder="/ftproot/tests_stations_anomaly_detection/results/",
+    )
+    time_consistency_check.time_consistency()
+    
+def test_spatial_consistency():
+    basins_spatial = RainfallAnalyzer(
+        stations_csv_path="/ftproot/tests_stations_anomaly_detection/stations/pp_stations.csv",
+        shp_folder="/ftproot/tests_stations_anomaly_detection/shapefiles/",
+        rainfall_data_folder="/ftproot/tests_stations_anomaly_detection/rainfall_cleaner/",
+        output_folder="/ftproot/tests_stations_anomaly_detection/results/",
+        output_plot="/ftproot/tests_stations_anomaly_detection/plot/",
+    )
+    basins_spatial.spatial_consistency()
