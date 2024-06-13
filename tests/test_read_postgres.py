@@ -32,6 +32,7 @@ def test_read_gfs_sm():
 
 
 def test_read_sl_pg():
+    import geopandas as gpd
     # 获取water数据库下所有表
     all_tables = pd.read_sql(
         "SELECT table_name FROM information_schema.tables WHERE table_type = 'BASE TABLE' "
@@ -42,3 +43,11 @@ def test_read_sl_pg():
     stbprp_df = pd.read_sql("select * FROM ST_STBPRP_B", hdscc.PS)
     print(all_tables)
     print(stbprp_df)
+    '''
+    stnames = ['猴山', '石门', '土门子', '三湾', '铁甲', '太平湾水电站', '水丰', '双岭', '南城子', '榛子岭', '丰满', '杨木',
+               '云峰水电站', '红石', '白山', '双沟', '小山', '松山', '向海', '老龙口']
+    stnames_df = stbprp_df[['STCD', 'STNAME', 'LGTD', 'LTTD']][stbprp_df['STNM'].str.contains('|'.join(stnames))]
+    # 若点处于多个流域的出口，取级别最低的那一个
+    geo_column = gpd.points_from_xy(stnames_df['LGTD'], stnames_df['LTTD'])
+    sta_gdf = gpd.GeoDataFrame(stnames_df).set_geometry(geo_column)
+    '''

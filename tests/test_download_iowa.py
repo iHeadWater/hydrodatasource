@@ -16,6 +16,7 @@ from hydrodatasource.downloader.iowa_stations_download import (
     download_from_link,
 )
 
+
 def test_dload_from_stations_csv():
     for slice in np.arange(8, 0, -2):
         file_path = f"/ftproot/iowa_stations_table/iowa_stations_{slice}.csv"
