@@ -1,5 +1,5 @@
 from hydrodatasource.configs.config import SETTING
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 from loguru import logger
 from sqlalchemy import create_engine
@@ -34,7 +34,14 @@ def read_forcing_dataframe(var_type, basin, time_period):
         raise ValueError(
             "var_type must be one of 'gpm_tp', 'gfs_tp', 'smap_sm_surface', 'gfs_soilw'"
         )
-
+        
+    # 将时间向前调整8小时
+    start_time = datetime.strptime(start_time, '%Y-%m-%d %H:%M:%S')
+    start_time -= timedelta(hours=8)
+    if end_time:
+        end_time = datetime.strptime(end_time, '%Y-%m-%d %H:%M:%S')
+        end_time -= timedelta(hours=8)
+        
     if var_type == "gpm_tp":
         sql = f"""
         SELECT 
@@ -121,6 +128,8 @@ def read_forcing_dataframe(var_type, basin, time_period):
         df["intersection_area"] = df["intersection_area"].astype(float)
         # 按照时间列排序
         df = df.sort_values(by=datetime_column)
+        
+        df[datetime_column] = pd.to_datetime(df[datetime_column]) + timedelta(hours=8)
     except Exception as e:
         logger.error(e)
         raise Exception() from e
