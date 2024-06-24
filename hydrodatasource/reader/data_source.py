@@ -609,33 +609,32 @@ class HydroBasins(HydroData):
                     aggregated_values.append(np.sum(chunk))
 
             aggregated_times = df_res.index[gap - 1 :: gap][: len(aggregated_values)]
-            aggregated_data[col] = (
-                ("time", "basin"),
+            aggregated_data[col] = xr.DataArray(
                 np.array(aggregated_values).reshape(-1, 1),
+                dims=["time", "basin"],
+                coords={"time": aggregated_times, "basin": [basin_id]},
             )
 
         # 处理 sm_surface 和 sm_rootzone 变量
         if "sm_surface" in df_res.columns:
             sm_surface_data = df_res["sm_surface"].iloc[gap - 1 :: gap].values
-            aggregated_data["sm_surface"] = (
-                ("time", "basin"),
+            aggregated_data["sm_surface"] = xr.DataArray(
                 sm_surface_data.reshape(-1, 1),
+                dims=["time", "basin"],
+                coords={"time": aggregated_times, "basin": [basin_id]},
             )
 
         if "sm_rootzone" in df_res.columns:
             sm_rootzone_data = df_res["sm_rootzone"].iloc[gap - 1 :: gap].values
-            aggregated_data["sm_rootzone"] = (
-                ("time", "basin"),
+            aggregated_data["sm_rootzone"] = xr.DataArray(
                 sm_rootzone_data.reshape(-1, 1),
+                dims=["time", "basin"],
+                coords={"time": aggregated_times, "basin": [basin_id]},
             )
 
         if "total_evaporation_hourly" in df_res.columns:
-            aggregated_data["total_precipitation_hourly"] = (
-                aggregated_data["total_precipitation_hourly"] * 1000
-            )
-            aggregated_data["total_evaporation_hourly"] = (
-                aggregated_data["total_evaporation_hourly"] * -1000
-            )
+            aggregated_data["total_precipitation_hourly"] *= 1000
+            aggregated_data["total_evaporation_hourly"] *= -1000
 
         result_ds = xr.Dataset(
             aggregated_data,
