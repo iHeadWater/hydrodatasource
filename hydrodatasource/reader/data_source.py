@@ -41,32 +41,16 @@ class HydroData(ABC):
         raise NotImplementedError
 
 
-class SelfMadeCamels(HydroDataset):
+class SelfMadeHydroDataset(HydroDataset):
     """A class for reading hydrodataset, but not really ready-datasets,
-    just some data directorys organized like a CAMELS dataset.
-
-    Typically, we read our self-made data.
+    just some data directorys organized like a HydroDataset.
 
     NOTE:
-    open data: Mainly for baisn from GAGES-II (FOR US) or GRDC (FOR CHINA)
-    private data: for stations with streamflow data
-
-    No matter open or private, we will compile forcing data and attr data into a dataset,
-    organized like a ready dataset -- like CAMELS, as these are for paper publication.
-
-    The process of compiling forcing data and attr data into these streamflow dataset is
-    not here. It is in some preprocessing scripts such as CatchmentAttributes repo: https://github.com/OuyangWenyu/CatchmentAttributes
-    or CatchmentForcing repo: https://github.com/OuyangWenyu/CatchmentForcings.
-
-    They are generally not full automatic, as some data are not open, and some data are not ready for use.
-
-    For streamflow data, we will transform them to netcdf format, and combine them with forcing data into a timesereis dataset.
-
-    Hence, in this module, we directly read the compiled dataset: one time-series nc file and one attr nc file.
-    If any data is not ready, we will raise an error and preprocess in other scripts again.
+    We compile forcing data and attr data into a dataset,
+    organized like a ready dataset -- like Caravan, but the directory structure is different.
     """
 
-    def __init__(self, data_path, download=False, version="latest"):
+    def __init__(self, data_path, download=False):
         """Initialize a self-made CAMELS dataset.
 
         Parameters
@@ -75,33 +59,19 @@ class SelfMadeCamels(HydroDataset):
             _description_
         download : bool, optional
             _description_, by default False
-        version : str, optional
-            We have multiple versions of self-made CAMELS dataset, by default "latest"
         """
         super().__init__(data_path)
-        # the naming convention for basin ids are needed
-        # we use GRDC station's ids as our default coding convention
-        # GRDC station ids are 7 digits, the first 1 digit is continent code,
-        # the second 4 digits are sub-region related code
         self.data_source_description = self.set_data_source_describe()
         if download:
             self.download_data_source()
         self.camels_sites = self.read_site_info()
-        # for camels_cc (version 1), {"time": "DATE", "streamflow": "Q"}
-        # Here the dict is for camels_cc_v2
-        if version in ["latest", "v2"]:
-            self.VAR_DICT = {"time": "time", "streamflow": "streamflow"}
-        elif version == "v1":
-            self.VAR_DICT = {"time": "DATE", "streamflow": "Q"}
-        else:
-            raise ValueError("version must be latest, v2, or v1")
 
     @property
     def streamflow_unit(self):
         return "m^3/s"
 
     def get_name(self):
-        return "SelfMadeCamels"
+        return "SelfMadeHydroDataset"
 
     def set_data_source_describe(self):
         camels_db = self.data_source_dir

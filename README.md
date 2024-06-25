@@ -1,7 +1,7 @@
 <!--
  * @Author: Wenyu Ouyang
  * @Date: 2023-10-24 21:30:40
- * @LastEditTime: 2024-05-20 20:35:58
+ * @LastEditTime: 2024-06-25 11:42:16
  * @LastEditors: Wenyu Ouyang
  * @Description: Readme for hydrodatasource
  * @FilePath: \hydrodatasource\README.md
@@ -25,7 +25,9 @@ Although there are many hydrological datasets for various watersheds, a noticeab
 
 To address this, we conceived the hydrodatasource repository, aiming to provide a unified way of organizing these data sources for better utilization in scientific research and production, especially within the context of watersheds. For information on currently available public datasets, please visit: [hydrodataset](https://github.com/OuyangWenyu/hydrodataset).
 
-Specifically, this repository aims to provide a unified pathway for acquiring, managing, and using watershed hydrological data, making the computation of hydrological models, particularly AI-based models, more convenient.
+To be more specific, the goal of this repository is to provide a unified pathway and method for watershed hydrological data management and usage, making hydrological model calculations, especially those based on artificial intelligence, more convenient.
+
+Regarding the part about data acquisition, since it involves a process with significant manual and semi-automatic intervention, we have placed these contents in a separate repository: [HydroDataCompiler](https://github.com/iHeadWater/HydroDataCompiler). Once it is relatively perfected, we will open source this repository.
 
 ## How many data sources are there
 

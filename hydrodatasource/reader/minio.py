@@ -1,7 +1,7 @@
 """
 Author: Jianfeng Zhu
 Date: 2023-10-22 16:47:36
-LastEditTime: 2024-03-28 08:34:13
+LastEditTime: 2024-06-25 11:47:47
 LastEditors: Wenyu Ouyang
 Description: Reader class for grid data in minio
 FilePath: \hydrodatasource\hydrodatasource\reader\minio.py
@@ -19,7 +19,6 @@ import geopandas as gpd
 
 from ..configs.config import FS, MINIO_PARAM, RO
 from ..utils.utils import regen_box, creatspinc
-from hydrodatasource.downloader.minio import ERA5LCatalog, GFSCatalog, GPMCatalog
 
 dask.config.set({"array.slicing.split_large_chunks": False})
 
@@ -905,7 +904,9 @@ class GFSReader:
         elif dataset == "camels":
             self._dataset = "camdata"
 
-        with FS.open(os.path.join(self._bucket_name, f"{self._dataset}/gfs/gfs.json")) as f:
+        with FS.open(
+            os.path.join(self._bucket_name, f"{self._dataset}/gfs/gfs.json")
+        ) as f:
             cont = json.load(f)
             self._paras = cont
 
@@ -1055,46 +1056,3 @@ class GFSReader:
         ds = self.open_dataset(creation_date, creation_time, dataset, bbox, time_chunks)
 
         return ds
-
-
-class Era5L:
-    def __init__(self):
-        self._catalog = ERA5LCatalog()
-        self._reader = ERA5LReader()
-
-    @property
-    def catalog(self):
-        return self._catalog
-
-    @property
-    def reader(self):
-        return self._reader
-
-
-class GPM:
-    def __init__(self):
-        self._catalog = GPMCatalog()
-        self._reader = GPMReader()
-
-    @property
-    def catalog(self):
-        return self._catalog
-
-    @property
-    def reader(self):
-        return self._reader
-
-
-class GFS:
-    def __init__(self, variable="tp"):
-        self._catalog = GFSCatalog(variable)
-        self._reader = GFSReader()
-        self._reader.set_default_variable(self._catalog.variable)
-
-    @property
-    def catalog(self):
-        return self._catalog
-
-    @property
-    def reader(self):
-        return self._reader

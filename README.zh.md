@@ -1,7 +1,7 @@
 <!--
  * @Author: Wenyu Ouyang
  * @Date: 2023-10-25 14:43:12
- * @LastEditTime: 2024-03-28 08:53:21
+ * @LastEditTime: 2024-06-25 11:41:07
  * @LastEditors: Wenyu Ouyang
  * @Description: Chinese version README
  * @FilePath: \hydrodatasource\README.zh.md
@@ -25,7 +25,9 @@
 
 但是这些数据又非常重要，为此，我们构思了这个hydrodatasource仓库，旨在提供一个能统一整理这些数据的方式，使得这些数据能够在以流域为基本单元的科研和生产背景下被更好地利用。关于目前已制作的公开数据集，请关注：[hydrodataset](https://github.com/OuyangWenyu/hydrodataset)
 
-更具体一点来说，这个仓库的目标是提供一个统一的流域水文数据获取、管理和使用路径及方法，使得水文模型计算尤其是基于人工智能的计算更加方便。
+更具体一点来说，这个仓库的目标是提供一个统一的流域水文数据管理和使用路径及方法，使得水文模型计算尤其是基于人工智能的计算更加方便。
+
+关于数据获取的部分，因为涉及较多人工介入半自动处理的过程，所以我们把这些内容放到一个单独的仓库：[HydroDataCompiler](https://github.com/iHeadWater/HydroDataCompiler)中，等后续相对完善后，我们会开源该仓库。
 
 ## How many data sources are there
 

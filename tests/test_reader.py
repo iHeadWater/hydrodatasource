@@ -1,7 +1,7 @@
 """
 Author: Wenyu Ouyang
 Date: 2023-11-01 08:58:50
-LastEditTime: 2024-03-28 08:40:38
+LastEditTime: 2024-06-25 09:42:12
 LastEditors: Wenyu Ouyang
 Description: Test funcs for reader.py
 FilePath: \hydrodatasource\tests\test_reader.py
@@ -13,7 +13,6 @@ from minio import Minio
 import hydrodataset as hds
 
 from hydrodatasource.configs.config import LOCAL_DATA_PATH
-from hydrodatasource.reader.grdc import GRDCDataHandler
 from hydrodatasource.reader.reader import (
     AOI,
     DataHandler,
@@ -92,20 +91,6 @@ def test_gpm_read_with_process():
 #     minio_gpm_reader = MinioFileReader(minio_client, gpm_handler)
 #     minio_gfs_reader = MinioFileReader(minio_client, gfs_handler)
 #     minio_gpm_reader.read("path/to/file", aoi)
-
-
-# def test_reader_grdc():
-#     grdc_handler = GRDCDataHandler()
-#     aoi = AOI(
-#         "station",
-#         {"station_id": "2181200", "start_time": "1980-01-01", "end_time": "2001-01-01"},
-#     )
-
-#     local_grdc_reader = LocalFileReader(grdc_handler)
-#     grdc_data = local_grdc_reader.read(
-#         os.path.join(hds.CACHE_DIR.joinpath("grdc_daily_data"), "grdc_daily_data.nc"),
-#         aoi,
-#     )
 
 
 # def test_reader_station():
