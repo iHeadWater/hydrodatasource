@@ -35,22 +35,14 @@ def test_merge_era5l_camels_sl_sd():
     old_era5l_ds_15_23['time_start'] = pd.to_datetime(old_era5l_ds_15_23['time_start'])
     old_era5l_ds_15_23 = old_era5l_ds_15_23.drop_sel(basin_id=mistake_list)
     old_era5l_ds_00_14 = xr.open_dataset("/ftproot/camels_songliao_era5land_2000_2014.nc")
-    old_era5l_ds_00_14 = old_era5l_ds_00_14.drop_sel(basin_id=mistake_list).drop(
-        'Unnamed: 0')
-    old_era5l_ds = xr.concat([old_era5l_ds_00_14, old_era5l_ds_15_23], dim='basin_id')
+    old_era5l_ds_00_14 = old_era5l_ds_00_14.drop_sel(basin_id=mistake_list).drop('Unnamed: 0')
+    old_era5l_ds = xr.concat([old_era5l_ds_00_14, old_era5l_ds_15_23], dim='time_start')
     old_era5l_ds = old_era5l_ds.astype(np.float32)
     sd_ds = xr.open_dataset("/ftproot/songliao_shandong_basins_era5land.nc")
     new_era5l_ds = xr.concat([old_era5l_ds, sd_ds], dim='basin_id')
     new_era5l_ds = new_era5l_ds.astype(np.float32)
-    new_era5l_ds.to_netcdf('632_basins_era5land_fixed.nc')
-
-
-def test_fix_632_datas():
-    era5l_ds = xr.open_dataset('/ftproot/632_basins_smap_fixed.nc')
-    basins_shp = gpd.read_file(hdscc.FS.open('s3://basins-origin/basins_shp.zip'))
-    basin_ids = np.unique(basins_shp['BASIN_ID'].to_numpy())
-    era5l_ds.coords['basin_id'] = basin_ids
-    era5l_ds.to_netcdf('632_basins_smap_fixed.nc')
+    # 不要从自己的工作文件夹中转，直接生成到相应文件夹即可，以防cp命令改变数据
+    new_era5l_ds.to_netcdf('/ftproot/632_basins_era5land_fixed.nc')
 
 
 def test_merge_new_streamflow():
@@ -80,7 +72,11 @@ def test_merge_new_streamflow():
             rsvr_df['time_start'] <= pd.to_datetime('2023-12-31 23:00:00'))]
     rsvr_df['basin_id'] = rsvr_df['basin_id'].astype(str)
     rsvr_df = rsvr_df.set_index(['time_start', 'basin_id'])
+    # 在这里xarray可能会莫名生成几个分钟数据，造成索引错误
     rsvr_ds = xr.Dataset.from_dataframe(rsvr_df)
+    time_start_arr = rsvr_ds['time_start'].to_numpy()
+    hourly_dr = pd.date_range(time_start_arr[0], time_start_arr[-1], freq='1h')
+    rsvr_ds = rsvr_ds.sel(time_start=hourly_dr)
     # rsvr_ds.coords['basin_id'] = rsvr_df['basin_id'].to_numpy()
     rsvr_ds.to_netcdf("/ftproot/100_basins_streamflow.nc")
 
