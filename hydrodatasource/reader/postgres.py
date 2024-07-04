@@ -135,3 +135,31 @@ def read_forcing_dataframe(var_type, basin, time_period):
         raise Exception() from e
 
     return df
+
+def read_plcd(basin):
+    sql = """
+    SELECT
+        stcd,
+        plcd
+    FROM
+        t_xaj_parameter
+    WHERE
+        stcd = %s
+    """
+    
+    db_username = SETTING["postgres"]["username"]
+    db_password = SETTING["postgres"]["password"]
+    db_host = SETTING["postgres"]["server_url"]
+    db_port = SETTING["postgres"]["port"]
+    db_name = SETTING["postgres"]["database"]
+    
+    engine = create_engine(
+        f"postgresql+psycopg2://{db_username}:{db_password}@{db_host}:{db_port}/{db_name}"
+    )
+    
+    result = pd.read_sql(sql, engine, params=(basin,))
+    
+    if result.empty:
+        return None
+    
+    return result.iloc[0]['plcd']
