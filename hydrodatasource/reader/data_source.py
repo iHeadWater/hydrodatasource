@@ -46,8 +46,9 @@ class SelfMadeHydroDataset(HydroDataset):
     just some data directorys organized like a HydroDataset.
 
     NOTE:
-    We compile forcing data and attr data into a dataset,
-    organized like a ready dataset -- like Caravan, but the directory structure is different.
+    We compile forcing data and attr data into a directory,
+    organized like a ready dataset -- like Caravan.
+    Only two directories are needed: attributes and timeseries
     """
 
     def __init__(self, data_path, download=False):

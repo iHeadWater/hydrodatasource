@@ -1,19 +1,21 @@
 """
 Author: Tianxu Liu
 Date: 2024-03-16 15:55:22
-LastEditTime: 2024-03-28 08:41:34
+LastEditTime: 2024-07-06 19:08:11
 LastEditors: Wenyu Ouyang
 Description: test process inq
-FilePath: \hydrodatasource\tests\test_process_inq.py
+FilePath: /hydrodatasource/tests/test_process_inq.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
+
 import pytest
-from hydrodatasource.cleaner.smooth_inq import Cleaner
+
+from hydrodatasource.cleaner.cleaner import Cleaner
 
 
 @pytest.fixture
 def cleaner():
-    cleaner = Cleaner(
+    return Cleaner(
         file_path="/home/liutianxv/sample_data.csv",
         column_id="ID",
         ID_list=None,
@@ -33,7 +35,6 @@ def cleaner():
         order=5,
         cwt_row=10,
     )
-    return cleaner
 
 
 def test_process_inq(cleaner):

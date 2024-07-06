@@ -1,10 +1,10 @@
 """
 Author: Jianfeng Zhu
 Date: 2023-10-25 18:49:02
-LastEditTime: 2024-02-15 21:08:19
+LastEditTime: 2024-07-06 18:57:14
 LastEditors: Wenyu Ouyang
 Description: Some configs for minio server
-FilePath: \hydrodatasource\hydrodatasource\configs\config.py
+FilePath: /hydrodatasource/hydrodatasource/configs/config.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 
@@ -21,7 +21,7 @@ def read_setting(setting_path):
     if not os.path.exists(setting_path):
         raise FileNotFoundError(f"Configuration file not found: {setting_path}")
 
-    with open(setting_path, 'r', encoding='utf-8') as file:  # 指定编码为 UTF-8
+    with open(setting_path, "r", encoding="utf-8") as file:  # 指定编码为 UTF-8
         setting = yaml.safe_load(file)
 
     example_setting = (
@@ -40,7 +40,7 @@ def read_setting(setting_path):
         "  username: your_postgres_username\n"
         "  password: your_postgres_secret_code\n"
         "  database: your_postgres_database\n"
-        )
+    )
 
     if setting is None:
         raise ValueError(
@@ -51,7 +51,7 @@ def read_setting(setting_path):
     expected_structure = {
         "minio": ["server_url", "client_endpoint", "access_key", "secret"],
         "local_data_path": ["root", "datasets-origin", "datasets-interim"],
-        "postgres":["server_url", "port", "username", "password", "database"]
+        "postgres": ["server_url", "port", "username", "password", "database"],
     }
 
     # Validate the structure

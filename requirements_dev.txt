@@ -1,24 +1,32 @@
 geopandas
-openpyxl==3.1
+openpyxl~=3.1
 xlrd
 requests
+
+psycopg2-binary
+sqlalchemy
+loguru
 
 kerchunk
 cfgrib
 eccodes
 h5py
-wget
 chardet
 
 intake
 
+wget
 dataretrieval
 pygeohydro
 
 pykalman
-psycopg2-binary
 
+# this part has been updated in hydroutils which will be installed as a dependency when installing hydrodataset
+# boto3>=1.34.34, <=1.34.51
+# s3fs~=2024.2.0
+# minio
 hydrodataset
+hydrotopo
 
 black
 black[jupyter]
@@ -34,4 +42,4 @@ twine
 
 pytest
 pytest-runner
-pytest_asyncio
+pytest-asyncio
