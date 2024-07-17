@@ -42,3 +42,6 @@ dependencies:
     - pykalman
     - hydrodataset
     - hydrotopo
+    - wheel
+    - twine
+    - bump2version
