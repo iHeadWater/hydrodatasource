@@ -107,7 +107,7 @@ class SelfMadeHydroDataset(HydroData):
         self, object_ids=None, t_range_list: list = None, relevant_cols=None, **kwargs
     ) -> Union[np.array, list]:
         """3d data (site_num * time_length * var_num), time-series data"""
-        region = kwargs.get("region", "dPL")
+        region = kwargs.get("region", None)
         t_range_list = pd.date_range(
             start=t_range_list[0], end=t_range_list[-1], freq=kwargs.get("freq", "D")
         )
@@ -116,9 +116,10 @@ class SelfMadeHydroDataset(HydroData):
         for k in tqdm(
             range(len(object_ids)), desc="Read timeseries data of SelfMadeHydroDataset"
         ):
+            prefix_ = "" if region is None else region + "_"
             ts_file = os.path.join(
                 self.data_source_description["TS_DIR"],
-                region + "_" + object_ids[k] + ".csv",
+                prefix_ + object_ids[k] + ".csv",
             )
             ts_data = pd.read_csv(ts_file)
             date = pd.to_datetime(ts_data["time"]).values
@@ -159,16 +160,37 @@ class SelfMadeHydroDataset(HydroData):
         """the constant cols in this data_source"""
         attr_file = self.data_source_description["ATTR_FILE"]
         attrs = pd.read_csv(attr_file, dtype={"basin_id": str})
-        return attrs.columns.values
+        attr_units = attrs.columns.values
+        return self._check_vars_in_unitsinfo(attr_units)
 
     def get_timeseries_cols(self) -> np.array:
         """the relevant cols in this data_source"""
         ts_dir = self.data_source_description["TS_DIR"]
         ts_file = os.path.join(ts_dir, os.listdir(ts_dir)[0])
         ts_tmp = pd.read_csv(ts_file, dtype={"basin_id": str})
-        return ts_tmp.columns.values[1:]
+        forcing_units = ts_tmp.columns.values[1:]
+        return self._check_vars_in_unitsinfo(forcing_units)
 
-    def cache_attributes_xrdataset(self, region="dPL"):
+    def _check_vars_in_unitsinfo(self, vars):
+        """If a var is not recorded in a units_info file, we will not use it.
+
+        Parameters
+        ----------
+        vars : _type_
+            _description_
+
+        Returns
+        -------
+        _type_
+            _description_
+        """
+        units_info = hydro_file.unserialize_json(
+            self.data_source_description["UNITS_FILE"]
+        )
+        vars_final = [var_ for var_ in vars if var_ in units_info]
+        return np.array(vars_final)
+
+    def cache_attributes_xrdataset(self, region=None):
         """Convert all the attributes to a single dataset
 
         Returns
@@ -216,10 +238,30 @@ class SelfMadeHydroDataset(HydroData):
                 # Convert the dictionary to a string
                 mapping_str = str(ds[column].attrs["category_mapping"])
                 ds[column].attrs["category_mapping"] = mapping_str
-        ds.to_netcdf(os.path.join(CACHE_DIR, f"{region}_attributes.nc"))
+        prefix_ = "" if region is None else region + "_"
+        ds.to_netcdf(os.path.join(CACHE_DIR, f"{prefix_}attributes.nc"))
 
-    def cache_timeseries_xrdataset(self, region, t_range=None, freq="D", batchsize=100):
-        """Save all timeseries data in a netcdf file"""
+    def cache_timeseries_xrdataset(
+        self, region=None, t_range=None, freq="D", batchsize=100
+    ):
+        """Save all timeseries data in a netcdf file
+
+        Parameters
+        ----------
+        region : _type_, optional
+            A prefix used in cache file, by default None
+        t_range : _type_, optional
+            _description_, by default None
+        freq : str, optional
+            _description_, by default "D"
+        batchsize : int, optional
+            _description_, by default 100
+
+        Yields
+        ------
+        _type_
+            _description_
+        """
         if t_range is None:
             t_range = ["1980-01-01", "2023-12-31"]
         variables = self.get_timeseries_cols()
@@ -244,7 +286,6 @@ class SelfMadeHydroDataset(HydroData):
                 object_ids=basin_batch,
                 t_range_list=t_range,
                 relevant_cols=variables,
-                region=region,
                 freq=freq,
             )
 
@@ -266,9 +307,10 @@ class SelfMadeHydroDataset(HydroData):
             )
 
             # Save the dataset to a NetCDF file for the current batch
+            prefix_ = "" if region is None else region + "_"
             batch_file_path = os.path.join(
                 CACHE_DIR,
-                f"{region}_timeseries_batch_{basin_batch[0]}_{basin_batch[-1]}.nc",
+                f"{prefix_}timeseries_batch_{basin_batch[0]}_{basin_batch[-1]}.nc",
             )
             dataset.to_netcdf(batch_file_path)
 
@@ -276,10 +318,10 @@ class SelfMadeHydroDataset(HydroData):
             del dataset
             del data
 
-    def cache_xrdataset(self, region="dPL", t_range=None, freq="D"):
+    def cache_xrdataset(self, region=None, t_range=None, freq="D"):
         """Save all data in a netcdf file in the cache directory"""
-        self.cache_attributes_xrdataset()
-        self.cache_timeseries_xrdataset(region, t_range=t_range, freq=freq)
+        self.cache_attributes_xrdataset(region=region)
+        self.cache_timeseries_xrdataset(region=region, t_range=t_range, freq=freq)
 
     def read_ts_xrdataset(
         self,
@@ -302,16 +344,17 @@ class SelfMadeHydroDataset(HydroData):
         ----------
         xarray.Dataset - Merged dataset containing the selected gage IDs, time range, and variables.
         """
-        region = kwargs.get("region", "dPL")
+        region = kwargs.get("region", None)
         if var_lst is None:
             return None
 
         # Collect all batch files in the cache directory
+        prefix_ = "" if region is None else region + "_"
         batch_files = [
             os.path.join(CACHE_DIR, f)
             for f in os.listdir(CACHE_DIR)
             if re.match(
-                rf"^{region}_timeseries_batch_[A-Za-z0-9]+_[A-Za-z0-9]+\.nc$", f
+                rf"^{prefix_}timeseries_batch_[A-Za-z0-9_]+_[A-Za-z0-9_]+\.nc$", f
             )
         ]
 
@@ -349,14 +392,15 @@ class SelfMadeHydroDataset(HydroData):
         )
 
     def read_attr_xrdataset(self, gage_id_lst=None, var_lst=None, **kwargs):
-        region = kwargs.get("region", "dPL")
+        region = kwargs.get("region", None)
+        prefix_ = "" if region is None else region + "_"
         if var_lst is None or len(var_lst) == 0:
             return None
         try:
-            attr = xr.open_dataset(os.path.join(CACHE_DIR, f"{region}_attributes.nc"))
+            attr = xr.open_dataset(os.path.join(CACHE_DIR, f"{prefix_}attributes.nc"))
         except FileNotFoundError:
             self.cache_xrdataset()
-            attr = xr.open_dataset(os.path.join(CACHE_DIR, f"{region}_attributes.nc"))
+            attr = xr.open_dataset(os.path.join(CACHE_DIR, f"{prefix_}attributes.nc"))
         return attr[var_lst].sel(basin=gage_id_lst)
 
     def read_area(self, gage_id_lst=None):

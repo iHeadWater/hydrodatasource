@@ -1,15 +1,14 @@
 """
 Author: Wenyu Ouyang
 Date: 2024-07-06 19:20:59
-LastEditTime: 2024-07-09 21:08:31
+LastEditTime: 2024-07-17 16:24:14
 LastEditors: Wenyu Ouyang
 Description: Test funcs for data source
-FilePath: /hydrodatasource/tests/test_data_source.py
+FilePath: \hydrodatasource\tests\test_data_source.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 
 import os
-import re
 import numpy as np
 import pandas as pd
 import pytest
@@ -19,7 +18,7 @@ from hydrodatasource.reader.data_source import CACHE_DIR, SelfMadeHydroDataset
 
 @pytest.fixture
 def dataset():
-    own_datapath = "/mnt/c/Users/wenyu/OneDrive/Research/research_topic_advancement/research_progress_plan/data4dpl/dplARdata"
+    own_datapath = "C:\\Users\\wenyu\\OneDrive\\Research\\research_topic_advancement\\research_progress_plan\\data4dpl\\dplARdata"
     return SelfMadeHydroDataset(data_path=own_datapath)
 
 
@@ -70,7 +69,7 @@ def test_selfmadehydrodataset_get_timeseries_cols(dataset):
 
 
 def test_selfmadehydrodataset_cache_attributes_xrdataset(dataset):
-    dataset.cache_attributes_xrdataset()
+    dataset.cache_attributes_xrdataset(region="dPL")
     assert os.path.exists(os.path.join(CACHE_DIR, "dPL_attributes.nc"))
 
 
@@ -84,25 +83,30 @@ def test_selfmadehydrodataset_cache_xrdataset(dataset):
 
 def test_selfmadehydrodataset_read_ts_xrdataset(dataset):
     xrdataset = dataset.read_ts_xrdataset(
-        gage_id_lst=["01013500", "01022500"],
+        gage_id_lst=["camels_01013500", "camels_01022500"],
         t_range=["2020-01-01", "2020-12-31"],
         var_lst=["streamflow"],
+        region="dPL",
     )
     assert isinstance(xrdataset, xr.Dataset)
 
 
 def test_selfmadehydrodataset_read_attr_xrdataset(dataset):
     xrdataset = dataset.read_attr_xrdataset(
-        gage_id_lst=["01013500", "01022500"], var_lst=["area"]
+        gage_id_lst=["camels_01013500", "camels_01022500"],
+        var_lst=["area"],
+        region="dPL",
     )
     assert isinstance(xrdataset, xr.Dataset)
 
 
 def test_selfmadehydrodataset_read_area(dataset):
-    area = dataset.read_area(gage_id_lst=["01013500", "01022500"])
+    area = dataset.read_area(gage_id_lst=["camels_01013500", "camels_01022500"])
     assert isinstance(area, xr.Dataset)
 
 
 def test_selfmadehydrodataset_read_mean_prcp(dataset):
-    mean_prcp = dataset.read_mean_prcp(gage_id_lst=["01013500", "01022500"])
+    mean_prcp = dataset.read_mean_prcp(
+        gage_id_lst=["camels_01013500", "camels_01022500"]
+    )
     assert isinstance(mean_prcp, xr.Dataset)
