@@ -1,7 +1,7 @@
 """
 Author: Wenyu Ouyang
 Date: 2024-07-06 19:20:59
-LastEditTime: 2024-07-17 16:24:14
+LastEditTime: 2024-08-10 11:44:35
 LastEditors: Wenyu Ouyang
 Description: Test funcs for data source
 FilePath: \hydrodatasource\tests\test_data_source.py
@@ -13,13 +13,14 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
+from hydrodatasource.configs.config import SETTING
 from hydrodatasource.reader.data_source import CACHE_DIR, SelfMadeHydroDataset
 
 
 @pytest.fixture
 def dataset():
-    own_datapath = "C:\\Users\\wenyu\\OneDrive\\Research\\research_topic_advancement\\research_progress_plan\\data4dpl\\dplARdata"
-    return SelfMadeHydroDataset(data_path=own_datapath)
+    selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
+    return SelfMadeHydroDataset(data_path=selfmadehydrodataset_path)
 
 
 def test_selfmadehydrodataset_get_name(dataset):
@@ -27,7 +28,7 @@ def test_selfmadehydrodataset_get_name(dataset):
 
 
 def test_selfmadehydrodataset_streamflow_unit(dataset):
-    assert dataset.streamflow_unit == "m^3/s"
+    assert dataset.streamflow_unit == {"1D": "mm/d"}
 
 
 def test_selfmadehydrodataset_read_site_info(dataset):
@@ -46,8 +47,9 @@ def test_selfmadehydrodataset_read_tsdata(dataset):
         object_ids=object_ids[:5],
         t_range_list=["2020-01-01", "2020-12-31"],
         relevant_cols=["streamflow"],
+        time_unit=["1D"],
     )
-    assert isinstance(target_cols, np.ndarray)
+    assert isinstance(target_cols, dict)
 
 
 def test_selfmadehydrodataset_read_attrdata(dataset):
@@ -65,16 +67,16 @@ def test_selfmadehydrodataset_get_attributes_cols(dataset):
 
 def test_selfmadehydrodataset_get_timeseries_cols(dataset):
     relevant_cols = dataset.get_timeseries_cols()
-    assert isinstance(relevant_cols, np.ndarray)
+    assert isinstance(relevant_cols, dict)
 
 
 def test_selfmadehydrodataset_cache_attributes_xrdataset(dataset):
-    dataset.cache_attributes_xrdataset(region="dPL")
-    assert os.path.exists(os.path.join(CACHE_DIR, "dPL_attributes.nc"))
+    dataset.cache_attributes_xrdataset()
+    assert os.path.exists(os.path.join(CACHE_DIR, "attributes.nc"))
 
 
 def test_selfmadehydrodataset_cache_timeseries_xrdataset(dataset):
-    dataset.cache_timeseries_xrdataset(region="dPL")
+    dataset.cache_timeseries_xrdataset()
 
 
 def test_selfmadehydrodataset_cache_xrdataset(dataset):
@@ -82,20 +84,28 @@ def test_selfmadehydrodataset_cache_xrdataset(dataset):
 
 
 def test_selfmadehydrodataset_read_ts_xrdataset(dataset):
-    xrdataset = dataset.read_ts_xrdataset(
+    xrdataset_dict = dataset.read_ts_xrdataset(
         gage_id_lst=["camels_01013500", "camels_01022500"],
         t_range=["2020-01-01", "2020-12-31"],
         var_lst=["streamflow"],
-        region="dPL",
+        time_units=["1D"],
     )
-    assert isinstance(xrdataset, xr.Dataset)
+    target_cols = dataset.read_timeseries(
+        object_ids=["camels_01013500", "camels_01022500"],
+        t_range_list=["2020-01-01", "2020-12-31"],
+        relevant_cols=["streamflow"],
+        time_unit=["1D"],
+    )
+    assert isinstance(xrdataset_dict, dict)
+    np.testing.assert_array_equal(
+        xrdataset_dict["1D"]["streamflow"].values, target_cols["1D"][:, :, 0]
+    )
 
 
 def test_selfmadehydrodataset_read_attr_xrdataset(dataset):
     xrdataset = dataset.read_attr_xrdataset(
         gage_id_lst=["camels_01013500", "camels_01022500"],
         var_lst=["area"],
-        region="dPL",
     )
     assert isinstance(xrdataset, xr.Dataset)
 
