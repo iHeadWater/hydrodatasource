@@ -1,4 +1,5 @@
 import collections
+import json
 import os
 from abc import ABC
 from pathlib import Path
@@ -14,6 +15,7 @@ from hydroutils import hydro_file
 import hydrodatasource.configs.config as conf
 from hydrodatasource.configs.data_consts import ERA5LAND_ET_REALATED_VARS
 from hydrodatasource.reader import access_fs
+from hydrodatasource.utils.utils import is_minio_folder, minio_file_list
 
 CACHE_DIR = hydro_file.get_cache_dir()
 
@@ -88,11 +90,18 @@ class SelfMadeHydroDataset(HydroData):
         ts_dir = os.path.join(data_root_dir, "timeseries")
         # we assume that each subdirectory in ts_dir represents a time unit
         # In this subdirectory, there are csv files for each basin
-        time_units_dir = [
-            os.path.join(ts_dir, name)
-            for name in os.listdir(ts_dir)
-            if os.path.isdir(os.path.join(ts_dir, name))
-        ]
+        if "s3://" in data_root_dir:
+            time_units_dir = [
+                os.path.join(ts_dir, name)
+                for name in minio_file_list(ts_dir)
+                if is_minio_folder(os.path.join(ts_dir, name))
+            ]
+        else:
+            time_units_dir = [
+                os.path.join(ts_dir, name)
+                for name in os.listdir(ts_dir)
+                if os.path.isdir(os.path.join(ts_dir, name))
+            ]
         unit_files = [folder + "_units_info.json" for folder in time_units_dir]
         attr_dir = os.path.join(data_root_dir, "attributes")
         attr_file = os.path.join(attr_dir, "attributes.csv")
@@ -112,7 +121,11 @@ class SelfMadeHydroDataset(HydroData):
 
     def read_site_info(self):
         camels_file = self.data_source_description["ATTR_FILE"]
-        attrs = pd.read_csv(camels_file, dtype={"basin_id": str})
+        if "s3://" in camels_file:
+            with conf.FS.open(camels_file, mode="rb") as f:
+                attrs = pd.read_csv(f, dtype={"basin_id": str})
+        else:
+            attrs = pd.read_csv(camels_file, dtype={"basin_id": str})
         return attrs[["basin_id", "area"]]
 
     def read_object_ids(self, object_params=None) -> np.array:
@@ -165,7 +178,11 @@ class SelfMadeHydroDataset(HydroData):
                     ts_dir,
                     prefix_ + object_ids[k] + ".csv",
                 )
-                ts_data = pd.read_csv(ts_file)
+                if "s3://" in ts_file:
+                    with conf.FS.open(ts_file, mode="rb") as f:
+                        ts_data = pd.read_csv(f)
+                else:
+                    ts_data = pd.read_csv(ts_file)
                 date = pd.to_datetime(ts_data["time"]).values
                 [_, ind1, ind2] = np.intersect1d(date, t_range, return_indices=True)
 
@@ -190,7 +207,11 @@ class SelfMadeHydroDataset(HydroData):
     ) -> np.array:
         """2d data (site_num * var_num), non-time-series data"""
         attr_file = self.data_source_description["ATTR_FILE"]
-        attrs = pd.read_csv(attr_file, dtype={"basin_id": str})
+        if "s3://" in attr_file:
+            with conf.FS.open(attr_file, mode="rb") as f:
+                attrs = pd.read_csv(f, dtype={"basin_id": str})
+        else:
+            attrs = pd.read_csv(attr_file, dtype={"basin_id": str})
         if object_ids is None:
             if constant_cols is None:
                 return attrs
@@ -207,7 +228,11 @@ class SelfMadeHydroDataset(HydroData):
     def get_attributes_cols(self) -> np.array:
         """the constant cols in this data_source"""
         attr_file = self.data_source_description["ATTR_FILE"]
-        attrs = pd.read_csv(attr_file, dtype={"basin_id": str})
+        if "s3://" in attr_file:
+            with conf.FS.open(attr_file, mode="rb") as f:
+                attrs = pd.read_csv(f, dtype={"basin_id": str})
+        else:
+            attrs = pd.read_csv(attr_file, dtype={"basin_id": str})
         attr_units = attrs.columns.values
         return self._check_vars_in_unitsinfo(attr_units)
 
@@ -222,8 +247,13 @@ class SelfMadeHydroDataset(HydroData):
             # Find the corresponding unit file
             unit_file = next(file for file in unit_files if time_unit in file)
             # Load the first CSV file in the directory to extract column names
-            ts_file = os.path.join(ts_dir, os.listdir(ts_dir)[0])
-            ts_tmp = pd.read_csv(ts_file, dtype={"basin_id": str})
+            if "s3://" in ts_dir:
+                ts_file = os.path.join(ts_dir, minio_file_list(ts_dir)[0])
+                with conf.FS.open(ts_file, mode="rb") as f:
+                    ts_tmp = pd.read_csv(f, dtype={"basin_id": str})
+            else:
+                ts_file = os.path.join(ts_dir, os.listdir(ts_dir)[0])
+                ts_tmp = pd.read_csv(ts_file, dtype={"basin_id": str})
             # Get the relevant forcing units and validate against unit info
             forcing_units = ts_tmp.columns.values[1:]
             the_vars = self._check_vars_in_unitsinfo(forcing_units, unit_file)
@@ -248,7 +278,11 @@ class SelfMadeHydroDataset(HydroData):
             # For attributes, all the variables' units are same in all unit_info files
             # hence, we just chose the first one
             unit_file = self.data_source_description["UNIT_FILES"][0]
-        units_info = hydro_file.unserialize_json(unit_file)
+        if "s3://" in unit_file:
+            with conf.FS.open(unit_file, mode="rb") as fp:
+                units_info = json.load(fp)
+        else:
+            units_info = hydro_file.unserialize_json(unit_file)
         vars_final = [var_ for var_ in vars if var_ in units_info]
         return np.array(vars_final)
 
@@ -267,9 +301,15 @@ class SelfMadeHydroDataset(HydroData):
         # Mapping provided units to the variables in the datasets
         # For attributes, all the variables' units are same in all unit_info files
         # hence, we just chose the first one
-        units_dict = hydro_file.unserialize_json(
-            self.data_source_description["UNIT_FILES"][0]
-        )
+        if "s3://" in self.data_source_description["UNIT_FILES"][0]:
+            with conf.FS.open(
+                self.data_source_description["UNIT_FILES"][0], mode="rb"
+            ) as fp:
+                units_dict = json.load(fp)
+        else:
+            units_dict = hydro_file.unserialize_json(
+                self.data_source_description["UNIT_FILES"][0]
+            )
 
         # Convert string columns to categorical variables and record categorical mappings
         categorical_mappings = {}
@@ -319,9 +359,9 @@ class SelfMadeHydroDataset(HydroData):
             time_units -- List of time units to process, by default None
         """
         batchsize = kwargs.get("batchsize", 100)
-        time_units = kwargs.get(
-            "time_units", self.time_unit
-        )  # Default to ["1D"] if not specified
+        time_units = kwargs.get("time_units", self.time_unit) or [
+            "1D"
+        ]  # Default to ["1D"] if not specified or if time_units is None
         if t_range is None:
             t_range = ["1980-01-01", "2023-12-31"]
 
@@ -346,7 +386,11 @@ class SelfMadeHydroDataset(HydroData):
                 for file in self.data_source_description["UNIT_FILES"]
                 if time_unit in file
             )
-            units_info = hydro_file.unserialize_json(unit_file)
+            if "s3://" in unit_file:
+                with conf.FS.open(unit_file, mode="rb") as fp:
+                    units_info = json.load(fp)
+            else:
+                units_info = hydro_file.unserialize_json(unit_file)
 
             for basin_batch in data_generator(basins, batchsize):
                 data = self.read_timeseries(

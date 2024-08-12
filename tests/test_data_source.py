@@ -19,7 +19,10 @@ from hydrodatasource.reader.data_source import CACHE_DIR, SelfMadeHydroDataset
 
 @pytest.fixture
 def dataset():
-    selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
+    # local
+    # selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
+    # minio
+    selfmadehydrodataset_path = "s3://basins-interim"
     return SelfMadeHydroDataset(data_path=selfmadehydrodataset_path)
 
 
