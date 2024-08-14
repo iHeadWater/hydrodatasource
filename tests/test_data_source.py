@@ -110,7 +110,7 @@ def test_selfmadehydrodataset_cache_timeseries_xrdataset(
         offset_to_utc=True,
         t_range=["1980-01-01 01", "2023-12-31 22"],
     )
-    # 1d
+    # 1D
     one_day_dataset.cache_timeseries_xrdataset()
 
 
@@ -118,7 +118,47 @@ def test_selfmadehydrodataset_cache_xrdataset(one_day_dataset):
     one_day_dataset.cache_xrdataset()
 
 
-def test_selfmadehydrodataset_read_ts_xrdataset(one_day_dataset):
+def test_selfmadehydrodataset_read_ts_xrdataset(
+    one_day_dataset, three_hour_dataset, one_hour_dataset
+):
+    # 1h
+    xrdataset_dict = one_day_dataset.read_ts_xrdataset(
+        gage_id_lst=["camels_01013500", "camels_01022500"],
+        t_range=["2020-01-01 01", "2020-12-31 22"],
+        var_lst=["streamflow"],
+        time_units=["1h"],
+    )
+    target_cols = one_day_dataset.read_timeseries(
+        object_ids=["camels_01013500", "camels_01022500"],
+        t_range_list=["2020-01-01 01", "2020-12-31 22"],
+        relevant_cols=["streamflow"],
+        time_units=["1h"],
+    )
+    assert isinstance(xrdataset_dict, dict)
+    np.testing.assert_array_equal(
+        xrdataset_dict["1h"]["streamflow"].values, target_cols["1h"][:, :, 0]
+    )
+
+    # 3h
+    xrdataset_dict = one_day_dataset.read_ts_xrdataset(
+        gage_id_lst=["camels_01013500", "camels_01022500"],
+        t_range=["2020-01-01 01", "2020-12-31 22"],
+        var_lst=["streamflow"],
+        time_units=["3h"],
+    )
+    target_cols = one_day_dataset.read_timeseries(
+        object_ids=["camels_01013500", "camels_01022500"],
+        t_range_list=["2020-01-01 01", "2020-12-31 22"],
+        relevant_cols=["streamflow"],
+        time_units=["3h"],
+        offset_to_utc=True,
+    )
+    assert isinstance(xrdataset_dict, dict)
+    np.testing.assert_array_equal(
+        xrdataset_dict["3h"]["streamflow"].values, target_cols["3h"][:, :, 0]
+    )
+
+    # 1D
     xrdataset_dict = one_day_dataset.read_ts_xrdataset(
         gage_id_lst=["camels_01013500", "camels_01022500"],
         t_range=["2020-01-01", "2020-12-31"],
