@@ -122,15 +122,15 @@ def test_selfmadehydrodataset_read_ts_xrdataset(
     one_day_dataset, three_hour_dataset, one_hour_dataset
 ):
     # 1h
-    xrdataset_dict = one_day_dataset.read_ts_xrdataset(
+    xrdataset_dict = one_hour_dataset.read_ts_xrdataset(
         gage_id_lst=["camels_01013500", "camels_01022500"],
-        t_range=["2020-01-01 01", "2020-12-31 22"],
+        t_range=["2020-01-01", "2020-12-31 23"],
         var_lst=["streamflow"],
         time_units=["1h"],
     )
-    target_cols = one_day_dataset.read_timeseries(
+    target_cols = one_hour_dataset.read_timeseries(
         object_ids=["camels_01013500", "camels_01022500"],
-        t_range_list=["2020-01-01 01", "2020-12-31 22"],
+        t_range_list=["2020-01-01", "2020-12-31 23"],
         relevant_cols=["streamflow"],
         time_units=["1h"],
     )
@@ -140,13 +140,13 @@ def test_selfmadehydrodataset_read_ts_xrdataset(
     )
 
     # 3h
-    xrdataset_dict = one_day_dataset.read_ts_xrdataset(
+    xrdataset_dict = three_hour_dataset.read_ts_xrdataset(
         gage_id_lst=["camels_01013500", "camels_01022500"],
         t_range=["2020-01-01 01", "2020-12-31 22"],
         var_lst=["streamflow"],
         time_units=["3h"],
     )
-    target_cols = one_day_dataset.read_timeseries(
+    target_cols = three_hour_dataset.read_timeseries(
         object_ids=["camels_01013500", "camels_01022500"],
         t_range_list=["2020-01-01 01", "2020-12-31 22"],
         relevant_cols=["streamflow"],
@@ -177,21 +177,21 @@ def test_selfmadehydrodataset_read_ts_xrdataset(
     )
 
 
-def test_selfmadehydrodataset_read_attr_xrdataset(dataset):
-    xrdataset = dataset.read_attr_xrdataset(
+def test_selfmadehydrodataset_read_attr_xrdataset(one_day_dataset):
+    xrdataset = one_day_dataset.read_attr_xrdataset(
         gage_id_lst=["camels_01013500", "camels_01022500"],
         var_lst=["area"],
     )
     assert isinstance(xrdataset, xr.Dataset)
 
 
-def test_selfmadehydrodataset_read_area(dataset):
-    area = dataset.read_area(gage_id_lst=["camels_01013500", "camels_01022500"])
+def test_selfmadehydrodataset_read_area(one_day_dataset):
+    area = one_day_dataset.read_area(gage_id_lst=["camels_01013500", "camels_01022500"])
     assert isinstance(area, xr.Dataset)
 
 
-def test_selfmadehydrodataset_read_mean_prcp(dataset):
-    mean_prcp = dataset.read_mean_prcp(
+def test_selfmadehydrodataset_read_mean_prcp(one_day_dataset):
+    mean_prcp = one_day_dataset.read_mean_prcp(
         gage_id_lst=["camels_01013500", "camels_01022500"]
     )
     assert isinstance(mean_prcp, xr.Dataset)
