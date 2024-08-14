@@ -18,7 +18,25 @@ from hydrodatasource.reader.data_source import CACHE_DIR, SelfMadeHydroDataset
 
 
 @pytest.fixture
-def dataset():
+def one_hour_dataset():
+    # local
+    # selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
+    # minio
+    selfmadehydrodataset_path = "s3://basins-interim"
+    return SelfMadeHydroDataset(data_path=selfmadehydrodataset_path, time_unit=["1h"])
+
+
+@pytest.fixture
+def three_hour_dataset():
+    # local
+    # selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
+    # minio
+    selfmadehydrodataset_path = "s3://basins-interim"
+    return SelfMadeHydroDataset(data_path=selfmadehydrodataset_path, time_unit=["3h"])
+
+
+@pytest.fixture
+def one_day_dataset():
     # local
     # selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
     # minio
@@ -26,27 +44,27 @@ def dataset():
     return SelfMadeHydroDataset(data_path=selfmadehydrodataset_path)
 
 
-def test_selfmadehydrodataset_get_name(dataset):
-    assert dataset.get_name() == "SelfMadeHydroDataset"
+def test_selfmadehydrodataset_get_name(one_day_dataset):
+    assert one_day_dataset.get_name() == "SelfMadeHydroDataset"
 
 
-def test_selfmadehydrodataset_streamflow_unit(dataset):
-    assert dataset.streamflow_unit == {"1D": "mm/d"}
+def test_selfmadehydrodataset_streamflow_unit(one_day_dataset):
+    assert one_day_dataset.streamflow_unit == {"1D": "mm/d"}
 
 
-def test_selfmadehydrodataset_read_site_info(dataset):
-    site_info = dataset.read_site_info()
+def test_selfmadehydrodataset_read_site_info(one_day_dataset):
+    site_info = one_day_dataset.read_site_info()
     assert isinstance(site_info, pd.DataFrame)
 
 
-def test_selfmadehydrodataset_read_object_ids(dataset):
-    object_ids = dataset.read_object_ids()
+def test_selfmadehydrodataset_read_object_ids(one_day_dataset):
+    object_ids = one_day_dataset.read_object_ids()
     assert isinstance(object_ids, np.ndarray)
 
 
-def test_selfmadehydrodataset_read_tsdata(dataset):
-    object_ids = dataset.read_object_ids()
-    target_cols = dataset.read_timeseries(
+def test_selfmadehydrodataset_read_tsdata(one_day_dataset):
+    object_ids = one_day_dataset.read_object_ids()
+    target_cols = one_day_dataset.read_timeseries(
         object_ids=object_ids[:5],
         t_range_list=["2020-01-01", "2020-12-31"],
         relevant_cols=["streamflow"],
@@ -55,45 +73,59 @@ def test_selfmadehydrodataset_read_tsdata(dataset):
     assert isinstance(target_cols, dict)
 
 
-def test_selfmadehydrodataset_read_attrdata(dataset):
-    object_ids = dataset.read_object_ids()
-    constant_cols = dataset.read_attributes(
+def test_selfmadehydrodataset_read_attrdata(one_day_dataset):
+    object_ids = one_day_dataset.read_object_ids()
+    constant_cols = one_day_dataset.read_attributes(
         object_ids=object_ids[:5], constant_cols=["area"]
     )
     assert isinstance(constant_cols, np.ndarray)
 
 
-def test_selfmadehydrodataset_get_attributes_cols(dataset):
-    constant_cols = dataset.get_attributes_cols()
+def test_selfmadehydrodataset_get_attributes_cols(one_day_dataset):
+    constant_cols = one_day_dataset.get_attributes_cols()
     assert isinstance(constant_cols, np.ndarray)
 
 
-def test_selfmadehydrodataset_get_timeseries_cols(dataset):
-    relevant_cols = dataset.get_timeseries_cols()
+def test_selfmadehydrodataset_get_timeseries_cols(one_day_dataset):
+    relevant_cols = one_day_dataset.get_timeseries_cols()
     assert isinstance(relevant_cols, dict)
 
 
-def test_selfmadehydrodataset_cache_attributes_xrdataset(dataset):
-    dataset.cache_attributes_xrdataset()
+def test_selfmadehydrodataset_cache_attributes_xrdataset(one_day_dataset):
+    one_day_dataset.cache_attributes_xrdataset()
     assert os.path.exists(os.path.join(CACHE_DIR, "attributes.nc"))
 
 
-def test_selfmadehydrodataset_cache_timeseries_xrdataset(dataset):
-    dataset.cache_timeseries_xrdataset()
+def test_selfmadehydrodataset_cache_timeseries_xrdataset(
+    one_day_dataset, three_hour_dataset, one_hour_dataset
+):
+    # 1h
+    one_hour_dataset.cache_timeseries_xrdataset(
+        time_units=["1h"],
+        t_range=["1980-01-01", "2023-12-31"],
+    )
+    # 3h
+    three_hour_dataset.cache_timeseries_xrdataset(
+        time_units=["3h"],
+        offset_to_utc=True,
+        t_range=["1980-01-01 01", "2023-12-31 22"],
+    )
+    # 1d
+    one_day_dataset.cache_timeseries_xrdataset()
 
 
-def test_selfmadehydrodataset_cache_xrdataset(dataset):
-    dataset.cache_xrdataset()
+def test_selfmadehydrodataset_cache_xrdataset(one_day_dataset):
+    one_day_dataset.cache_xrdataset()
 
 
-def test_selfmadehydrodataset_read_ts_xrdataset(dataset):
-    xrdataset_dict = dataset.read_ts_xrdataset(
+def test_selfmadehydrodataset_read_ts_xrdataset(one_day_dataset):
+    xrdataset_dict = one_day_dataset.read_ts_xrdataset(
         gage_id_lst=["camels_01013500", "camels_01022500"],
         t_range=["2020-01-01", "2020-12-31"],
         var_lst=["streamflow"],
         time_units=["1D"],
     )
-    target_cols = dataset.read_timeseries(
+    target_cols = one_day_dataset.read_timeseries(
         object_ids=["camels_01013500", "camels_01022500"],
         t_range_list=["2020-01-01", "2020-12-31"],
         relevant_cols=["streamflow"],
