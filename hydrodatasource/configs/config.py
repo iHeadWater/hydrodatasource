@@ -1,10 +1,10 @@
 """
 Author: Jianfeng Zhu
 Date: 2023-10-25 18:49:02
-LastEditTime: 2024-07-06 18:57:14
+LastEditTime: 2024-08-15 10:02:10
 LastEditors: Wenyu Ouyang
 Description: Some configs for minio server
-FilePath: /hydrodatasource/hydrodatasource/configs/config.py
+FilePath: \hydrodatasource\hydrodatasource\configs\config.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 
@@ -80,52 +80,75 @@ except ValueError as e:
 except Exception as e:
     print(f"Unexpected error: {e}")
 
+# Initialize local data path
 LOCAL_DATA_PATH = SETTING["local_data_path"]["root"]
 
-MINIO_PARAM = {
-    "endpoint_url": SETTING["minio"]["client_endpoint"],
-    "key": SETTING["minio"]["access_key"],
-    "secret": SETTING["minio"]["secret"],
-}
 
-FS = s3fs.S3FileSystem(
-    client_kwargs={"endpoint_url": MINIO_PARAM["endpoint_url"]},
-    key=MINIO_PARAM["key"],
-    secret=MINIO_PARAM["secret"],
-    use_ssl=False,
-)
+# Initialize remote service settings
+MINIO_PARAM = {}
+RO = {}
+S3 = None
+MC = None
+PS = None
+FS = None
 
-# remote_options parameters for xr open_dataset from minio
-RO = {
-    "client_kwargs": {"endpoint_url": MINIO_PARAM["endpoint_url"]},
-    "key": MINIO_PARAM["key"],
-    "secret": MINIO_PARAM["secret"],
-    "use_ssl": False,
-}
-
-
-# Set up MinIO client
-S3 = boto3.client(
-    "s3",
-    endpoint_url=SETTING["minio"]["client_endpoint"],
-    aws_access_key_id=MINIO_PARAM["key"],
-    aws_secret_access_key=MINIO_PARAM["secret"],
-)
-MC = Minio(
-    SETTING["minio"]["client_endpoint"].replace("http://", ""),
-    access_key=MINIO_PARAM["key"],
-    secret_key=MINIO_PARAM["secret"],
-    secure=False,  # True if using HTTPS
-)
 STATION_BUCKET = "stations"
 STATION_OBJECT = "sites.csv"
-
 GRID_INTERIM_BUCKET = "grids-interim"
 
-PS = psycopg2.connect(
-    database=SETTING["postgres"]["database"],
-    user=SETTING["postgres"]["username"],
-    password=SETTING["postgres"]["password"],
-    host=SETTING["postgres"]["server_url"],
-    port=SETTING["postgres"]["port"],
-)
+# Handle MinIO connection
+try:
+    # MinIO parameters
+    MINIO_PARAM = {
+        "endpoint_url": SETTING["minio"]["client_endpoint"],
+        "key": SETTING["minio"]["access_key"],
+        "secret": SETTING["minio"]["secret"],
+    }
+
+    # Initialize S3 FileSystem
+    FS = s3fs.S3FileSystem(
+        client_kwargs={"endpoint_url": MINIO_PARAM["endpoint_url"]},
+        key=MINIO_PARAM["key"],
+        secret=MINIO_PARAM["secret"],
+        use_ssl=False,
+    )
+
+    # remote_options parameters for xr open_dataset from minio
+    RO = {
+        "client_kwargs": {"endpoint_url": MINIO_PARAM["endpoint_url"]},
+        "key": MINIO_PARAM["key"],
+        "secret": MINIO_PARAM["secret"],
+        "use_ssl": False,
+    }
+
+    # Set up MinIO client
+    S3 = boto3.client(
+        "s3",
+        endpoint_url=SETTING["minio"]["client_endpoint"],
+        aws_access_key_id=MINIO_PARAM["key"],
+        aws_secret_access_key=MINIO_PARAM["secret"],
+    )
+    MC = Minio(
+        SETTING["minio"]["client_endpoint"].replace("http://", ""),
+        access_key=MINIO_PARAM["key"],
+        secret_key=MINIO_PARAM["secret"],
+        secure=False,  # True if using HTTPS
+    )
+except KeyError as e:
+    print(f"Configuration error: {e}")
+except Exception as e:
+    print(f"Remote service setup failed: {e}")
+
+# Handle PostgreSQL connection
+try:
+    PS = psycopg2.connect(
+        database=SETTING["postgres"]["database"],
+        user=SETTING["postgres"]["username"],
+        password=SETTING["postgres"]["password"],
+        host=SETTING["postgres"]["server_url"],
+        port=SETTING["postgres"]["port"],
+    )
+except KeyError as e:
+    print(f"PostgreSQL configuration error: {e}")
+except Exception as e:
+    print(f"Failed to connect to PostgreSQL: {e}")

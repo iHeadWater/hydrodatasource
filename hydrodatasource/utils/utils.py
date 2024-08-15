@@ -1,16 +1,20 @@
 import re
 import numpy as np
+import geopandas as gpd
 from netCDF4 import Dataset, date2num, num2date
 import time
 from datetime import datetime, timedelta
 import pandas as pd
 import pint
 import xarray as xr
-import s3fs
+import contextlib
+import tempfile
 from ..configs.config import FS
 
 # please don't remove the following line although it seems not used
 import pint_xarray  # noqa
+
+from hydroutils.hydro_time import calculate_utc_offset
 
 
 def creatspinc(value, data_vars, lats, lons, starttime, filename, resolution):
@@ -340,3 +344,49 @@ def is_minio_folder(minio_url):
         return len(objects) != 1 or test_object != minio_url
     except Exception as e:
         raise NotImplementedError(f"Error accessing {minio_url}: {e}") from e
+
+
+def calculate_basin_offsets(shp_file_path):
+    """
+    Calculate the UTC offset for each basin based on the outlet shapefile.
+
+    Parameters:
+        shp_file (str): The path to the basin outlet shapefile.
+
+    Returns:
+        dict: A dictionary where the keys are the BASIN_ID and the values are the corresponding UTC offsets.
+    """
+    # read shapefile
+    if "s3://" in shp_file_path:
+        # related list
+        extensions = [".shp", ".shx", ".dbf", ".prj"]
+
+        # create a temporary directory
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # download all related files to the temporary directory
+            base_name = shp_file_path.rsplit(".", 1)[0]
+            extensions = [".shp", ".shx", ".dbf", ".prj"]
+
+            for ext in extensions:
+                remote_file = f"{base_name}{ext}"
+                local_file = f"{tmpdir}/shp_file{ext}"
+                with contextlib.suppress(FileNotFoundError):
+                    FS.get(remote_file, local_file)
+            gdf = gpd.read_file(f"{tmpdir}/shp_file.shp")
+
+    else:
+        # If the file is not on S3 (MinIO), read it directly
+        gdf = gpd.read_file(shp_file_path)
+
+    # create an empty dictionary
+    basin_offset_dict = {}
+
+    for index, row in gdf.iterrows():
+        outlet = row["geometry"]
+        offset = calculate_utc_offset(outlet.y, outlet.x)
+        basin_id = row.get(
+            "BASIN_ID", index
+        )  # Use the index as the default value if "BASIN_ID" is not found
+        basin_offset_dict[basin_id] = offset
+
+    return basin_offset_dict

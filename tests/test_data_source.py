@@ -1,7 +1,7 @@
 """
 Author: Wenyu Ouyang
 Date: 2024-07-06 19:20:59
-LastEditTime: 2024-08-10 11:44:35
+LastEditTime: 2024-08-15 10:47:16
 LastEditors: Wenyu Ouyang
 Description: Test funcs for data source
 FilePath: \hydrodatasource\tests\test_data_source.py
@@ -20,27 +20,27 @@ from hydrodatasource.reader.data_source import CACHE_DIR, SelfMadeHydroDataset
 @pytest.fixture
 def one_hour_dataset():
     # local
-    # selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
+    selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
     # minio
-    selfmadehydrodataset_path = "s3://basins-interim"
+    # selfmadehydrodataset_path = "s3://basins-interim"
     return SelfMadeHydroDataset(data_path=selfmadehydrodataset_path, time_unit=["1h"])
 
 
 @pytest.fixture
 def three_hour_dataset():
     # local
-    # selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
+    selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
     # minio
-    selfmadehydrodataset_path = "s3://basins-interim"
+    # selfmadehydrodataset_path = "s3://basins-interim"
     return SelfMadeHydroDataset(data_path=selfmadehydrodataset_path, time_unit=["3h"])
 
 
 @pytest.fixture
 def one_day_dataset():
     # local
-    # selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
+    selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
     # minio
-    selfmadehydrodataset_path = "s3://basins-interim"
+    # selfmadehydrodataset_path = "s3://basins-interim"
     return SelfMadeHydroDataset(data_path=selfmadehydrodataset_path)
 
 

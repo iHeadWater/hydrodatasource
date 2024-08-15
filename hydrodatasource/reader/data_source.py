@@ -2,10 +2,7 @@ import collections
 import json
 import os
 from abc import ABC
-from pathlib import Path
 import re
-import glob
-from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -14,9 +11,12 @@ from tqdm import tqdm
 from hydroutils import hydro_file
 import hydrodatasource.configs.config as conf
 from hydrodatasource.configs.data_consts import ERA5LAND_ET_REALATED_VARS
+from hydrodatasource.utils.utils import (
+    calculate_basin_offsets,
+    is_minio_folder,
+    minio_file_list,
+)
 from hydrodatasource.reader import access_fs
-from hydrodatasource.utils.utils import is_minio_folder, minio_file_list
-from hydroutils.hydro_time import calculate_basin_offsets
 
 CACHE_DIR = hydro_file.get_cache_dir()
 
@@ -71,6 +71,8 @@ class SelfMadeHydroDataset(HydroData):
             raise ValueError(
                 "time_unit must be one of ['1h', '3h', '1D']. We only support these time units now."
             )
+        # TODO: maybe starting with "s3://" is a better idea?
+        self.head = "minio" if "s3://" in data_path else "local"
         super().__init__(data_path)
         self.data_source_description = self.set_data_source_describe()
         if download:
@@ -125,11 +127,7 @@ class SelfMadeHydroDataset(HydroData):
 
     def read_site_info(self):
         camels_file = self.data_source_description["ATTR_FILE"]
-        if "s3://" in camels_file:
-            with conf.FS.open(camels_file, mode="rb") as f:
-                attrs = pd.read_csv(f, dtype={"basin_id": str})
-        else:
-            attrs = pd.read_csv(camels_file, dtype={"basin_id": str})
+        attrs = access_fs.spec_path(camels_file, head=self.head)
         return attrs[["basin_id", "area"]]
 
     def read_object_ids(self, object_params=None) -> np.array:
