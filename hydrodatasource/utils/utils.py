@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 import pandas as pd
 import pint
 import xarray as xr
+import s3fs
+from ..configs.config import FS
 
 # please don't remove the following line although it seems not used
 import pint_xarray  # noqa
@@ -285,3 +287,56 @@ def streamflow_unit_conv(streamflow, area, target_unit="mm/d", inverse=False):
         raise TypeError(
             "Input streamflow must be xarray.Dataset, or pint.Quantity wrapping numpy.ndarray, or pandas.DataFrame/Series"
         )
+
+
+def minio_file_list(minio_folder_url):
+    """
+    Get all filenames in a specified directory on MinIO.
+
+    Parameters
+    ----------
+    minio_folder_url : str
+        the minio file url, must start with s3://
+
+    Returns
+    -------
+    folder list
+    """
+    # Get the list of files in the directory
+    try:
+        # the minio folder url doesn't have to start with s3://, but we agree that it must
+        # start with s3:// to distinguish between local and Minio folder directories.
+        files = FS.ls(minio_folder_url)
+        return [file.split("/")[-1] for file in files if not file.endswith("/")]
+    except Exception as e:
+        print(f"Error accessing {minio_folder_url}: {e}")
+        return []
+
+
+def is_minio_folder(minio_url):
+    """
+    Check if a MinIO folder exists.
+
+    Parameters
+    ----------
+    minio_url : str
+        the minio file url, must start with s3://
+
+    Returns
+    -------
+    bool
+        True if the folder exists, False otherwise
+
+    """
+    try:
+        if not FS.exists(minio_url):
+            raise FileNotFoundError(f"No file or folder found in {minio_url}")
+        if minio_url.endswith("/"):
+            # If the path ends with '/', treat it as a directory
+            return True
+        # Try to list objects under this path
+        objects = FS.ls(minio_url)
+        test_object = "s3://" + objects[0]
+        return len(objects) != 1 or test_object != minio_url
+    except Exception as e:
+        raise NotImplementedError(f"Error accessing {minio_url}: {e}") from e
