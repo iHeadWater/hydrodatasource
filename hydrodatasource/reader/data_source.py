@@ -157,24 +157,23 @@ class SelfMadeHydroDataset(HydroData):
         """
         time_units = kwargs.get("time_units", ["1D"])
         region = kwargs.get("region", None)
-        offset_to_utc = kwargs.get(
-            "offset_to_utc", False
-        )  # explained in cache_timeseries_xrdataset function
-
-        if offset_to_utc is True:
-            basinoutlets_path = os.path.join(
-                self.data_source_description["SHAPE_DIR"], "basinoutlets.shp"
-            )
-            try:
-                offset_dict = calculate_basin_offsets(basinoutlets_path)
-            except:
-                raise FileNotFoundError(
-                    f"basinoutlets.shp not found in {basinoutlets_path}."
-                )
 
         results = {}
 
         for time_unit in time_units:
+            # whether to convert the time to UTC, for 1D time unit, default set False,
+            # and for 3h time unit, set True
+            offset_to_utc = time_unit == "3h"
+            if offset_to_utc:
+                basinoutlets_path = os.path.join(
+                    self.data_source_description["SHAPE_DIR"], "basinoutlets.shp"
+                )
+                try:
+                    offset_dict = calculate_basin_offsets(basinoutlets_path)
+                except:
+                    raise FileNotFoundError(
+                        f"basinoutlets.shp not found in {basinoutlets_path}."
+                    )
             ts_dir = next(
                 dir_path
                 for dir_path in self.data_source_description["TS_DIRS"]
@@ -200,7 +199,7 @@ class SelfMadeHydroDataset(HydroData):
                 else:
                     ts_data = pd.read_csv(ts_file)
                 date = pd.to_datetime(ts_data["time"]).values
-                if offset_to_utc is True:
+                if offset_to_utc:
                     date = date - np.timedelta64(offset_dict[object_ids[k]], "h")
                 [_, ind1, ind2] = np.intersect1d(date, t_range, return_indices=True)
 
@@ -381,13 +380,6 @@ class SelfMadeHydroDataset(HydroData):
             "1D"
         ]  # Default to ["1D"] if not specified or if time_units is None
 
-        # whether to convert the time to UTC, for 1D time unit, suggest set False,
-        # and for 3h time unit, set True
-        offset_to_utc = kwargs.get("offset_to_utc", False)
-
-        if t_range is None:
-            t_range = ["1980-01-01", "2023-12-31"]
-
         variables = self.get_timeseries_cols()
         basins = self.camels_sites["basin_id"].values
 
@@ -397,6 +389,12 @@ class SelfMadeHydroDataset(HydroData):
                 yield basins[i : i + batch_size]
 
         for time_unit in time_units:
+            if t_range is None:
+                if time_unit != "3h":
+                    t_range = ["1980-01-01", "2023-12-31"]
+                else:
+                    t_range = ["1980-01-01 01", "2023-12-31 22"]
+
             # Generate the time range specific to the time unit
             times = (
                 pd.date_range(start=t_range[0], end=t_range[-1], freq=time_unit)
@@ -425,7 +423,6 @@ class SelfMadeHydroDataset(HydroData):
                     time_units=[
                         time_unit
                     ],  # Pass the time unit to ensure correct data retrieval
-                    offset_to_utc=offset_to_utc,
                 )
 
                 dataset = xr.Dataset(
@@ -545,13 +542,14 @@ class SelfMadeHydroDataset(HydroData):
 
     def read_attr_xrdataset(self, gage_id_lst=None, var_lst=None, **kwargs):
         region = kwargs.get("region", None)
+
         prefix_ = "" if region is None else region + "_"
         if var_lst is None or len(var_lst) == 0:
             return None
         try:
             attr = xr.open_dataset(os.path.join(CACHE_DIR, f"{prefix_}attributes.nc"))
         except FileNotFoundError:
-            self.cache_xrdataset()
+            self.cache_xrdataset(time_units=self.time_unit)
             attr = xr.open_dataset(os.path.join(CACHE_DIR, f"{prefix_}attributes.nc"))
         return attr[var_lst].sel(basin=gage_id_lst)
 

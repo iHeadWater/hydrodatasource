@@ -107,7 +107,6 @@ def test_selfmadehydrodataset_cache_timeseries_xrdataset(
     # 3h
     three_hour_dataset.cache_timeseries_xrdataset(
         time_units=["3h"],
-        offset_to_utc=True,
         t_range=["1980-01-01 01", "2023-12-31 22"],
     )
     # 1D
@@ -151,7 +150,6 @@ def test_selfmadehydrodataset_read_ts_xrdataset(
         t_range_list=["2020-01-01 01", "2020-12-31 22"],
         relevant_cols=["streamflow"],
         time_units=["3h"],
-        offset_to_utc=True,
     )
     assert isinstance(xrdataset_dict, dict)
     np.testing.assert_array_equal(
