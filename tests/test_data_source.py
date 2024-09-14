@@ -1,7 +1,7 @@
 """
 Author: Wenyu Ouyang
 Date: 2024-07-06 19:20:59
-LastEditTime: 2024-09-14 14:11:04
+LastEditTime: 2024-09-14 14:58:28
 LastEditors: Wenyu Ouyang
 Description: Test funcs for data source
 FilePath: \hydrodatasource\tests\test_data_source.py
@@ -134,10 +134,10 @@ def test_selfmadehydrodataset_cache_xrdataset(one_day_dataset):
 
 
 def test_selfmadehydrodataset_read_ts_xrdataset(
-    one_day_dataset, three_hour_dataset, one_hour_dataset
+    one_day_dataset, three_hour_dataset, one_hour_dataset, eight_day_dataset
 ):
     # 8D
-    xrdataset_dict = one_day_dataset.read_ts_xrdataset(
+    xrdataset_dict = eight_day_dataset.read_ts_xrdataset(
         gage_id_lst=["camels_01013500", "camels_01022500"],
         t_range=["2020-01-01", "2020-12-31"],
         var_lst=["ET_modis16a2006", "ET_modis16a2gf061"],
