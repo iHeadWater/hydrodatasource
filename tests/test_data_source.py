@@ -1,7 +1,7 @@
 """
 Author: Wenyu Ouyang
 Date: 2024-07-06 19:20:59
-LastEditTime: 2024-08-15 10:47:16
+LastEditTime: 2024-09-14 14:11:04
 LastEditors: Wenyu Ouyang
 Description: Test funcs for data source
 FilePath: \hydrodatasource\tests\test_data_source.py
@@ -42,6 +42,15 @@ def one_day_dataset():
     # minio
     # selfmadehydrodataset_path = "s3://basins-interim"
     return SelfMadeHydroDataset(data_path=selfmadehydrodataset_path)
+
+
+@pytest.fixture
+def eight_day_dataset():
+    # local
+    selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
+    # minio
+    # selfmadehydrodataset_path = "s3://basins-interim"
+    return SelfMadeHydroDataset(data_path=selfmadehydrodataset_path, time_unit=["8D"])
 
 
 def test_selfmadehydrodataset_get_name(one_day_dataset):
@@ -97,8 +106,15 @@ def test_selfmadehydrodataset_cache_attributes_xrdataset(one_day_dataset):
 
 
 def test_selfmadehydrodataset_cache_timeseries_xrdataset(
-    one_day_dataset, three_hour_dataset, one_hour_dataset
+    one_day_dataset, three_hour_dataset, one_hour_dataset, eight_day_dataset
 ):
+    # 8D
+    eight_day_dataset.cache_timeseries_xrdataset(
+        time_units=["8D"],
+        t_range=["1980-01-01", "2023-12-31"],
+        start0101_freq=True,
+        batchsize=200,
+    )
     # 1h
     one_hour_dataset.cache_timeseries_xrdataset(
         time_units=["1h"],
@@ -120,6 +136,23 @@ def test_selfmadehydrodataset_cache_xrdataset(one_day_dataset):
 def test_selfmadehydrodataset_read_ts_xrdataset(
     one_day_dataset, three_hour_dataset, one_hour_dataset
 ):
+    # 8D
+    xrdataset_dict = one_day_dataset.read_ts_xrdataset(
+        gage_id_lst=["camels_01013500", "camels_01022500"],
+        t_range=["2020-01-01", "2020-12-31"],
+        var_lst=["ET_modis16a2006", "ET_modis16a2gf061"],
+        time_units=["8D"],
+    )
+    target_cols = one_day_dataset.read_timeseries(
+        object_ids=["camels_01013500", "camels_01022500"],
+        t_range_list=["2020-01-01", "2020-12-31"],
+        relevant_cols=["streamflow"],
+        time_unit=["1D"],
+    )
+    assert isinstance(xrdataset_dict, dict)
+    np.testing.assert_array_equal(
+        xrdataset_dict["1D"]["streamflow"].values, target_cols["1D"][:, :, 0]
+    )
     # 1h
     xrdataset_dict = one_hour_dataset.read_ts_xrdataset(
         gage_id_lst=["camels_01013500", "camels_01022500"],
