@@ -1,7 +1,7 @@
 """
 Author: Wenyu Ouyang
 Date: 2024-08-09 19:38:52
-LastEditTime: 2024-08-09 19:40:50
+LastEditTime: 2024-09-15 14:51:07
 LastEditors: Wenyu Ouyang
 Description: Some constants for data source
 FilePath: \hydrodatasource\hydrodatasource\configs\data_consts.py
@@ -95,4 +95,11 @@ ERA5LAND_ET_REALATED_VARS = [
     "potential_evaporation_hourly",
     "snow_evaporation_hourly",
     "total_evaporation_hourly",
+]
+
+MODIS_ET_PET_8D_VARS = [
+    "ET_modis16a2006",
+    "ET_modis16a2gf061",
+    "PET_modis16a2006",
+    "PET_modis16a2gf061",
 ]

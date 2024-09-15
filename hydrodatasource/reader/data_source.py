@@ -1,17 +1,21 @@
 import collections
 import json
 import os
-from abc import ABC
 import re
-
 import numpy as np
 import pandas as pd
 import xarray as xr
+from abc import ABC
 from tqdm import tqdm
+
 from hydroutils import hydro_file
 from hydroutils.hydro_time import generate_start0101_time_range
+
 import hydrodatasource.configs.config as conf
-from hydrodatasource.configs.data_consts import ERA5LAND_ET_REALATED_VARS
+from hydrodatasource.configs.data_consts import (
+    ERA5LAND_ET_REALATED_VARS,
+    MODIS_ET_PET_8D_VARS,
+)
 from hydrodatasource.utils.utils import (
     calculate_basin_offsets,
     is_minio_folder,
@@ -213,20 +217,43 @@ class SelfMadeHydroDataset(HydroData):
                 [_, ind1, ind2] = np.intersect1d(date, t_range, return_indices=True)
 
                 for j in range(len(relevant_cols)):
-                    if "precipitation" in relevant_cols[j]:
-                        prcp = ts_data[relevant_cols[j]].values
-                        prcp[prcp < 0] = 0.0
-                        x[k, ind2, j] = prcp[ind1]
-                    elif relevant_cols[j] in ERA5LAND_ET_REALATED_VARS:
-                        evap = -1 * ts_data[relevant_cols[j]].values
-                        evap[evap < 0] = 0.0
-                        x[k, ind2, j] = evap[ind1]
-                    else:
-                        x[k, ind2, j] = ts_data[relevant_cols[j]].values[ind1]
+                    tmp_ = self._read_timeseries_1basin1var(ts_data, relevant_cols[j])
+                    x[k, ind2, j] = tmp_[ind1]
 
             results[time_unit] = x
 
         return results
+
+    def _read_timeseries_1basin1var(self, ts_data, relevant_col):
+        if "precipitation" in relevant_col:
+            prcp = ts_data[relevant_col].values
+            prcp[prcp < 0] = 0.0
+            return prcp
+        elif relevant_col in ERA5LAND_ET_REALATED_VARS:
+            evap = -1 * ts_data[relevant_col].values
+            evap[evap < 0] = 0.0
+            return evap
+        elif relevant_col in MODIS_ET_PET_8D_VARS:
+            modis_values = ts_data[relevant_col].values
+            modis_dates = pd.to_datetime(ts_data["time"].values)
+            for idx, current_date in enumerate(modis_dates):
+                # Check if the date is prior to or on January 1st
+                if current_date.month == 1 and current_date.day == 1:
+                    if idx == 0:
+                        # First day is January 1st, no previous date to scale from
+                        continue
+                        # Get the previous date
+                    previous_date = modis_dates[idx - 1]
+                    # Calculate the number of days between the previous date and January 1st
+                    delta_days = (current_date - previous_date).days
+
+                    # Adjust the MODIS value based on the number of days between the previous date and January 1st
+                    if delta_days > 0:
+                        modis_values[idx - 1] = modis_values[idx - 1] * 8 / delta_days
+                        # Assign the updated MODIS data to x
+            return modis_values
+        else:
+            return ts_data[relevant_col].values
 
     def read_attributes(
         self, object_ids=None, constant_cols=None, **kwargs
