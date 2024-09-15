@@ -250,8 +250,8 @@ class SelfMadeHydroDataset(HydroData):
                     # Adjust the MODIS value based on the number of days between the previous date and January 1st
                     if delta_days > 0:
                         modis_values[idx - 1] = modis_values[idx - 1] * 8 / delta_days
-                        # Assign the updated MODIS data to x
-            return modis_values
+            # NOTE: MODIS ET values are ACTUALLY in 0.1mm/day, so we need to convert to mm/day
+            return modis_values * 0.1
         else:
             return ts_data[relevant_col].values
 
