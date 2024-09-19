@@ -1,5 +1,6 @@
 from hydrodatasource.reader.postgres import (
     read_forcing_dataframe,
+    read_plcd
 )
 import hydrodatasource.configs.config as hdscc
 import pandas as pd
@@ -51,3 +52,9 @@ def test_read_sl_pg():
     geo_column = gpd.points_from_xy(stnames_df['LGTD'], stnames_df['LTTD'])
     sta_gdf = gpd.GeoDataFrame(stnames_df).set_geometry(geo_column)
     '''
+
+def test_read_plcd():
+    basin_code = '10513040'
+    data = read_plcd(basin_code)
+    print(data)
+    print(type(data))

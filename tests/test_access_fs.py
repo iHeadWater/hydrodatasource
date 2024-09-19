@@ -1,12 +1,10 @@
 import geopandas as gpd
 import pandas as pd
-import pytest
 import numpy as np
 import xarray as xr
 import hydrodatasource.configs.config as conf
 from hydrodatasource.reader import access_fs
 from hydrodatasource.cleaner import rain_anomaly
-from hydrodatasource.reader.data_source import HydroBasins
 
 
 def test_read_spec():
@@ -54,59 +52,60 @@ def test_read_zz_stations_ts():
 
 
 def test_read_stations_shp():
-    # 读取zip中的shpfiles文件
-    zz_stations_gdf = gpd.read_file(
-        conf.FS.open("s3://stations-origin/stations_list/zz_stations.zip")
+    zz_stations_gdf = _extracted_from_test_read_stations_shp_3(
+        "s3://stations-origin/stations_list/zz_stations.zip",
+        "zz_stations 站点列表如下:",
     )
-    print("zz_stations 站点列表如下:")
-    print(zz_stations_gdf)
-    # 读取zip中的shpfiles文件
-    pp_stations_gdf = gpd.read_file(
-        conf.FS.open("s3://stations-origin/stations_list/pp_stations.zip")
+    pp_stations_gdf = _extracted_from_test_read_stations_shp_3(
+        "s3://stations-origin/stations_list/pp_stations.zip",
+        "pp_stations 站点列表如下:",
     )
-    print("pp_stations 站点列表如下:")
-    print(pp_stations_gdf)
-    # 读取zip中的shpfiles文件
-    zq_stations_gdf = gpd.read_file(
-        conf.FS.open("s3://stations-origin/stations_list/zq_stations.zip")
+    zq_stations_gdf = _extracted_from_test_read_stations_shp_3(
+        "s3://stations-origin/stations_list/zq_stations.zip",
+        "zq_stations 站点列表如下:",
     )
-    print("zq_stations 站点列表如下:")
-    print(zq_stations_gdf)
     return zz_stations_gdf, pp_stations_gdf, zq_stations_gdf
 
 
+# TODO Rename this here and in `test_read_stations_shp`
+def _extracted_from_test_read_stations_shp_3(arg0, arg1):
+    # 读取zip中的shpfiles文件
+    result = gpd.read_file(conf.FS.open(arg0))
+    print(arg1)
+    print(result)
+    return result
+
+
 def test_read_stations_list():
-    # 读取csv文件
-    zz_stations_df = pd.read_csv(
+    zz_stations_df = _extracted_from_test_read_stations_list_3(
         "s3://stations-origin/stations_list/zz_stations.csv",
-        storage_options=conf.MINIO_PARAM,
-        index_col=False,
+        "zz_stations 站点列表如下:",
     )
-    print("zz_stations 站点列表如下:")
-    print(zz_stations_df)
-    pp_stations_df = pd.read_csv(
+    pp_stations_df = _extracted_from_test_read_stations_list_3(
         "s3://stations-origin/stations_list/pp_stations.csv",
-        storage_options=conf.MINIO_PARAM,
-        index_col=False,
+        "pp_stations 站点列表如下:",
     )
-    print("pp_stations 站点列表如下:")
-    print(pp_stations_df)
-    zq_stations_df = pd.read_csv(
+    zq_stations_df = _extracted_from_test_read_stations_list_3(
         "s3://stations-origin/stations_list/zq_stations.csv",
-        storage_options=conf.MINIO_PARAM,
-        index_col=False,
+        "zq_stations 站点列表如下:",
     )
-    print("zq_stations 站点列表如下:")
-    print(zq_stations_df)
     return zz_stations_df, pp_stations_df, zq_stations_df
 
 
+# TODO Rename this here and in `test_read_stations_list`
+def _extracted_from_test_read_stations_list_3(arg0, arg1):
+    # 读取csv文件
+    result = pd.read_csv(arg0, storage_options=conf.MINIO_PARAM, index_col=False)
+    print(arg1)
+    print(result)
+    return result
+
+
 def test_read_zqstations_ts():
-    test_csv = pd.read_csv(
+    return pd.read_csv(
         "s3://stations-origin/zq_stations/zq_CHN_songliao_10310500.csv",
         storage_options=conf.MINIO_PARAM,
     )
-    return test_csv
 
 
 def test_read_reservoirs_info():
@@ -116,40 +115,35 @@ def test_read_reservoirs_info():
 
 
 def test_read_river_network():
-    test_gdf = gpd.read_file(conf.FS.open("s3://basins-origin/HydroRIVERS_v10_shp.zip"))
-    return test_gdf
+    return gpd.read_file(conf.FS.open("s3://basins-origin/HydroRIVERS_v10_shp.zip"))
 
 
 def test_read_rsvr_ts():
-    test_rsvr_df = pd.read_csv(
+    return pd.read_csv(
         "s3://reservoirs-origin/rr_stations/zq_CHN_songliao_10310500.csv",
         storage_options=conf.MINIO_PARAM,
     )
-    return test_rsvr_df
 
 
 def test_read_pp():
-    pp_df = pd.read_csv(
+    return pd.read_csv(
         "s3://stations-origin/pp_stations/hour_data/1h/pp_CHN_songliao_10951870.csv",
         storage_options=conf.MINIO_PARAM,
     )
-    return pp_df
 
 
 def test_read_zz():
-    zz_df = pd.read_csv(
+    return pd.read_csv(
         "s3://stations-origin/zz_stations/hour_data/1h/zz_CHN_dalianxiaoku_21302120.csv",
         storage_options=conf.MINIO_PARAM,
     )
-    return zz_df
 
 
 def test_read_zq():
-    zq_df = pd.read_csv(
+    return pd.read_csv(
         "s3://stations-origin/zq_stations/hour_data/1h/zq_USA_usgs_01181000.csv",
         storage_options=conf.MINIO_PARAM,
     )
-    return zq_df
 
 
 def test_df2ds():
@@ -157,17 +151,13 @@ def test_df2ds():
         "s3://stations-origin/zq_stations/hour_data/1h/zq_USA_usgs_01181000.csv",
         storage_options=conf.MINIO_PARAM,
     )
-    # 两种写法都可以，但索引列名不同
-    zq_ds = xr.Dataset().from_dataframe(zq_df)  # Coordinates: index
-    # zq_dss = xr.Dataset(zq_df) # Coordinates: dim_0
-    return zq_ds
+    return xr.Dataset().from_dataframe(zq_df)
 
 
 def list_csv_files(bucket_name, prefix=""):
     """List paths of all CSV files in the specified S3 bucket."""
     path = f"{bucket_name}/{prefix}" if prefix else bucket_name
-    csv_files = conf.FS.glob(f"{path}*.csv")
-    return csv_files
+    return conf.FS.glob(f"{path}*.csv")
 
 
 def process_store_csvs(source_bucket, destination_bucket, prefix=""):
@@ -231,7 +221,7 @@ def test_read_era5_land_csv():
     end_list = []
     res_lon_list = []
     res_lat_list = []
-    for i in range(0, len(era5_land_zarr_files)):
+    for i in range(len(era5_land_zarr_files)):
         test_ds_i = xr.open_dataset(conf.FS.open(era5_land_zarr_files[i]))
         bbox = [
             np.min(test_ds_i["longitude"].to_numpy()),

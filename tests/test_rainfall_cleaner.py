@@ -2,7 +2,7 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-05-28 10:24:16
 LastEditors: liutiaxqabs 1498093445@qq.com
-LastEditTime: 2024-06-05 10:50:22
+LastEditTime: 2024-06-22 10:40:23
 FilePath: /hydrodatasource/tests/test_rainfall_cleaner.py
 Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
 '''
@@ -12,6 +12,8 @@ from hydrodatasource.cleaner.rainfall_cleaner import RainfallCleaner, RainfallAn
 
 import pandas as pd
 import matplotlib.pyplot as plt
+import os
+from tqdm import tqdm
 
 
 def test_anomaly_process():
@@ -43,16 +45,55 @@ def test_anomaly_process():
 def test_basins_polygon_mean():
     # 测试泰森多边形平均值，碧流河为例。测试结果见 /ftproot/tests_stations_anomaly_detection/plot
     basins_mean = RainfallAnalyzer(
-        stations_csv_path="/ftproot/tests_stations_anomaly_detection/stations/pp_stations_.csv",# 站点表，其中ID列带有前缀‘pp_’
-        shp_folder="/ftproot/tests_stations_anomaly_detection/shapefiles/",
-        rainfall_data_folder="/ftproot/tests_stations_anomaly_detection/rainfall_cleaner/",
-        output_folder="/ftproot/tests_stations_anomaly_detection/basins_rainfall_mean/",
-        output_log="/ftproot/tests_stations_anomaly_detection/plot/summary_log.txt",
-        output_plot="/ftproot/tests_stations_anomaly_detection/plot/",
+        stations_csv_path="/ftproot/basins-origin/basins_pp_stations/20600340_stations.csv",# 站点表，其中ID列带有前缀‘pp_’
+        shp_folder="/ftproot/basins-origin/basins_shp/20600340/",
+        rainfall_data_folder="/ftproot/basins-origin/basins_songliao_pp_origin_data/20600340/",
+        output_folder="/ftproot/basins-origin/basins_rainfall_mean/",
+        output_log="/ftproot/basins-origin/basins_rainfall_mean/plot/summary_log.txt",
+        output_plot="/ftproot/basins-origin/basins_rainfall_mean/plot/",
         lower_bound=200,
         upper_bound=2000,
     )
     basins_mean.basins_polygon_mean()
+
+
+def test_basins_polygon_mean_folder():
+    # 设置基础路径
+    base_shp_folder = "/ftproot/basins-origin/basins_shp/"
+    base_stations_csv_folder = "/ftproot/basins-origin/basins_pp_stations/"
+    base_rainfall_data_folder = "/ftproot/basins-origin/basins_songliao_pp_origin_data/"
+    output_folder = "/ftproot/basins-origin/basins_rainfall_mean/"
+    output_log = os.path.join(output_folder, "plot", "summary_log.txt")
+    output_plot = os.path.join(output_folder, "plot")
+
+    # 获取shp_folder目录下的所有文件夹名称并排序
+    subfolders = sorted([f.name for f in os.scandir(base_shp_folder) if f.is_dir()])
+
+    # 遍历所有文件夹并运行 basins_polygon_mean
+    for subfolder in tqdm(subfolders, desc="Processing basins"):
+        stations_csv_path = os.path.join(base_stations_csv_folder, f"{subfolder}_stations.csv")
+        shp_folder = os.path.join(base_shp_folder, subfolder)
+        rainfall_data_folder = os.path.join(base_rainfall_data_folder, subfolder)
+        
+        if os.path.exists(stations_csv_path) and os.path.exists(shp_folder) and os.path.exists(rainfall_data_folder):
+            try:
+                basins_mean = RainfallAnalyzer(
+                    stations_csv_path=stations_csv_path,
+                    shp_folder=shp_folder,
+                    rainfall_data_folder=rainfall_data_folder,
+                    output_folder=output_folder,
+                    output_log=output_log,
+                    output_plot=output_plot,
+                    lower_bound=200,
+                    upper_bound=2000,
+                )
+                basins_mean.basins_polygon_mean()
+            except Exception as e:
+                print(f"Error processing {subfolder}: {e}")
+                # 这里可以添加更多调试信息，比如打印 DataFrame 的列名
+        else:
+            print(f"Missing required files for {subfolder}")
+
 
 def test_time_consistency():
     time_consistency_check = RainfallAnalyzer(

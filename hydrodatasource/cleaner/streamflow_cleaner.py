@@ -2,7 +2,7 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-19 14:00:16
 LastEditors: liutiaxqabs 1498093445@qq.com
-LastEditTime: 2024-05-28 11:24:06
+LastEditTime: 2024-08-05 11:50:28
 FilePath: /hydrodatasource/hydrodatasource/cleaner/streamflow_cleaner.py
 Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
 '''
@@ -16,20 +16,21 @@ from scipy.signal import cwt, morlet, butter, filtfilt
 from scipy.fft import fft, ifft, fftfreq
 from scipy.optimize import curve_fit
 import os
+from tqdm import tqdm
 
 
 class StreamflowCleaner(Cleaner):
     def __init__(
         self,
         data_path,
-        window_size=24,
+        window_size=14,
         stride=1,
         cutoff_frequency=0.035,
         time_step=1.0,
         iterations=3,
         sampling_rate=1.0,
         order=5,
-        cwt_row=8,
+        cwt_row=2,
         *args,
         **kwargs,
     ):
@@ -357,10 +358,10 @@ class StreamflowCleaner(Cleaner):
         # 分段处理
         # 计算不同窗口的滑动平均
         df["INQA"] = self.adaptive_moving_average(
-            df["INQQ"], threshold=40, initial_window=168, min_window=24, max_window=168
+            df["INQQ"], threshold=200, initial_window=56, min_window=4, max_window=56
         )
         df["INQB"] = self.adaptive_moving_average(
-            df["INQQ"], threshold=40, initial_window=168, min_window=168, max_window=720
+            df["INQQ"], threshold=200, initial_window=140, min_window=28, max_window=140
         )
 
         # 创建新的INQQ列，根据月份替换数据
@@ -647,31 +648,31 @@ class StreamflowBacktrack:
                 "BLRZ",
             ]
         ].to_csv(result_path, index=False)
-        # df[
-        #     [
-        #         "STCD",
-        #         "TM",
-        #         "RZ",
-        #         "INQ",
-        #         "W",
-        #         "OTQ",
-        #         "RWCHRCD",
-        #         "RWPTN",
-        #         "INQDR",
-        #         "MSQMT",
-        #         "BLRZ",
-        #     ]
-        # ].to_csv(
-        #     os.path.join(
-        #         "/home/liutianxv1/水库流量数据小时插值并保持水量平衡版本", file
-        #     ),
-        #     index=False,
-        # )
+        df[
+            [
+                "STCD",
+                "TM",
+                "RZ",
+                "INQ",
+                "W",
+                "OTQ",
+                "RWCHRCD",
+                "RWPTN",
+                "INQDR",
+                "MSQMT",
+                "BLRZ",
+            ]
+        ].to_csv(
+            os.path.join(
+                "/home/liutianxv1/水库流量数据小时插值并保持水量平衡版本", file
+            ),
+            index=False,
+        )
 
         return result_path
 
     def process_backtrack(self):
-        for file in os.listdir(self.data_folder):
+        for file in tqdm(os.listdir(self.data_folder)):
             if file.endswith(".csv"):
                 file_path = os.path.join(self.data_folder, file)
                 output_folder = os.path.join(self.output_folder, file[:-4])
@@ -685,6 +686,6 @@ class StreamflowBacktrack:
                 # 去除反推异常值
                 nonan_data = self.delete_nan_inq(back_data, file, output_folder)
                 # 插值平衡
-                insert_data = self.insert_inq(nonan_data, file, output_folder)
+                #insert_data = self.insert_inq(nonan_data, file, output_folder)
                 # 绘图
 

@@ -1,20 +1,27 @@
 import collections
+import json
 import os
-from abc import ABC
-from pathlib import Path
-from typing import Union
-
+import re
 import numpy as np
 import pandas as pd
 import xarray as xr
-from hydrodataset import HydroDataset
-from hydroutils import hydro_file, hydro_time
+from abc import ABC
 from tqdm import tqdm
 
+from hydroutils import hydro_file
+from hydroutils.hydro_time import generate_start0101_time_range
+
 import hydrodatasource.configs.config as conf
-from hydrodatasource.configs.config import SETTING
+from hydrodatasource.configs.data_consts import (
+    ERA5LAND_ET_REALATED_VARS,
+    MODIS_ET_PET_8D_VARS,
+)
+from hydrodatasource.utils.utils import (
+    calculate_basin_offsets,
+    is_minio_folder,
+    minio_file_list,
+)
 from hydrodatasource.reader import access_fs
-from hydrodatasource.reader.reader import DataHandler
 
 CACHE_DIR = hydro_file.get_cache_dir()
 
@@ -41,17 +48,18 @@ class HydroData(ABC):
         raise NotImplementedError
 
 
-class SelfMadeHydroDataset(HydroDataset):
+class SelfMadeHydroDataset(HydroData):
     """A class for reading hydrodataset, but not really ready-datasets,
     just some data directorys organized like a HydroDataset.
 
     NOTE:
-    We compile forcing data and attr data into a dataset,
-    organized like a ready dataset -- like Caravan, but the directory structure is different.
+    We compile forcing data and attr data into a directory,
+    organized like a ready dataset -- like Caravan.
+    Only two directories are needed: attributes and timeseries
     """
 
-    def __init__(self, data_path, download=False):
-        """Initialize a self-made CAMELS dataset.
+    def __init__(self, data_path, download=False, time_unit=None):
+        """Initialize a self-made Caravan-style dataset.
 
         Parameters
         ----------
@@ -59,52 +67,61 @@ class SelfMadeHydroDataset(HydroDataset):
             _description_
         download : bool, optional
             _description_, by default False
+        time_unit : list, optional
+            _description_, by default
         """
+        if time_unit is None:
+            time_unit = ["1D"]
+        if any(unit not in ["1h", "3h", "1D", "8D"] for unit in time_unit):
+            raise ValueError(
+                "time_unit must be one of ['1h', '3h', '1D', '8D']. We only support these time units now."
+            )
+        # TODO: maybe starting with "s3://" is a better idea?
+        self.head = "minio" if "s3://" in data_path else "local"
         super().__init__(data_path)
         self.data_source_description = self.set_data_source_describe()
         if download:
             self.download_data_source()
         self.camels_sites = self.read_site_info()
+        self.time_unit = time_unit
 
     @property
     def streamflow_unit(self):
-        return "m^3/s"
+        unit_mapping = {"1h": "mm/h", "3h": "mm/3h", "1D": "mm/d"}
+        return {unit: unit_mapping[unit] for unit in self.time_unit}
 
     def get_name(self):
         return "SelfMadeHydroDataset"
 
     def set_data_source_describe(self):
-        camels_db = self.data_source_dir
-        # shp files of basins
-        camels_shp_files_dir = os.path.join(camels_db, "basin_boudaries")
-        # attr, flow and forcing data are all in the same dir. each basin has one dir.
-        flow_dir = os.path.join(camels_db, "streamflow")
-        sm_dir = os.path.join(camels_db, "soil_moisture")
-        et_dir = os.path.join(camels_db, "evapotranspiration")
-        forcing_dir = os.path.join(camels_db, "basin_mean_forcing")
-        attr_dir = os.path.join(camels_db, "attribute")
-        # no gauge id file for CAMELS_CC, just read from any attribute file
-        gauge_id_file = os.path.join(camels_db, "gage_points.csv")
-        attr_key_lst = [
-            "climate",
-            "geology",
-            "land_cover",
-            "permeability_porosity",
-            "root_depth",
-            "soil",
-            "topo_elev_slope",
-            "topo_shape_factors",
-        ]
+        data_root_dir = self.data_source_dir
+        ts_dir = os.path.join(data_root_dir, "timeseries")
+        # we assume that each subdirectory in ts_dir represents a time unit
+        # In this subdirectory, there are csv files for each basin
+        if "s3://" in data_root_dir:
+            time_units_dir = [
+                os.path.join(ts_dir, name)
+                for name in minio_file_list(ts_dir)
+                if is_minio_folder(os.path.join(ts_dir, name))
+            ]
+        else:
+            time_units_dir = [
+                os.path.join(ts_dir, name)
+                for name in os.listdir(ts_dir)
+                if os.path.isdir(os.path.join(ts_dir, name))
+            ]
+        unit_files = [folder + "_units_info.json" for folder in time_units_dir]
+        attr_dir = os.path.join(data_root_dir, "attributes")
+        attr_file = os.path.join(attr_dir, "attributes.csv")
+        shape_dir = os.path.join(data_root_dir, "shapes")
+
         return collections.OrderedDict(
-            CAMELS_DIR=camels_db,
-            CAMELS_FLOW_DIR=flow_dir,
-            CAMELS_SM_DIR=sm_dir,
-            CAMELS_ET_DIR=et_dir,
-            CAMELS_FORCING_DIR=forcing_dir,
-            CAMELS_ATTR_DIR=attr_dir,
-            CAMELS_ATTR_KEY_LST=attr_key_lst,
-            CAMELS_GAUGE_FILE=gauge_id_file,
-            CAMELS_BASINS_SHP_DIR=camels_shp_files_dir,
+            DATA_DIR=data_root_dir,
+            TS_DIRS=time_units_dir,
+            ATTR_DIR=attr_dir,
+            ATTR_FILE=attr_file,
+            UNIT_FILES=unit_files,
+            SHAPE_DIR=shape_dir,
         )
 
     def download_data_source(self):
@@ -114,109 +131,216 @@ class SelfMadeHydroDataset(HydroDataset):
         print("We unzip all files now.")
 
     def read_site_info(self):
-        camels_file = self.data_source_description["CAMELS_GAUGE_FILE"]
-        return pd.read_csv(camels_file, sep=",", dtype={"gage_id": str})
+        camels_file = self.data_source_description["ATTR_FILE"]
+        attrs = access_fs.spec_path(camels_file, head=self.head)
+        return attrs[["basin_id", "area"]]
 
     def read_object_ids(self, object_params=None) -> np.array:
-        return self.camels_sites["gage_id"].values
+        return self.camels_sites["basin_id"].values
 
-    def read_target_cols(
-        self, object_ids=None, t_range_list=None, target_cols=None, **kwargs
-    ) -> np.array:
-        if target_cols is None:
-            return np.array([])
-        else:
-            nf = len(target_cols)
-        t_range_list = hydro_time.t_range_days(t_range_list)
-        nt = t_range_list.shape[0]
-        y = np.full([len(object_ids), nt, nf], np.nan)
-        streamflow_name = self.VAR_DICT["streamflow"]
-        time_name = self.VAR_DICT["time"]
-        for j in tqdm(
-            range(len(target_cols)), desc="Read streamflow data of CAMELS-CC"
-        ):
-            for k in tqdm(range(len(object_ids))):
-                # only one streamflow type: Q
-                flow_file = os.path.join(
-                    self.data_source_description["CAMELS_FLOW_DIR"],
-                    object_ids[k] + ".csv",
-                )
-                flow_data = pd.read_csv(flow_file, sep=",")
-                date = pd.to_datetime(flow_data[time_name]).values.astype(
-                    "datetime64[D]"
-                )
-                [c, ind1, ind2] = np.intersect1d(
-                    date, t_range_list, return_indices=True
-                )
-                y[k, ind2, j] = flow_data[streamflow_name].values[ind1]
-        return y
-
-    def read_relevant_cols(
+    def read_timeseries(
         self, object_ids=None, t_range_list: list = None, relevant_cols=None, **kwargs
-    ) -> Union[np.array, list]:
-        """3d data (site_num * time_length * var_num), time-series data"""
-        t_range_list = hydro_time.t_range_days(t_range_list)
-        nt = t_range_list.shape[0]
-        x = np.full([len(object_ids), nt, len(relevant_cols)], np.nan)
-        for k in tqdm(range(len(object_ids)), desc="Read forcing data of CAMELS-CC"):
-            forcing_file = os.path.join(
-                self.data_source_description["CAMELS_FORCING_DIR"],
-                object_ids[k] + "_lump_era5_land_forcing.txt",
-            )
-            forcing_data = pd.read_csv(forcing_file, sep=" ")
-            df_date = forcing_data[["Year", "Mnth", "Day"]]
-            df_date.columns = ["year", "month", "day"]
-            date = pd.to_datetime(df_date).values.astype("datetime64[D]")
+    ) -> dict:
+        """
+        Returns a dictionary containing data with different time scales.
 
-            [c, ind1, ind2] = np.intersect1d(date, t_range_list, return_indices=True)
-            for j in range(len(relevant_cols)):
-                if "evaporation" in relevant_cols[j]:
-                    # evaporation value are all negative (maybe upward flux is marked as negative)
-                    x[k, ind2, j] = (
-                        forcing_data[relevant_cols[j]].values[ind1] * -1 * 1e3
+        Parameters
+        ----------
+        object_ids : list, optional
+            List of object IDs. Defaults to None.
+        t_range_list : list, optional
+            List of time ranges. Defaults to None.
+        relevant_cols : list, optional
+            List of relevant columns. Defaults to None.
+        **kwargs : dict, optional
+            Additional keyword arguments.
+
+        Returns
+        -------
+        dict
+            A dictionary containing data with different time scales.
+        """
+        time_units = kwargs.get("time_units", ["1D"])
+        region = kwargs.get("region", None)
+        start0101_freq = kwargs.get("start0101_freq", False)
+
+        results = {}
+
+        for time_unit in time_units:
+            # whether to convert the time to UTC, for 1D time unit, default set False,
+            # and for 3h time unit, set True
+            offset_to_utc = time_unit == "3h"
+            if offset_to_utc:
+                basinoutlets_path = os.path.join(
+                    self.data_source_description["SHAPE_DIR"], "basinoutlets.shp"
+                )
+                try:
+                    offset_dict = calculate_basin_offsets(basinoutlets_path)
+                except:
+                    raise FileNotFoundError(
+                        f"basinoutlets.shp not found in {basinoutlets_path}."
                     )
-                # unit of prep and pet is m, tran them to mm
-                elif "precipitation" in relevant_cols[j]:
-                    prcp = forcing_data[relevant_cols[j]].values
-                    # there are a few negative values for prcp, set them 0
-                    prcp[prcp < 0] = 0.0
-                    x[k, ind2, j] = prcp[ind1] * 1e3
-                else:
-                    x[k, ind2, j] = forcing_data[relevant_cols[j]].values[ind1]
-        return x
+            ts_dir = next(
+                dir_path
+                for dir_path in self.data_source_description["TS_DIRS"]
+                if time_unit in dir_path
+            )
+            if start0101_freq:
+                t_range = generate_start0101_time_range(
+                    start_time=t_range_list[0],
+                    end_time=t_range_list[-1],
+                    freq=time_unit,
+                )
+            else:
+                t_range = pd.date_range(
+                    start=t_range_list[0], end=t_range_list[-1], freq=time_unit
+                )
+            nt = len(t_range)
+            x = np.full([len(object_ids), nt, len(relevant_cols)], np.nan)
 
-    def read_constant_cols(
+            for k in tqdm(
+                range(len(object_ids)), desc=f"Reading timeseries data with {time_unit}"
+            ):
+                prefix_ = "" if region is None else region + "_"
+                ts_file = os.path.join(
+                    ts_dir,
+                    prefix_ + object_ids[k] + ".csv",
+                )
+                if "s3://" in ts_file:
+                    with conf.FS.open(ts_file, mode="rb") as f:
+                        ts_data = pd.read_csv(f)
+                else:
+                    ts_data = pd.read_csv(ts_file)
+                date = pd.to_datetime(ts_data["time"]).values
+                if offset_to_utc:
+                    date = date - np.timedelta64(offset_dict[object_ids[k]], "h")
+                [_, ind1, ind2] = np.intersect1d(date, t_range, return_indices=True)
+
+                for j in range(len(relevant_cols)):
+                    tmp_ = self._read_timeseries_1basin1var(ts_data, relevant_cols[j])
+                    x[k, ind2, j] = tmp_[ind1]
+
+            results[time_unit] = x
+
+        return results
+
+    def _read_timeseries_1basin1var(self, ts_data, relevant_col):
+        if "precipitation" in relevant_col:
+            prcp = ts_data[relevant_col].values
+            prcp[prcp < 0] = 0.0
+            return prcp
+        elif relevant_col in ERA5LAND_ET_REALATED_VARS:
+            evap = -1 * ts_data[relevant_col].values
+            evap[evap < 0] = 0.0
+            return evap
+        elif relevant_col in MODIS_ET_PET_8D_VARS:
+            modis_values = ts_data[relevant_col].values
+            modis_dates = pd.to_datetime(ts_data["time"].values)
+            for idx, current_date in enumerate(modis_dates):
+                # Check if the date is prior to or on January 1st
+                if current_date.month == 1 and current_date.day == 1:
+                    if idx == 0:
+                        # First day is January 1st, no previous date to scale from
+                        continue
+                        # Get the previous date
+                    previous_date = modis_dates[idx - 1]
+                    # Calculate the number of days between the previous date and January 1st
+                    delta_days = (current_date - previous_date).days
+
+                    # Adjust the MODIS value based on the number of days between the previous date and January 1st
+                    if delta_days > 0:
+                        modis_values[idx - 1] = modis_values[idx - 1] * 8 / delta_days
+            # NOTE: MODIS ET values are ACTUALLY in 0.1mm/day, so we need to convert to mm/day
+            return modis_values * 0.1
+        else:
+            return ts_data[relevant_col].values
+
+    def read_attributes(
         self, object_ids=None, constant_cols=None, **kwargs
     ) -> np.array:
         """2d data (site_num * var_num), non-time-series data"""
-        raise NotImplementedError(
-            "Directly read attributes from nc file by read_attr_xrdataset."
-        )
+        attr_file = self.data_source_description["ATTR_FILE"]
+        if "s3://" in attr_file:
+            with conf.FS.open(attr_file, mode="rb") as f:
+                attrs = pd.read_csv(f, dtype={"basin_id": str})
+        else:
+            attrs = pd.read_csv(attr_file, dtype={"basin_id": str})
+        if object_ids is None:
+            if constant_cols is None:
+                return attrs
+            object_ids = attrs["basin_id"].values
+        if constant_cols is None:
+            constant_cols = attrs.columns.values
+        x = np.full([len(object_ids), len(constant_cols)], np.nan)
+        for k in range(len(object_ids)):
+            ind = attrs["basin_id"] == object_ids[k]
+            for j in range(len(constant_cols)):
+                x[k, j] = attrs[constant_cols[j]][ind].values
+        return x
 
-    def get_constant_cols(self) -> np.array:
+    def get_attributes_cols(self) -> np.array:
         """the constant cols in this data_source"""
-        data_folder = self.data_source_description["CAMELS_ATTR_DIR"]
-        files = np.sort(os.listdir(data_folder))
-        attr_types = []
-        for file_ in files:
-            file = os.path.join(data_folder, file_)
-            attr_tmp = pd.read_csv(file, sep=",", dtype={"gage_id": str})
-            attr_types = attr_types + attr_tmp.columns[1:].values.tolist()
-        return np.array(attr_types)
+        attr_file = self.data_source_description["ATTR_FILE"]
+        if "s3://" in attr_file:
+            with conf.FS.open(attr_file, mode="rb") as f:
+                attrs = pd.read_csv(f, dtype={"basin_id": str})
+        else:
+            attrs = pd.read_csv(attr_file, dtype={"basin_id": str})
+        attr_units = attrs.columns.values
+        return self._check_vars_in_unitsinfo(attr_units)
 
-    def get_relevant_cols(self) -> np.array:
+    def get_timeseries_cols(self) -> np.array:
         """the relevant cols in this data_source"""
-        forcing_dir = self.data_source_description["CAMELS_FORCING_DIR"]
-        forcing_file = os.path.join(forcing_dir, os.listdir(forcing_dir)[0])
-        forcing_tmp = pd.read_csv(forcing_file, sep="\s+", dtype={"gage_id": str})
-        return forcing_tmp.columns.values[4:]
+        ts_dirs = self.data_source_description["TS_DIRS"]
+        unit_files = self.data_source_description["UNIT_FILES"]
+        all_vars = {}
+        for time_unit in self.time_unit:
+            # Find the directory that corresponds to the current time unit
+            ts_dir = next(dir_path for dir_path in ts_dirs if time_unit in dir_path)
+            # Find the corresponding unit file
+            unit_file = next(file for file in unit_files if time_unit in file)
+            # Load the first CSV file in the directory to extract column names
+            if "s3://" in ts_dir:
+                ts_file = os.path.join(ts_dir, minio_file_list(ts_dir)[0])
+                with conf.FS.open(ts_file, mode="rb") as f:
+                    ts_tmp = pd.read_csv(f, dtype={"basin_id": str})
+            else:
+                ts_file = os.path.join(ts_dir, os.listdir(ts_dir)[0])
+                ts_tmp = pd.read_csv(ts_file, dtype={"basin_id": str})
+            # Get the relevant forcing units and validate against unit info
+            forcing_units = ts_tmp.columns.values[1:]
+            the_vars = self._check_vars_in_unitsinfo(forcing_units, unit_file)
+            # Map the variables to the corresponding time unit
+            all_vars[time_unit] = the_vars
+        return all_vars
 
-    def get_target_cols(self) -> np.array:
-        """the target cols in this data_source"""
-        return np.array(["streamflow"])
+    def _check_vars_in_unitsinfo(self, vars, unit_file=None):
+        """If a var is not recorded in a units_info file, we will not use it.
 
-    def cache_attributes_xrdataset(self):
-        """Convert all the attributes to a single dataframe
+        Parameters
+        ----------
+        vars : _type_
+            _description_
+
+        Returns
+        -------
+        _type_
+            _description_
+        """
+        if unit_file is None:
+            # For attributes, all the variables' units are same in all unit_info files
+            # hence, we just chose the first one
+            unit_file = self.data_source_description["UNIT_FILES"][0]
+        if "s3://" in unit_file:
+            with conf.FS.open(unit_file, mode="rb") as fp:
+                units_info = json.load(fp)
+        else:
+            units_info = hydro_file.unserialize_json(unit_file)
+        vars_final = [var_ for var_ in vars if var_ in units_info]
+        return np.array(vars_final)
+
+    def cache_attributes_xrdataset(self, region=None):
+        """Convert all the attributes to a single dataset
 
         Returns
         -------
@@ -225,219 +349,163 @@ class SelfMadeHydroDataset(HydroDataset):
         # NOTICE: although it seems that we don't use pint_xarray, we have to import this package
         import pint_xarray  # noqa: F401
 
-        attr_files = Path(self.data_source_description["CAMELS_ATTR_DIR"]).glob("*.csv")
-        dataframes = {}
-        for file_path in attr_files:
-            df = pd.read_csv(file_path, index_col="gage_id")
-            dataframes[file_path.stem] = df  # use stem as key
-
-        # merged all data
-        merged_data = pd.DataFrame()
-        for df in dataframes.values():
-            if merged_data.empty:
-                merged_data = df
-            else:
-                merged_data = pd.merge(merged_data, df, on="gage_id", how="outer")
-
+        df_attr = self.read_attributes()
+        df_attr.set_index("basin_id", inplace=True)
         # Mapping provided units to the variables in the datasets
-        units_dict = {
-            "p_mean": "mm/day",
-            "pet_mean": "mm/day",
-            "aet_mean": "mm/day",
-            "aridity": "dimensionless",
-            "p_seasonality": "dimensionless",
-            "high_prec_freq": "days/year",
-            "high_prec_dur": "day",
-            "high_prec_timing": "dimensionless",
-            "low_prec_freq": "days/year",
-            "low_prec_dur": "day",
-            "low_prec_timing": "dimensionless",
-            "frac_snow_daily": "dimensionless",
-            # Adding some additional units for other variables based on the provided units dict
-            "elev": "m",
-            "slope": "m/km",
-            # Geology data
-            "geol_class_1st": "dimensionless",
-            "geol_class_1st_frac": "dimensionless",
-            "geol_class_2nd": "dimensionless",
-            "geol_class_2nd_frac": "dimensionless",
-            "carb_rocks_frac": "dimensionless",
-            # Land Cover
-            "EvergreenNeedleleafTree": "dimensionless",
-            "EvergreenBroadleafTree": "dimensionless",
-            # ... other land cover variables ...
-            # Permeability and Porosity
-            "Permeability": "m^2",
-            "Porosity": "dimensionless",
-            # Root Depth
-            "root_depth_50": "m",
-            "root_depth_99": "m",
-            # Soil
-            "SNDPPT": "percent",
-            "CLYPPT": "percent",
-            # Topography
-            "Length": "m",
-            "Area": "km^2",
-            "FormFactor": "dimensionless",
-            "ShapeFactor": "dimensionless",
-            "CompactnessCoefficient": "dimensionless",
-            "CirculatoryRatio": "dimensionless",
-            "ElongationRatio": "dimensionless",
-        }
+        # For attributes, all the variables' units are same in all unit_info files
+        # hence, we just chose the first one
+        if "s3://" in self.data_source_description["UNIT_FILES"][0]:
+            with conf.FS.open(
+                self.data_source_description["UNIT_FILES"][0], mode="rb"
+            ) as fp:
+                units_dict = json.load(fp)
+        else:
+            units_dict = hydro_file.unserialize_json(
+                self.data_source_description["UNIT_FILES"][0]
+            )
 
-        # 转换字符串列为分类变量并记录分类映射
+        # Convert string columns to categorical variables and record categorical mappings
         categorical_mappings = {}
-        for column in merged_data.columns:
-            if merged_data[column].dtype == "object":
-                merged_data[column] = merged_data[column].astype("category")
+        for column in df_attr.columns:
+            if df_attr[column].dtype == "object":
+                df_attr[column] = df_attr[column].astype("category")
                 categorical_mappings[column] = dict(
-                    enumerate(merged_data[column].cat.categories)
+                    enumerate(df_attr[column].cat.categories)
                 )
-                merged_data[column] = merged_data[column].cat.codes
+                df_attr[column] = df_attr[column].cat.codes
 
         ds = xr.Dataset()
-        for column in merged_data.columns:
+        for column in df_attr.columns:
             attrs = {"units": units_dict.get(column, "unknown")}
             if column in categorical_mappings:
                 attrs["category_mapping"] = categorical_mappings[column]
 
             data_array = xr.DataArray(
-                data=merged_data[column].values,
+                data=df_attr[column].values,
                 dims=["basin"],
                 # we have set gage_id as index so that it won't be saved as numeric values
-                coords={"basin": merged_data.index.values.astype(str)},
+                coords={"basin": df_attr.index.values.astype(str)},
                 attrs=attrs,
             )
             ds[column] = data_array
 
-        # 将分类映射转换为字符串
+        # Convert categorical mappings to strings
         for column in ds.data_vars:
             if "category_mapping" in ds[column].attrs:
-                # 将字典转换为字符串
+                # Convert the dictionary to a string
                 mapping_str = str(ds[column].attrs["category_mapping"])
                 ds[column].attrs["category_mapping"] = mapping_str
-        return ds
+        prefix_ = "" if region is None else region + "_"
+        ds.to_netcdf(os.path.join(CACHE_DIR, f"{prefix_}attributes.nc"))
 
-    def cache_streamflow_xrdataset(self):
-        """Save all basins' streamflow data in a netcdf file in the cache directory"""
-        variables = self.get_target_cols()
-        basins = self.camels_sites["gage_id"].values
-        t_range = ["2014-01-01", "2022-01-01"]
-        times = [
-            hydro_time.t2str(tmp) for tmp in hydro_time.t_range_days(t_range).tolist()
-        ]
-        data = self.read_target_cols(
-            object_ids=basins,
-            t_range_list=t_range,
-            target_cols=variables,
-        )
+    def cache_timeseries_xrdataset(self, region=None, t_range=None, **kwargs):
+        """Save all timeseries data in separate NetCDF files for each time unit.
 
-        return xr.Dataset(
-            {
-                "streamflow": (
-                    ["basin", "time"],
-                    data.reshape([len(basins), len(times)])[:, :],
-                    {"units": self.streamflow_unit},
-                )
-            },
-            coords={
-                "basin": basins,
-                "time": pd.to_datetime(times),
-            },
-        )
+        Parameters
+        ----------
+        region : str, optional
+            A prefix used in cache file, by default None
+        t_range : list, optional
+            Time range for the data, by default ["1980-01-01", "2023-12-31"]
+        kwargs : dict, optional
+            batchsize -- Number of basins to process per batch, by default 100
+            time_units -- List of time units to process, by default None
+            start0101_freq -- for freq setting, if the start date is 01-01, set True, by default False
+        """
+        batchsize = kwargs.get("batchsize", 100)
+        time_units = kwargs.get("time_units", self.time_unit) or [
+            "1D"
+        ]  # Default to ["1D"] if not specified or if time_units is None
+        start0101_freq = kwargs.get("start0101_freq", False)
 
-    def cache_forcing_xrdataset(self):
-        """Save all daymet basin-forcing data in a netcdf file in the cache directory."""
-        variables = self.get_relevant_cols()
-        basins = self.camels_sites["gage_id"].values
-        t_range = ["2014-01-01", "2022-01-01"]
-        times = [
-            hydro_time.t2str(tmp) for tmp in hydro_time.t_range_days(t_range).tolist()
-        ]
-        data = self.read_relevant_cols(
-            object_ids=basins,
-            t_range_list=t_range,
-            relevant_cols=variables,
-        )
-        era5_land_units = {
-            "dewpoint_temperature_2m": "K",
-            "temperature_2m": "K",
-            "skin_temperature": "K",
-            "soil_temperature_level_1": "K",
-            "soil_temperature_level_2": "K",
-            "soil_temperature_level_3": "K",
-            "soil_temperature_level_4": "K",
-            "lake_bottom_temperature": "K",
-            "lake_ice_depth": "m",
-            "lake_ice_temperature": "K",
-            "lake_mix_layer_depth": "m",
-            "lake_shape_factor": "Dimensionless",
-            "lake_total_layer_temperature": "K",
-            "snow_albedo": "Dimensionless",
-            "snow_cover": "%",
-            "snow_density": "kg/m^3",
-            "snow_depth": "m",
-            "snow_depth_water_equivalent": "m",
-            "temperature_of_snow_layer": "K",
-            "skin_reservoir_content": "m",
-            "volumetric_soil_water_layer_1": "Dimensionless",
-            "volumetric_soil_water_layer_2": "Dimensionless",
-            "volumetric_soil_water_layer_3": "Dimensionless",
-            "volumetric_soil_water_layer_4": "Dimensionless",
-            "forecast_albedo": "Dimensionless",
-            "u_component_of_wind_10m": "m/s",
-            "v_component_of_wind_10m": "m/s",
-            "surface_pressure": "Pa",
-            "leaf_area_index_high_vegetation": "Dimensionless",
-            "leaf_area_index_low_vegetation": "Dimensionless",
-            "snowfall": "m",
-            "snowmelt": "m",
-            "surface_latent_heat_flux": "J/m^2",
-            "surface_net_solar_radiation": "J/m^2",
-            "surface_net_thermal_radiation": "J/m^2",
-            "surface_sensible_heat_flux": "J/m^2",
-            "surface_solar_radiation_downwards": "J/m^2",
-            "surface_thermal_radiation_downwards": "J/m^2",
-            # for evaporation and precipitation, we have trans m to mm when reading data
-            "evaporation_from_bare_soil": "mm",
-            "evaporation_from_open_water_surfaces_excluding_oceans": "mm",
-            "evaporation_from_the_top_of_canopy": "mm",
-            "evaporation_from_vegetation_transpiration": "mm",
-            "potential_evaporation": "mm",
-            "runoff": "m",
-            "snow_evaporation": "mm",
-            "sub_surface_runoff": "m",
-            "surface_runoff": "m",
-            "total_evaporation": "mm",
-            "total_precipitation": "mm",
-        }
+        variables = self.get_timeseries_cols()
+        basins = self.camels_sites["basin_id"].values
 
-        return xr.Dataset(
-            data_vars={
-                **{
-                    variables[i]: (
-                        ["basin", "time"],
-                        data[:, :, i],
-                        {"units": era5_land_units[variables[i]]},
+        # Define the generator function for batching
+        def data_generator(basins, batch_size):
+            for i in range(0, len(basins), batch_size):
+                yield basins[i : i + batch_size]
+
+        for time_unit in time_units:
+            if t_range is None:
+                if time_unit != "3h":
+                    t_range = ["1980-01-01", "2023-12-31"]
+                else:
+                    t_range = ["1980-01-01 01", "2023-12-31 22"]
+
+            # Generate the time range specific to the time unit
+            if start0101_freq:
+                times = (
+                    generate_start0101_time_range(
+                        start_time=t_range[0], end_time=t_range[-1], freq=time_unit
                     )
-                    for i in range(len(variables))
-                }
-            },
-            coords={
-                "basin": basins,
-                "time": pd.to_datetime(times),
-            },
-            attrs={"forcing_type": "era5land"},
-        )
+                    .strftime("%Y-%m-%d %H:%M:%S")
+                    .tolist()
+                )
+            else:
+                times = (
+                    pd.date_range(start=t_range[0], end=t_range[-1], freq=time_unit)
+                    .strftime("%Y-%m-%d %H:%M:%S")
+                    .tolist()
+                )
+            # Retrieve the correct units information for this time unit
+            unit_file = next(
+                file
+                for file in self.data_source_description["UNIT_FILES"]
+                if time_unit in file
+            )
+            if "s3://" in unit_file:
+                with conf.FS.open(unit_file, mode="rb") as fp:
+                    units_info = json.load(fp)
+            else:
+                units_info = hydro_file.unserialize_json(unit_file)
 
-    def cache_xrdataset(self):
+            for basin_batch in data_generator(basins, batchsize):
+                data = self.read_timeseries(
+                    object_ids=basin_batch,
+                    t_range_list=t_range,
+                    relevant_cols=variables[
+                        time_unit
+                    ],  # Ensure we use the right columns for the time unit
+                    time_units=[
+                        time_unit
+                    ],  # Pass the time unit to ensure correct data retrieval
+                    start0101_freq=start0101_freq,
+                )
+
+                dataset = xr.Dataset(
+                    data_vars={
+                        variables[time_unit][i]: (
+                            ["basin", "time"],
+                            data[time_unit][:, :, i],
+                            {"units": units_info[variables[time_unit][i]]},
+                        )
+                        for i in range(len(variables[time_unit]))
+                    },
+                    coords={
+                        "basin": basin_batch,
+                        "time": pd.to_datetime(times),
+                    },
+                )
+
+                # Save the dataset to a NetCDF file for the current batch and time unit
+                prefix_ = "" if region is None else region + "_"
+                batch_file_path = os.path.join(
+                    CACHE_DIR,
+                    f"{prefix_}timeseries_{time_unit}_batch_{basin_batch[0]}_{basin_batch[-1]}.nc",
+                )
+                dataset.to_netcdf(batch_file_path)
+
+                # Release memory by deleting the dataset
+                del dataset
+                del data
+
+    def cache_xrdataset(self, region=None, t_range=None, time_units=None):
         """Save all data in a netcdf file in the cache directory"""
-        ds_attr = self.cache_attributes_xrdataset()
-        ds_attr.to_netcdf(os.path.join(CACHE_DIR, "camelscc_attributes.nc"))
-        ds_streamflow = self.cache_streamflow_xrdataset()
-        ds_forcing = self.cache_forcing_xrdataset()
-        ds = xr.merge([ds_streamflow, ds_forcing])
-        ds.to_netcdf(os.path.join(CACHE_DIR, "camelscc_timeseries.nc"))
+        self.cache_attributes_xrdataset(region=region)
+        self.cache_timeseries_xrdataset(
+            region=region, t_range=t_range, time_units=time_units
+        )
 
     def read_ts_xrdataset(
         self,
@@ -445,192 +513,98 @@ class SelfMadeHydroDataset(HydroDataset):
         t_range: list = None,
         var_lst: list = None,
         **kwargs,
-    ):
-        """read time-series xarray dataset"""
+    ) -> dict:
+        """
+        Read time-series xarray dataset from multiple NetCDF files and organize them by time units.
+
+        Parameters:
+        ----------
+        gage_id_lst: list - List of gage IDs to select.
+        t_range: list - List of two elements [start_time, end_time] to select time range.
+        var_lst: list - List of variables to select.
+        **kwargs: Additional arguments.
+
+        Returns:
+        ----------
+        dict: A dictionary where each key is a time unit and each value is an xarray.Dataset containing the selected gage IDs, time range, and variables.
+        """
+        region = kwargs.get("region", None)
+        time_units = kwargs.get("time_units", self.time_unit)
         if var_lst is None:
             return None
-        try:
-            ts = xr.open_dataset(os.path.join(CACHE_DIR, "camelscc_timeseries.nc"))
-        except FileNotFoundError:
-            self.cache_xrdataset()
-            ts = xr.open_dataset(os.path.join(CACHE_DIR, "camelscc_timeseries.nc"))
-        all_vars = ts.data_vars
-        if any(var not in ts.variables for var in var_lst):
-            raise ValueError(f"var_lst must all be in {all_vars}")
-        return ts[var_lst].sel(basin=gage_id_lst, time=slice(t_range[0], t_range[1]))
+
+        # Initialize a dictionary to hold datasets for each time unit
+        datasets_by_time_unit = {}
+
+        prefix_ = "" if region is None else region + "_"
+
+        for time_unit in time_units:
+            # Collect batch files specific to the current time unit
+            batch_files = [
+                os.path.join(CACHE_DIR, f)
+                for f in os.listdir(CACHE_DIR)
+                if re.match(
+                    rf"^{prefix_}timeseries_{time_unit}_batch_[A-Za-z0-9_]+_[A-Za-z0-9_]+\.nc$",
+                    f,
+                )
+            ]
+
+            if not batch_files:
+                # Cache the data if no batch files are found for the current time unit
+                self.cache_timeseries_xrdataset(region=region, **kwargs)
+                batch_files = [
+                    os.path.join(CACHE_DIR, f)
+                    for f in os.listdir(CACHE_DIR)
+                    if re.match(
+                        rf"^{prefix_}timeseries_{time_unit}_batch_[A-Za-z0-9_]+_[A-Za-z0-9_]+\.nc$",
+                        f,
+                    )
+                ]
+
+            selected_datasets = []
+
+            for batch_file in batch_files:
+                ds = xr.open_dataset(batch_file)
+                all_vars = ds.data_vars
+                if any(var not in ds.variables for var in var_lst):
+                    raise ValueError(f"var_lst must all be in {all_vars}")
+                if valid_gage_ids := [
+                    gid for gid in gage_id_lst if gid in ds["basin"].values
+                ]:
+                    ds_selected = ds[var_lst].sel(
+                        basin=valid_gage_ids, time=slice(t_range[0], t_range[1])
+                    )
+                    selected_datasets.append(ds_selected)
+
+                ds.close()  # Close the dataset to free memory
+
+            # If any datasets were selected, concatenate them along the 'basin' dimension
+            if selected_datasets:
+                datasets_by_time_unit[time_unit] = xr.concat(
+                    selected_datasets, dim="basin"
+                )
+            else:
+                datasets_by_time_unit[time_unit] = xr.Dataset()
+
+        return datasets_by_time_unit
 
     def read_attr_xrdataset(self, gage_id_lst=None, var_lst=None, **kwargs):
-        """read attribute pandas feather"""
+        region = kwargs.get("region", None)
+
+        prefix_ = "" if region is None else region + "_"
         if var_lst is None or len(var_lst) == 0:
             return None
         try:
-            attr = xr.open_dataset(os.path.join(CACHE_DIR, "camelscc_attributes.nc"))
+            attr = xr.open_dataset(os.path.join(CACHE_DIR, f"{prefix_}attributes.nc"))
         except FileNotFoundError:
-            self.cache_xrdataset()
-            attr = xr.open_dataset(os.path.join(CACHE_DIR, "camelscc_attributes.nc"))
+            self.cache_xrdataset(time_units=self.time_unit)
+            attr = xr.open_dataset(os.path.join(CACHE_DIR, f"{prefix_}attributes.nc"))
         return attr[var_lst].sel(basin=gage_id_lst)
 
     def read_area(self, gage_id_lst=None):
         """read area of each basin/unit"""
-        return self.read_attr_xrdataset(gage_id_lst, ["Area"])
+        return self.read_attr_xrdataset(gage_id_lst, ["area"])
 
     def read_mean_prcp(self, gage_id_lst=None):
         """read mean precipitation of each basin/unit"""
-        return self.read_attr_xrdataset(gage_id_lst, ["p_mean"])
-
-
-class HydroBasins(HydroData):
-    def __init__(self, data_path):
-        super().__init__(data_path)
-
-    def get_name(self):
-        return " HydroBasins"
-
-    def set_data_source_describe(self):
-        self.data_source = "MINIO"
-        self.data_source_bucket = "basins-origin"
-
-    def read_BA_xrdataset(self, gage_id_lst: list, var_lst: list, path):
-        attr = access_fs.spec_path(path, head="minio")
-        if "all" in var_lst:
-            return attr.sel(basin=gage_id_lst)
-        return attr[var_lst].sel(basin=gage_id_lst)
-
-    def read_MP(self, gage_id_lst, path):
-        mean_prep = access_fs.spec_path(path, head="minio")
-        return mean_prep["pet_mm_syr"].sel(basin=gage_id_lst)
-
-    def merge_nc_minio_datasets(self, folder_path, basin, var_lst, gap="3h"):
-        datasets = []
-        basins = []
-
-        file_lst = self.read_file_lst(folder_path)
-
-        for file_path in file_lst:
-            basin_id = file_path.split("_")[-1].split(".")[0]
-            if basin_id in basin:
-                basins.append(basin_id)
-                if "ftproot" in file_path:
-                    ds = access_fs.spec_path(file_path)
-                else:
-                    ds = access_fs.spec_path(file_path, head="minio")
-                if gap != "1h":
-                    ds = self.aggregate_dataset(ds, gap, basin_id)
-                    # ds = self.aggeragate_dataset(ds, gap)
-                # ds = ds.assign_coords({"basin": basin_id})
-                # ds = ds.expand_dims("basin")
-                datasets.append(ds[var_lst])
-
-        return xr.concat(datasets, dim="basin")
-
-    # def aggeragate_dataset(self, ds: xr.Dataset, gap):
-    #     df_res = ds.to_dataframe()
-    #     if "total_evaporation_hourly" in df_res.columns:
-    #         df_res["total_evaporation_hourly"] = (
-    #             df_res["total_evaporation_hourly"].resample(gap, origin="start").sum()
-    #         )
-    #         df_res["total_evaporation_hourly"] *= -1000
-    #         df_res["total_precipitation_hourly"] = (
-    #             df_res["total_precipitation_hourly"].resample(gap, origin="start").sum()
-    #         )
-    #         df_res["total_precipitation_hourly"] *= 1000
-    #     elif "gpm_tp" in df_res.columns:
-    #         df_res["gpm_tp"] = df_res["gpm_tp"].resample(gap, origin="start").sum()
-    #     df_res["streamflow"] = df_res["streamflow"].resample(gap, origin="start").sum()
-    #     df_res = df_res.resample(gap).mean()
-    #     return xr.Dataset.from_dataframe(df_res)
-
-    def aggregate_dataset(self, ds: xr.Dataset, gap, basin_id):
-        if gap == "3h":
-            gap = 3
-            start_times = [2, 5, 8, 11, 14, 17, 20, 23]
-            end_times = [1, 4, 7, 10, 13, 16, 19, 22]
-            time_index = ds.indexes["time"]
-
-            # 修剪开始时间
-            while time_index[0].hour not in start_times:
-                ds = ds.isel(time=slice(1, None))
-                time_index = ds.indexes["time"]
-
-            # 修剪结束时间
-            while time_index[-1].hour not in end_times:
-                ds = ds.isel(time=slice(None, -1))
-                time_index = ds.indexes["time"]
-
-        df_res = ds.to_dataframe().reset_index()
-        df_res.set_index("time", inplace=True)
-
-        numeric_cols = df_res.select_dtypes(include=[np.number]).columns
-        aggregated_data = {}
-        sm_surface_data = []
-        sm_rootzone_data = []
-
-        for col in numeric_cols:
-            if col in ["sm_surface", "sm_rootzone"]:
-                continue
-
-            data = df_res[col].values
-            aggregated_values = []
-            for start in range(0, len(data), gap):
-                chunk = data[start : start + gap]
-                if np.isnan(chunk).any():
-                    aggregated_values.append(np.nan)
-                else:
-                    aggregated_values.append(np.sum(chunk))
-
-            aggregated_times = df_res.index[gap - 1 :: gap][: len(aggregated_values)]
-            aggregated_data[col] = xr.DataArray(
-                np.array(aggregated_values).reshape(-1, 1),
-                dims=["time", "basin"],
-                coords={"time": aggregated_times, "basin": [basin_id]},
-            )
-
-        # 处理 sm_surface 和 sm_rootzone 变量
-        if "sm_surface" in df_res.columns:
-            sm_surface_data = df_res["sm_surface"].iloc[gap - 1 :: gap].values
-            aggregated_data["sm_surface"] = xr.DataArray(
-                sm_surface_data.reshape(-1, 1),
-                dims=["time", "basin"],
-                coords={"time": aggregated_times, "basin": [basin_id]},
-            )
-
-        if "sm_rootzone" in df_res.columns:
-            sm_rootzone_data = df_res["sm_rootzone"].iloc[gap - 1 :: gap].values
-            aggregated_data["sm_rootzone"] = xr.DataArray(
-                sm_rootzone_data.reshape(-1, 1),
-                dims=["time", "basin"],
-                coords={"time": aggregated_times, "basin": [basin_id]},
-            )
-
-        if "total_evaporation_hourly" in df_res.columns:
-            aggregated_data["total_precipitation_hourly"] *= 1000
-            aggregated_data["total_evaporation_hourly"] *= -1000
-
-        result_ds = xr.Dataset(
-            aggregated_data,
-            coords={"time": aggregated_times, "basin": [basin_id]},
-        )
-
-        result_ds = result_ds.transpose("basin", "time")
-
-        return result_ds
-
-    def read_grid_data(self, file_lst, basin):
-        def get_basin_id(file_path):
-            return file_path.split("_")[-1].split(".")[0]
-
-        matched_path = next(
-            (path for path in file_lst if get_basin_id(path) in basin), None
-        )
-
-        if matched_path:
-            grid_data = access_fs.spec_path(matched_path, head="minio")
-            return grid_data
-
-        return None
-
-    def read_file_lst(self, folder_path):
-        if "ftproot" in folder_path:
-            return glob.glob(folder_path + "/*")[1:]
-        url_path = "s3://" + folder_path
-        return conf.FS.glob(url_path + "/**")[1:]
+        return self.read_attr_xrdataset(gage_id_lst, ["pre_mm_syr"])

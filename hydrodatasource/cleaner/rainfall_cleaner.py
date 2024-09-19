@@ -2,7 +2,7 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-19 14:00:06
 LastEditors: liutiaxqabs 1498093445@qq.com
-LastEditTime: 2024-04-22 17:56:18
+LastEditTime: 2024-06-21 12:13:04
 FilePath: /hydrodatasource/hydrodatasource/cleaner/rainfall_cleaner.py
 Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
 '''
@@ -347,7 +347,10 @@ class RainfallAnalyzer:
             if file.endswith(".csv"):
                 file_path = os.path.join(input_folder, file)
                 data = pd.read_csv(file_path)
-                data["TM"] = pd.to_datetime(data["TM"])
+                data["TM"] = pd.to_datetime(data["TM"], errors='coerce')
+                #data["TM"] = pd.to_datetime(data["TM"], format="%Y-%m-%d %H:%M:%S.%f", errors='coerce')
+                data["DRP"] = data["DRP"].astype(float)
+
                 data["ID"] = file.replace(".csv", "")
                 for year, group in data.groupby(data["TM"].dt.year):
                     drp_sum = group["DRP"].sum()

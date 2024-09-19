@@ -13,7 +13,11 @@ import xarray as xr
 import pint
 import pytest
 
-from hydrodatasource.utils.utils import streamflow_unit_conv
+from hydrodatasource.utils.utils import (
+    streamflow_unit_conv,
+    minio_file_list,
+    is_minio_folder,
+)
 
 ureg = pint.UnitRegistry()
 ureg.force_ndarray_like = True  # or ureg.force_ndarray = True
@@ -224,3 +228,16 @@ def test_streamflow_unit_conv_np_pd(streamflow, area, target_unit, inverse, expe
 def test_streamflow_unit_conv_invalid_input(streamflow, area, target_unit, inverse):
     with pytest.raises(TypeError):
         streamflow_unit_conv(streamflow, area, target_unit, inverse)
+
+
+def test_minio_file_list():
+    minio_folder_url = "s3://basins-interim/timeseries/1D"
+    file_list = minio_file_list(minio_folder_url)
+    print(file_list)
+
+
+def test_is_minio_folder():
+    minio_folder_url = "s3://basins-interim/timeseries/1D"
+    print(is_minio_folder(minio_folder_url))
+    minio_folder_url = "s3://basins-interim/timeseries/1D_units_info.json"
+    print(is_minio_folder(minio_folder_url))
