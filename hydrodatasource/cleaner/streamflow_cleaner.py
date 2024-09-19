@@ -315,7 +315,10 @@ class StreamflowCleaner(Cleaner):
                 end_date = date + pd.DateOffset(hours=half_window)
 
             # 计算窗口内的平均值
-            window_data = streamflow_data[start_date:end_date]
+            try:
+                window_data = streamflow_data[start_date:end_date]
+            except KeyError:
+                print('WTF')
             smoothed_value = window_data.mean()
             smoothed_data.loc[date] = smoothed_value
 
@@ -384,8 +387,17 @@ class StreamflowCleaner(Cleaner):
 
     def anomaly_process(self, methods=None):
         super().anomaly_process(methods)
+        if "INQ" not in self.origin_df.columns:
+            if 'q' in self.origin_df.columns:
+                self.origin_df = self.origin_df.rename(columns={'q':'INQ'})
+            elif "inq" in self.origin_df.columns:
+                self.origin_df = self.origin_df.rename(columns={'inq':'INQ'})
         self.origin_df["INQ"] = pd.to_numeric(self.origin_df["INQ"], errors="coerce")
+        if "TM" not in self.origin_df.columns:
+            if "tm" in self.origin_df.columns:
+                self.origin_df = self.origin_df.rename(columns={'tm':'TM'})
         self.origin_df["TM"] = pd.to_datetime(self.origin_df["TM"], errors="coerce")
+        self.origin_df = self.origin_df.sort_values(by="TM")
         streamflow_data = self.origin_df["INQ"].copy()
         # 使用插值填充缺失值
         streamflow_data = streamflow_data.interpolate().fillna(0)
@@ -675,4 +687,4 @@ class StreamflowBacktrack:
                 # 插值平衡
                 insert_data = self.insert_inq(nonan_data, file, output_folder)
                 # 绘图
-                
+
