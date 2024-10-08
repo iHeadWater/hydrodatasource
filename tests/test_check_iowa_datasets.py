@@ -158,8 +158,6 @@ def test_check_iowa_pp_data():
         else:
             continue
         name = file.split('_')[-1].split('.')[0]
-        if 'year' in prcp_df.columns:
-            prcp_df = prcp_df.drop(columns=['year'])
         prcp_df = prcp_df.resample('h').sum().dropna().reset_index()
         prcp_df['station_id'] = np.repeat(name, len(prcp_df))
         total_prcp_df = pd.concat([total_prcp_df, prcp_df])
