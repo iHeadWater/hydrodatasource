@@ -1,5 +1,6 @@
+import glob
 import os
-
+import scipy
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -69,19 +70,21 @@ def test_download_from_usgs():
     '''
     camels_hourly_csvs = '/ftproot/camels_hourly/data/usgs_streamflow_csv/'
     csv_paths = os.listdir(camels_hourly_csvs)
-    minio_csv_paths = FS.glob('s3://basins-origin/basin_shapefiles/**')[1:]
-    hourly_basin_ids = [path.split('-')[0] for path in csv_paths]
-    minio_stcds = [csv.split('_')[-1].split('.')[0] for csv in minio_csv_paths]
-    empty_stcds = [stcd for stcd in hourly_basin_ids if stcd not in minio_stcds]
     '''
+    minio_csv_paths = FS.glob('s3://basins-origin/basin_shapefiles/**')[1:]
+    # hourly_basin_ids = [path.split('-')[0] for path in csv_paths]
+    minio_stcds = [csv.split('_')[-1].split('.')[0] for csv in minio_csv_paths]
+    # empty_stcds = [stcd for stcd in hourly_basin_ids if stcd not in minio_stcds]
     # usgs_basins = gpd.read_file("/ftproot/usgs_camels_hourly_flowdb_1373/concat_flow_camels_1373.zip")
     # first_empty_stcds = usgs_basins['basin_id'].to_numpy()
-    usgs_gages = gpd.read_file("/ftproot/usgs_camels_hourly_flowdb_1373/concat_usa_usgs_all.shp")
-    empty_stcds = usgs_gages['GAGE_ID'].to_numpy()
+    # usgs_gages = gpd.read_file("/ftproot/usgs_camels_hourly_flowdb_1373/concat_usa_usgs_all.shp")
+    # empty_stcds = usgs_gages['GAGE_ID'].to_numpy()
     # empty_stcds = np.union1d(first_empty_stcds, second_empty_stcds)
-    for site in empty_stcds:
-        site_path = f'/ftproot/usgs_camels_hourly_flowdb_1373/zq_USA_usgs_{site}.csv'
-        if not os.path.exists(site_path):
+    for i in range(len(minio_csv_paths)):
+        site = minio_stcds[i]
+        country = minio_csv_paths[i].split('_')[2]
+        site_path = f'/ftproot/usgs_minio_basins/zq_USA_usgs_{site}.csv'
+        if (not os.path.exists(site_path)) & (country == 'USA'):
             try:
                 site_df = nwis.get_record(sites=site, service='iv', start='2015-01-01')
             except requests.exceptions.ConnectionError:
@@ -90,3 +93,66 @@ def test_download_from_usgs():
                 continue
             site_df.to_csv(site_path)
 
+
+def test_dload_usgs_prcp_stations():
+    import re
+    with open('usgs_prcp_stations.txt', 'r') as fp:
+        stations_txt = fp.read()
+    sta_list = re.findall('\d{8,}', stations_txt)
+    # site_base_df = pd.DataFrame()
+    for sta_id in sta_list:
+        '''
+        try:
+            site_basin_df = nwis.get_record(sites=sta_id, service='site')
+        except ValueError:
+            site_basin_df = pd.DataFrame()
+        site_base_df = pd.concat([site_base_df, site_basin_df])
+        '''
+        site_path = f'/ftproot/usgs_prcp_stations/pp_USA_usgs_{sta_id}.csv'
+        if not os.path.exists(site_path):
+            try:
+                site_df = nwis.get_record(sites=sta_id, service='iv', start='2000-01-01')
+            except requests.exceptions.ConnectionError:
+                continue
+            except requests.exceptions.JSONDecodeError:
+                continue
+            except requests.exceptions.ChunkedEncodingError:
+                continue
+            site_df.to_csv(site_path)
+    # site_base_df.to_csv('usgs_prcp_stations_base.csv')
+
+
+def test_gen_usgs_prcp_shp():
+    csv_df = pd.read_csv('usgs_prcp_stations_base.csv')
+    gpd_csv_df = gpd.GeoDataFrame(csv_df, geometry=gpd.points_from_xy(csv_df['dec_long_va'], csv_df['dec_lat_va']))
+    basin_shp_gdf = gpd.read_file('iowa_all_locs/basins_shp.shp', engine='pyogrio')
+    camels_gpd_csv_df = gpd.sjoin(gpd_csv_df, basin_shp_gdf)
+    camels_gpd_csv_df.to_file('usgs_prcp_shp/camels_usgs_prcp_stations.shp')
+
+
+def test_read_ghcnh_data():
+    ghcnh_files = glob.glob('/ftproot/ghcnh/*.psv', recursive=True)
+    lon_list = []
+    lat_list = []
+    error_list = []
+    for file in ghcnh_files:
+        try:
+            ghcnh_df = pd.read_csv(file, engine='c', delimiter='|')
+        except pd.errors.ParserError:
+            error_list.append(file)
+            continue
+        if len(ghcnh_df) > 0:
+            lon = ghcnh_df['Longitude'][0]
+            lat = ghcnh_df['Latitude'][0]
+            lon_list.append(lon)
+            lat_list.append(lat)
+    print(error_list)
+    gpd_pos_df = gpd.GeoDataFrame(geometry=gpd.points_from_xy(lon_list, lat_list))
+    gpd_pos_df.to_file('ghcnh_stations.shp')
+
+
+def test_intersect_ghcnh_data():
+    ghcnh_locs = gpd.read_file('ghcnh_locs/ghcnh_stations.shp').set_crs(4326)
+    basin_shps = gpd.read_file('iowa_all_locs/basins_shp.shp')
+    intersection = gpd.sjoin(ghcnh_locs, basin_shps)
+    intersection.to_file('ghcnh_locs/ghcnh_intersect_basins.shp')
