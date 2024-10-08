@@ -135,6 +135,7 @@ def test_check_iowa_pp_data():
                 prcp_df[pc_max_count_col] = prcp_df.apply(fill_na_with_other_cols, args=(pc_max_count_col,), axis=1)
                 prcp_df['year'] = df.index.year
                 prcp_df = prcp_df.groupby('year').apply(calculate_differences, pc_max_count_col).drop('year', axis=1)
+                prcp_df = prcp_df.reset_index().drop(columns=['year']).set_index('utc_valid')
             else:
                 prcp_df = prcp_df[prcp_df.columns[prcp_df.columns.str.startswith('PP') | prcp_df.columns.str.startswith('PR')]]
                 prcp_df[pc_max_count_col] = prcp_df.apply(fill_na_with_other_cols, args=(pc_max_count_col,), axis=1)
