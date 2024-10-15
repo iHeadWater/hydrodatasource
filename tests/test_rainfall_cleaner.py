@@ -2,7 +2,7 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-05-28 10:24:16
 LastEditors: liutiaxqabs 1498093445@qq.com
-LastEditTime: 2024-06-22 10:40:23
+LastEditTime: 2024-09-27 16:04:32
 FilePath: /hydrodatasource/tests/test_rainfall_cleaner.py
 Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
 '''
@@ -45,29 +45,30 @@ def test_anomaly_process():
 def test_basins_polygon_mean():
     # 测试泰森多边形平均值，碧流河为例。测试结果见 /ftproot/tests_stations_anomaly_detection/plot
     basins_mean = RainfallAnalyzer(
-        stations_csv_path="/ftproot/basins-origin/basins_pp_stations/20600340_stations.csv",# 站点表，其中ID列带有前缀‘pp_’
-        shp_folder="/ftproot/basins-origin/basins_shp/20600340/",
-        rainfall_data_folder="/ftproot/basins-origin/basins_songliao_pp_origin_data/20600340/",
-        output_folder="/ftproot/basins-origin/basins_rainfall_mean/",
-        output_log="/ftproot/basins-origin/basins_rainfall_mean/plot/summary_log.txt",
-        output_plot="/ftproot/basins-origin/basins_rainfall_mean/plot/",
-        lower_bound=200,
-        upper_bound=2000,
+        stations_csv_path="/ftproot/basins-origin/basins_pp_stations/21401550_stations.csv",# 站点表，其中ID列带有前缀‘pp_’
+        shp_folder="/ftproot/basins-origin/basins_shp/21401550/",
+        rainfall_data_folder="/ftproot/basins-origin/basins_songliao_pp_origin_available_data/21401550/",
+        output_folder="/ftproot/basins-origin/basins_rainfall_mean_available/",
+        output_log="/ftproot/basins-origin/basins_rainfall_mean_available/plot/summary_log.txt",
+        output_plot="/ftproot/basins-origin/basins_rainfall_mean_available/plot/",
+        lower_bound=0,
+        upper_bound=20000,
     )
     basins_mean.basins_polygon_mean()
 
 
 def test_basins_polygon_mean_folder():
     # 设置基础路径
+    
     base_shp_folder = "/ftproot/basins-origin/basins_shp/"
     base_stations_csv_folder = "/ftproot/basins-origin/basins_pp_stations/"
-    base_rainfall_data_folder = "/ftproot/basins-origin/basins_songliao_pp_origin_data/"
-    output_folder = "/ftproot/basins-origin/basins_rainfall_mean/"
+    base_rainfall_data_folder = "/ftproot/basins-origin/basins_songliao_pp_origin_available_data/"
+    output_folder = "/ftproot/basins-origin/basins_rainfall_mean_available/"
     output_log = os.path.join(output_folder, "plot", "summary_log.txt")
     output_plot = os.path.join(output_folder, "plot")
 
     # 获取shp_folder目录下的所有文件夹名称并排序
-    subfolders = sorted([f.name for f in os.scandir(base_shp_folder) if f.is_dir()])
+    subfolders = sorted([f.name for f in os.scandir(base_rainfall_data_folder) if f.is_dir()])
 
     # 遍历所有文件夹并运行 basins_polygon_mean
     for subfolder in tqdm(subfolders, desc="Processing basins"):

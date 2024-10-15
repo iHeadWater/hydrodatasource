@@ -2,7 +2,7 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-19 14:00:06
 LastEditors: liutiaxqabs 1498093445@qq.com
-LastEditTime: 2024-06-21 12:13:04
+LastEditTime: 2024-09-27 15:12:59
 FilePath: /hydrodatasource/hydrodatasource/cleaner/rainfall_cleaner.py
 Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
 '''
@@ -348,14 +348,14 @@ class RainfallAnalyzer:
                 file_path = os.path.join(input_folder, file)
                 data = pd.read_csv(file_path)
                 data["TM"] = pd.to_datetime(data["TM"], errors='coerce')
-                #data["TM"] = pd.to_datetime(data["TM"], format="%Y-%m-%d %H:%M:%S.%f", errors='coerce')
+                data["TM"] = pd.to_datetime(data["TM"], format="%Y-%m-%d %H:%M:%S.%f", errors='coerce')
                 data["DRP"] = data["DRP"].astype(float)
 
                 data["ID"] = file.replace(".csv", "")
                 for year, group in data.groupby(data["TM"].dt.year):
                     drp_sum = group["DRP"].sum()
                     if self.lower_bound <= drp_sum <= self.upper_bound:
-                        # print(f"File {file} contains valid data for year {year} with DRP sum {drp_sum}")
+                        print(f"File {file} contains valid data for year {year} with DRP sum {drp_sum}")
                         filtered_data_list.append(group)
         if filtered_data_list:
             return pd.concat(filtered_data_list, ignore_index=True)
@@ -399,6 +399,7 @@ class RainfallAnalyzer:
         gdf_stations = gdf_stations.to_crs(basin.crs)
         stations_within_basin = sjoin(gdf_stations, basin, predicate="within")
         print(f"Found {len(stations_within_basin)} stations within the basin")
+        print(stations_within_basin)
         return stations_within_basin
 
     def calculate_voronoi_polygons(self, stations, basin):
@@ -632,8 +633,12 @@ class RainfallAnalyzer:
 
             # 筛选符合条件的每年站点数据
             yearly_stations = yearly_data["ID"].unique()
+            print(yearly_stations)
             valid_stations = self.process_stations(stations_df, basin)
+            print(valid_stations["ID"])
             valid_stations = valid_stations[valid_stations["ID"].isin(yearly_stations)]
+            print("11111111111111111111111111")
+            print(valid_stations.head())
 
             if valid_stations.empty:
                 print(
@@ -754,24 +759,3 @@ class RainfallAnalyzer:
             f.write(all_anomalies.to_string(index=False))
 
         print(f"异常数据已保存到 {output_file}")
-
-    # 添加空间一致性检验功能
-    def spatial_consistency(self):
-        """
-        主函数，执行整个数据处理流程。
-
-        参数：
-        stations_csv_path - 站点信息CSV文件路径。
-        shp_folder - 流域shapefile文件夹路径。
-        rainfall_data_folder - 降雨数据文件夹路径。
-        output_folder - 输出文件夹路径。
-        """
-        self.lower_bound = -1
-        self.upper_bound = 50000
-        filtered_data = self.filter_and_save_csv()
-        for shp_file in os.listdir(self.shp_folder):
-            if shp_file.endswith(".shp"):
-                basin_shp_path = os.path.join(self.shp_folder, shp_file)
-                #########################################################
-                # 以下是空间一致性检验的代码
-                #########################################################
