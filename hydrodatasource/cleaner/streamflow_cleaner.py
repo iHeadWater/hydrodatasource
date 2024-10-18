@@ -716,6 +716,6 @@ class StreamflowBacktrack:
                 # 去除反推异常值
                 nonan_data = self.delete_nan_inq(back_data, file, output_folder)
                 # 插值平衡
-                #insert_data = self.insert_inq(nonan_data, file, output_folder)
+                insert_data = self.insert_inq(nonan_data, file, output_folder)
                 # 绘图
 
