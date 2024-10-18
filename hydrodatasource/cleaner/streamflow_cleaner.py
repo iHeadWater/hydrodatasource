@@ -2,7 +2,7 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-19 14:00:16
 LastEditors: liutiaxqabs 1498093445@qq.com
-LastEditTime: 2024-10-11 13:34:26
+LastEditTime: 2024-10-18 18:49:24
 FilePath: /hydrodatasource/hydrodatasource/cleaner/streamflow_cleaner.py
 Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
 '''
@@ -316,7 +316,10 @@ class StreamflowCleaner(Cleaner):
                 end_date = date + pd.DateOffset(hours=half_window)
 
             # 计算窗口内的平均值
-            window_data = streamflow_data[start_date:end_date]
+            try:
+                window_data = streamflow_data[start_date:end_date]
+            except KeyError:
+                print('WTF')
             smoothed_value = window_data.mean()
             smoothed_data.loc[date] = smoothed_value
 
@@ -390,8 +393,17 @@ class StreamflowCleaner(Cleaner):
 
     def anomaly_process(self, methods=None):
         super().anomaly_process(methods)
+        if "INQ" not in self.origin_df.columns:
+            if 'q' in self.origin_df.columns:
+                self.origin_df = self.origin_df.rename(columns={'q':'INQ'})
+            elif "inq" in self.origin_df.columns:
+                self.origin_df = self.origin_df.rename(columns={'inq':'INQ'})
         self.origin_df["INQ"] = pd.to_numeric(self.origin_df["INQ"], errors="coerce")
+        if "TM" not in self.origin_df.columns:
+            if "tm" in self.origin_df.columns:
+                self.origin_df = self.origin_df.rename(columns={'tm':'TM'})
         self.origin_df["TM"] = pd.to_datetime(self.origin_df["TM"], errors="coerce")
+        self.origin_df = self.origin_df.sort_values(by="TM")
         streamflow_data = self.origin_df["INQ"].copy()
         # 使用插值填充缺失值
         streamflow_data = streamflow_data.interpolate().fillna(0)
@@ -697,44 +709,13 @@ class StreamflowBacktrack:
                 if not os.path.exists(output_folder):
                     os.makedirs(output_folder)
                 # Process each file step by step
-                try:
-                    # 去除库容异常
-                    # cleaned_data = self.clean_W(file_path, output_folder)
-                    pass
-                except Exception as e:
-                    print(f"Error in clean_W for {file}: {e}")
-                    continue  # 跳过当前文件并继续处理下一个文件
+                # 去除库容异常
+                cleaned_data = self.clean_W(file_path, output_folder)
+                # 公式计算反推
+                back_data = self.back_calculation(cleaned_data, file, output_folder)
+                # 去除反推异常值
+                nonan_data = self.delete_nan_inq(back_data, file, output_folder)
+                # 插值平衡
+                #insert_data = self.insert_inq(nonan_data, file, output_folder)
+                # 绘图
 
-                try:
-                    # 公式计算反推
-                    cleaned_data = os.path.join(output_folder, "去除库容异常的数据.csv")
-                    back_data = self.back_calculation(cleaned_data, file, output_folder)
-                    pass  # 临时代替你的 back_calculation 调用
-                except Exception as e:
-                    print(f"Error in back_calculation for {file}: {e}")
-                    continue  # 跳过当前文件并继续处理下一个文件
-
-                try:
-                    # 去除反推异常值
-                    nonan_data = self.delete_nan_inq(back_data, file, output_folder)
-                    pass  # 临时代替你的 delete_nan_inq 调用
-                except Exception as e:
-                    print(f"Error in delete_nan_inq for {file}: {e}")
-                    continue  # 跳过当前文件并继续处理下一个文件
-
-                try:
-                    # 插值平衡
-                    # insert_data = self.insert_inq(nonan_data, file, output_folder)
-                    pass  # 临时代替你的 insert_inq 调用
-                except Exception as e:
-                    print(f"Error in insert_inq for {file}: {e}")
-                    continue  # 跳过当前文件并继续处理下一个文件
-
-                try:
-                    # 绘图等其他处理步骤
-                    # self.plot_data(insert_data, output_folder)
-                    pass  # 临时代替你的 plot_data 调用
-                except Exception as e:
-                    print(f"Error in plot_data for {file}: {e}")
-                    continue  # 跳过当前文件并继续处理下一个文件
-                    
