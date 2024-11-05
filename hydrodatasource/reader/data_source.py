@@ -608,3 +608,235 @@ class SelfMadeHydroDataset(HydroData):
     def read_mean_prcp(self, gage_id_lst=None):
         """read mean precipitation of each basin/unit"""
         return self.read_attr_xrdataset(gage_id_lst, ["pre_mm_syr"])
+
+
+class LongTermDataset(SelfMadeHydroDataset):
+    def __init__(self, data_path, download=False, time_unit=None):
+        super(LongTermDataset,self).__init__(data_path)
+        if time_unit is None:
+            time_unit = ["1MS"]
+        if any(unit not in ["1h", "3h", "1D", "8D", "1MS"] for unit in time_unit):
+            raise ValueError(
+                "time_unit must be one of ['1h', '3h', '1D', '8D', '1MS']. We only support these time units now."
+            )
+        # TODO: maybe starting with "s3://" is a better idea?
+        self.head = "minio" if "s3://" in data_path else "local"
+        super().__init__(data_path)
+        self.data_source_description = self.set_data_source_describe()
+        if download:
+            self.download_data_source()
+        self.camels_sites = self.read_site_info()
+        self.time_unit = time_unit
+    def read_site_info(self):
+        camels_file = self.data_source_description["ATTR_FILE"]
+        attrs = access_fs.spec_path(camels_file, head=self.head)
+        return attrs[["basin_id"]]
+    
+    def set_data_source_describe(self):
+        data_root_dir = self.data_source_dir
+        ts_dir = os.path.join(data_root_dir, "timeseries")
+        # we assume that each subdirectory in ts_dir represents a time unit
+        # In this subdirectory, there are csv files for each basin
+        if "s3://" in data_root_dir:
+            time_units_dir = [
+                os.path.join(ts_dir, name)
+                for name in minio_file_list(ts_dir)
+                if is_minio_folder(os.path.join(ts_dir, name))
+            ]
+        else:
+            time_units_dir = [
+                os.path.join(ts_dir, name)
+                for name in os.listdir(ts_dir)
+                if os.path.isdir(os.path.join(ts_dir, name))
+            ]
+        unit_files = [folder + "_units_info.json" for folder in time_units_dir]
+        attr_dir = os.path.join(data_root_dir, "attributes")
+        attr_file = os.path.join(attr_dir, "grdc_attributes1.csv")
+        shape_dir = os.path.join(data_root_dir, "shapes")
+        global_dir = os.path.join(data_root_dir, "attributes")
+        return collections.OrderedDict(
+            DATA_DIR=data_root_dir,
+            TS_DIRS=time_units_dir,
+            ATTR_DIR=attr_dir,
+            ATTR_FILE=attr_file,
+            UNIT_FILES=unit_files,
+            SHAPE_DIR=shape_dir,
+            GLOBAL_DIR=global_dir,
+        )
+    def read_attr_xrdataset(self,gage_id_lst=None,var_lst=None, **kwargs):
+        region = kwargs.get("region", None)
+
+        prefix_ = "" if region is None else region + "_"
+        if var_lst is None or len(var_lst) == 0:
+            return None
+        try:
+            attr = xr.open_dataset(os.path.join(CACHE_DIR, f"{prefix_}attributes.nc"))
+        except FileNotFoundError:
+            self.cache_xrdataset(time_units=self.time_unit)
+            attr = xr.open_dataset(os.path.join(CACHE_DIR, f"{prefix_}attributes.nc"))
+        # return attr.sel(basin=gage_id_lst)
+        # return attr
+        gage_id_lst=[str(i) for i in gage_id_lst]
+        return attr[var_lst].sel(basin=gage_id_lst)
+    def read_global_data(self, object_ids: list = None, t_range_list: list = None) -> dict:
+        """
+        读取全球数据，返回一个字典，其中每个键是时间单位，每个值是一个 xarray.Dataset。
+        """
+        # self.cache_global_dataset(object_ids, t_range_list)
+        
+        
+        if not os.path.exists(os.path.join(CACHE_DIR, "global_data.nc")):
+            self.cache_global_dataset(object_ids, t_range_list)
+            netcdf_file = os.path.join(CACHE_DIR, "global_data.nc")
+        else:
+            netcdf_file = os.path.join(CACHE_DIR, "global_data.nc")
+        # print(netcdf_file)
+        ds = xr.open_dataset(netcdf_file)
+
+        result_dict = {}
+        result_dict = {"global_dataset": ds}
+    
+        return result_dict
+
+    def cache_global_dataset(self, object_ids: list = None, t_range_list: list = None):
+        """
+        读取 CSV 数据并将其转换为 xarray 数据集并保存为 NetCDF 文件。
+        """
+        global_data_file = os.path.join(self.data_source_description["GLOBAL_DIR"], "global.csv")
+        if not os.path.exists(global_data_file):
+            raise FileNotFoundError(f"Global data file not found at {global_data_file}")
+        global_data = pd.read_csv(global_data_file, parse_dates=["time"])
+        start_time = t_range_list[0]
+        end_time = t_range_list[-1]
+        mask = (global_data["time"] >= start_time) & (global_data["time"] <= end_time)
+        filtered_data = global_data[mask]
+
+        time_col = pd.to_datetime(filtered_data['time']) 
+
+        variable_names = filtered_data.columns.drop('time').tolist()
+        ds = xr.Dataset(
+            coords={
+                "basin": object_ids,
+                "time": time_col
+            }
+        )
+
+        for i, var in enumerate(variable_names):
+            # 由于没有单位信息，我们只传递数据
+            data_array = np.tile(filtered_data[var].values, (len(object_ids), 1))  # 复制变量数据以适应 (basin, time)
+            
+            # 添加变量到 Dataset
+            ds[var] = (("basin", "time"), data_array)
+
+        # 保存为 NetCDF 文件
+        ds.to_netcdf(os.path.join(CACHE_DIR, "global_data.nc"))
+        print("NetCDF 文件已成功保存为 global_data.nc")
+        del global_data
+
+    def cache_timeseries_xrdataset(self, region=None, t_range=None, **kwargs):
+        """Save all timeseries data in separate NetCDF files for each time unit.
+
+        Parameters
+        ----------
+        region : str, optional
+            A prefix used in cache file, by default None
+        t_range : list, optional
+            Time range for the data, by default ["1980-01-01", "2023-12-31"]
+        kwargs : dict, optional
+            batchsize -- Number of basins to process per batch, by default 100
+            time_units -- List of time units to process, by default None
+            start0101_freq -- for freq setting, if the start date is 01-01, set True, by default False
+        """
+        batchsize = kwargs.get("batchsize", 100)
+        time_units = kwargs.get("time_units", self.time_unit) or [
+            "1D"
+        ]  # Default to ["1D"] if not specified or if time_units is None
+        start0101_freq = kwargs.get("start0101_freq", False)
+
+        variables = self.get_timeseries_cols()
+        basins = self.camels_sites["basin_id"]
+        # Define the generator function for batching
+        def data_generator(basins, batch_size):
+            for i in range(0, len(basins), batch_size):
+                yield basins[i : i + batch_size]
+        for time_unit in time_units:
+            if t_range is None:
+                if time_unit != "3h":
+                    t_range = ["1951-01-01", "2010-12-31"]
+                else:
+                    t_range = ["1951-01-01", "2010-12-31"]
+
+            # Generate the time range specific to the time unit
+            if start0101_freq:
+                times = (
+                    generate_start0101_time_range(
+                        start_time=t_range[0], end_time=t_range[-1], freq=time_unit
+                    )
+                    .strftime("%Y-%m-%d %H:%M:%S")
+                    .tolist()
+                )
+            else:
+                times = (
+                    pd.date_range(start=t_range[0], end=t_range[-1], freq=time_unit)
+                    .strftime("%Y-%m-%d %H:%M:%S")
+                    .tolist()
+                )
+            # Retrieve the correct units information for this time unit
+            unit_file = next(
+                file
+                for file in self.data_source_description["UNIT_FILES"]
+                if time_unit in file
+            )
+            if "s3://" in unit_file:
+                with conf.FS.open(unit_file, mode="rb") as fp:
+                    units_info = json.load(fp)
+            else:
+                units_info = hydro_file.unserialize_json(unit_file)
+
+            for basin_batch in data_generator(basins, batchsize):
+                basin_batch = [int(basin) for basin in basin_batch if not pd.isna(basin)]
+                data = self.read_timeseries(
+                    object_ids=basin_batch,
+                    t_range_list=t_range,
+                    relevant_cols=variables[
+                        time_unit
+                    ],  # Ensure we use the right columns for the time unit
+                    time_units=[
+                        time_unit
+                    ],  # Pass the time unit to ensure correct data retrieval
+                    start0101_freq=start0101_freq,
+                )
+
+                dataset = xr.Dataset(
+                    data_vars={
+                        variables[time_unit][i]: (
+                            ["basin", "time"],
+                            data[time_unit][:, :, i],
+                            {"units": units_info[variables[time_unit][i]]},
+                        )
+                        for i in range(len(variables[time_unit]))
+                    },
+                    coords={
+                        "basin": basin_batch,
+                        "time": pd.to_datetime(times),
+                    },
+                )
+
+                # Save the dataset to a NetCDF file for the current batch and time unit
+                prefix_ = "" if region is None else region + "_"
+                batch_file_path = os.path.join(
+                    CACHE_DIR,
+                    f"{prefix_}timeseries_{time_unit}_batch_{basin_batch[0]}_{basin_batch[-1]}.nc",
+                )
+                dataset.to_netcdf(batch_file_path)
+
+                # Release memory by deleting the dataset
+                del dataset
+                del data
+
+    def cache_xrdataset(self,region=None, t_range=None, time_units=None):
+        """Save all data in a netcdf file in the cache directory"""
+        self.cache_attributes_xrdataset(region=region)
+        self.cache_timeseries_xrdataset(
+            region=region, t_range=t_range, time_units=time_units
+        )
