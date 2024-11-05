@@ -1,7 +1,7 @@
 """
 Author: Wenyu Ouyang
 Date: 2024-07-06 19:20:59
-LastEditTime: 2024-09-14 14:58:28
+LastEditTime: 2024-11-05 08:56:42
 LastEditors: Wenyu Ouyang
 Description: Test funcs for data source
 FilePath: \hydrodatasource\tests\test_data_source.py
@@ -226,3 +226,53 @@ def test_selfmadehydrodataset_read_mean_prcp(one_day_dataset):
         gage_id_lst=["camels_01013500", "camels_01022500"]
     )
     assert isinstance(mean_prcp, xr.Dataset)
+    assert mean_prcp["pre_mm_syr"].attrs["units"] == "mm/d"
+
+
+def test_read_mean_prcp_mm_per_hour(one_day_dataset):
+    mean_prcp = one_day_dataset.read_mean_prcp(
+        gage_id_lst=["camels_01013500", "camels_01022500"], unit="mm/h"
+    )
+    mean_prcp_ = one_day_dataset.read_mean_prcp(
+        gage_id_lst=["camels_01013500", "camels_01022500"]
+    )
+    assert isinstance(mean_prcp, xr.Dataset)
+    assert mean_prcp["pre_mm_syr"].attrs["units"] == "mm/h"
+    np.testing.assert_allclose(
+        mean_prcp["pre_mm_syr"].values, mean_prcp_["pre_mm_syr"].values / 24
+    )
+
+
+def test_read_mean_prcp_mm_per_3hour(one_day_dataset):
+    mean_prcp = one_day_dataset.read_mean_prcp(
+        gage_id_lst=["camels_01013500", "camels_01022500"], unit="mm/3h"
+    )
+    mean_prcp_ = one_day_dataset.read_mean_prcp(
+        gage_id_lst=["camels_01013500", "camels_01022500"]
+    )
+    assert isinstance(mean_prcp, xr.Dataset)
+    assert mean_prcp["pre_mm_syr"].attrs["units"] == "mm/3h"
+    np.testing.assert_allclose(
+        mean_prcp["pre_mm_syr"].values, mean_prcp_["pre_mm_syr"].values / (24 / 3)
+    )
+
+
+def test_read_mean_prcp_mm_per_8day(one_day_dataset):
+    mean_prcp = one_day_dataset.read_mean_prcp(
+        gage_id_lst=["camels_01013500", "camels_01022500"], unit="mm/8d"
+    )
+    mean_prcp_ = one_day_dataset.read_mean_prcp(
+        gage_id_lst=["camels_01013500", "camels_01022500"]
+    )
+    assert isinstance(mean_prcp, xr.Dataset)
+    assert mean_prcp["pre_mm_syr"].attrs["units"] == "mm/8d"
+    np.testing.assert_allclose(
+        mean_prcp["pre_mm_syr"].values, mean_prcp_["pre_mm_syr"].values * 8
+    )
+
+
+def test_read_mean_prcp_invalid_unit(one_day_dataset):
+    with pytest.raises(ValueError, match="unit must be one of"):
+        one_day_dataset.read_mean_prcp(
+            gage_id_lst=["camels_01013500", "camels_01022500"], unit="invalid_unit"
+        )
