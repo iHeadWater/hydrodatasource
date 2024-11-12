@@ -1,0 +1,18 @@
+# https://www.weather.gov/media/mdl/SHEF_CodeManual_5July2012.pdf
+convert_standard:
+    - HG: Z # 标尺水位
+    - TA: temp #当前温度
+    - ET: pet # 总蒸散发
+    - EA: pev # 潜在蒸散发
+    - GT: fdep # 冰层厚度
+    - HH: Z_read # 读数水位
+    - MV: sm # 土壤含水量
+    - PA: patm # 当前气压
+    - PC: prcp_acc # 从某段时间以来统计的总降雨量
+    - PP: prcp_inc # 特定时间内降雨量
+    - PR: prcp_day # 当日降雨量
+    - QC: Q # 流量
+    - QR: Q_river # 河道流量
+    - QM: Q_noman # 定点流域，消除一切人为影响
+    - SD: snow_depth # 雪厚度
+    - VB: voltage # 电压

@@ -605,14 +605,48 @@ class SelfMadeHydroDataset(HydroData):
         """read area of each basin/unit"""
         return self.read_attr_xrdataset(gage_id_lst, ["area"])
 
-    def read_mean_prcp(self, gage_id_lst=None):
-        """read mean precipitation of each basin/unit"""
-        return self.read_attr_xrdataset(gage_id_lst, ["pre_mm_syr"])
+    def read_mean_prcp(self, gage_id_lst=None, unit="mm/d"):
+        """read mean precipitation of each basin
+        default unit is mm/d, but one can chose other units and we will convert the unit to the specified unit
+
+        Parameters
+        ----------
+        gage_id_lst : list, optional
+            the list of gage ids, by default None
+        unit : str, optional
+            the unit of precipitation, by default "mm/d"
+
+        Returns
+        -------
+        xr.Dataset
+            the mean precipitation of each basin
+        """
+        pre_mm_syr = self.read_attr_xrdataset(gage_id_lst, ["pre_mm_syr"])
+        da = pre_mm_syr["pre_mm_syr"]
+        # Convert the unit to the specified unit, pre_mm_syr means yearly precipitation
+        if unit in ["mm/d", "mm/day"]:
+            converted_data = da / 365
+        elif unit in ["mm/h", "mm/hour"]:
+            converted_data = da / 8760
+        elif unit in ["mm/3h", "mm/3hour"]:
+            converted_data = da / (8760 / 3)
+        elif unit in ["mm/8d", "mm/8day"]:
+            converted_data = da / (365 / 8)
+        else:
+            raise ValueError(
+                "unit must be one of ['mm/d', 'mm/day', 'mm/h', 'mm/hour', 'mm/3h', 'mm/3hour', 'mm/8d', 'mm/8day']"
+            )
+
+        # Set the units attribute
+        converted_data.attrs["units"] = unit
+        # Assign the modified DataArray back to the Dataset
+        pre_mm_syr["pre_mm_syr"] = converted_data
+        return pre_mm_syr
 
 
 class LongTermDataset(SelfMadeHydroDataset):
     def __init__(self, data_path, download=False, time_unit=None):
-        super(LongTermDataset,self).__init__(data_path)
+        super(LongTermDataset, self).__init__(data_path)
         if time_unit is None:
             time_unit = ["1MS"]
         if any(unit not in ["1h", "3h", "1D", "8D", "1MS"] for unit in time_unit):
@@ -627,11 +661,12 @@ class LongTermDataset(SelfMadeHydroDataset):
             self.download_data_source()
         self.camels_sites = self.read_site_info()
         self.time_unit = time_unit
+
     def read_site_info(self):
         camels_file = self.data_source_description["ATTR_FILE"]
         attrs = access_fs.spec_path(camels_file, head=self.head)
         return attrs[["basin_id"]]
-    
+
     def set_data_source_describe(self):
         data_root_dir = self.data_source_dir
         ts_dir = os.path.join(data_root_dir, "timeseries")
@@ -663,7 +698,8 @@ class LongTermDataset(SelfMadeHydroDataset):
             SHAPE_DIR=shape_dir,
             GLOBAL_DIR=global_dir,
         )
-    def read_attr_xrdataset(self,gage_id_lst=None,var_lst=None, **kwargs):
+
+    def read_attr_xrdataset(self, gage_id_lst=None, var_lst=None, **kwargs):
         region = kwargs.get("region", None)
 
         prefix_ = "" if region is None else region + "_"
@@ -676,33 +712,32 @@ class LongTermDataset(SelfMadeHydroDataset):
             attr = xr.open_dataset(os.path.join(CACHE_DIR, f"{prefix_}attributes.nc"))
         # return attr.sel(basin=gage_id_lst)
         # return attr
-        gage_id_lst=[str(i) for i in gage_id_lst]
+        gage_id_lst = [str(i) for i in gage_id_lst]
         return attr[var_lst].sel(basin=gage_id_lst)
-    def read_global_data(self, object_ids: list = None, t_range_list: list = None) -> dict:
+
+    def read_global_data(
+        self, object_ids: list = None, t_range_list: list = None
+    ) -> dict:
         """
         读取全球数据，返回一个字典，其中每个键是时间单位，每个值是一个 xarray.Dataset。
         """
         # self.cache_global_dataset(object_ids, t_range_list)
-        
-        
+
         if not os.path.exists(os.path.join(CACHE_DIR, "global_data.nc")):
             self.cache_global_dataset(object_ids, t_range_list)
-            netcdf_file = os.path.join(CACHE_DIR, "global_data.nc")
-        else:
-            netcdf_file = os.path.join(CACHE_DIR, "global_data.nc")
+        netcdf_file = os.path.join(CACHE_DIR, "global_data.nc")
         # print(netcdf_file)
         ds = xr.open_dataset(netcdf_file)
 
-        result_dict = {}
-        result_dict = {"global_dataset": ds}
-    
-        return result_dict
+        return {"global_dataset": ds}
 
     def cache_global_dataset(self, object_ids: list = None, t_range_list: list = None):
         """
         读取 CSV 数据并将其转换为 xarray 数据集并保存为 NetCDF 文件。
         """
-        global_data_file = os.path.join(self.data_source_description["GLOBAL_DIR"], "global.csv")
+        global_data_file = os.path.join(
+            self.data_source_description["GLOBAL_DIR"], "global.csv"
+        )
         if not os.path.exists(global_data_file):
             raise FileNotFoundError(f"Global data file not found at {global_data_file}")
         global_data = pd.read_csv(global_data_file, parse_dates=["time"])
@@ -711,20 +746,17 @@ class LongTermDataset(SelfMadeHydroDataset):
         mask = (global_data["time"] >= start_time) & (global_data["time"] <= end_time)
         filtered_data = global_data[mask]
 
-        time_col = pd.to_datetime(filtered_data['time']) 
+        time_col = pd.to_datetime(filtered_data["time"])
 
-        variable_names = filtered_data.columns.drop('time').tolist()
-        ds = xr.Dataset(
-            coords={
-                "basin": object_ids,
-                "time": time_col
-            }
-        )
+        variable_names = filtered_data.columns.drop("time").tolist()
+        ds = xr.Dataset(coords={"basin": object_ids, "time": time_col})
 
-        for i, var in enumerate(variable_names):
+        for var in variable_names:
             # 由于没有单位信息，我们只传递数据
-            data_array = np.tile(filtered_data[var].values, (len(object_ids), 1))  # 复制变量数据以适应 (basin, time)
-            
+            data_array = np.tile(
+                filtered_data[var].values, (len(object_ids), 1)
+            )  # 复制变量数据以适应 (basin, time)
+
             # 添加变量到 Dataset
             ds[var] = (("basin", "time"), data_array)
 
@@ -755,10 +787,12 @@ class LongTermDataset(SelfMadeHydroDataset):
 
         variables = self.get_timeseries_cols()
         basins = self.camels_sites["basin_id"]
+
         # Define the generator function for batching
         def data_generator(basins, batch_size):
             for i in range(0, len(basins), batch_size):
                 yield basins[i : i + batch_size]
+
         for time_unit in time_units:
             if t_range is None:
                 if time_unit != "3h":
@@ -794,7 +828,9 @@ class LongTermDataset(SelfMadeHydroDataset):
                 units_info = hydro_file.unserialize_json(unit_file)
 
             for basin_batch in data_generator(basins, batchsize):
-                basin_batch = [int(basin) for basin in basin_batch if not pd.isna(basin)]
+                basin_batch = [
+                    int(basin) for basin in basin_batch if not pd.isna(basin)
+                ]
                 data = self.read_timeseries(
                     object_ids=basin_batch,
                     t_range_list=t_range,
@@ -834,7 +870,7 @@ class LongTermDataset(SelfMadeHydroDataset):
                 del dataset
                 del data
 
-    def cache_xrdataset(self,region=None, t_range=None, time_units=None):
+    def cache_xrdataset(self, region=None, t_range=None, time_units=None):
         """Save all data in a netcdf file in the cache directory"""
         self.cache_attributes_xrdataset(region=region)
         self.cache_timeseries_xrdataset(

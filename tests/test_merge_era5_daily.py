@@ -41,6 +41,7 @@ def test_merge_era5l_camels_sl_sd():
     sd_ds = xr.open_dataset("/ftproot/songliao_shandong_basins_era5land.nc")
     new_era5l_ds = xr.concat([old_era5l_ds, sd_ds], dim='basin_id')
     new_era5l_ds = new_era5l_ds.astype(np.float32)
+    new_era5l_ds.coords['basin_id'] = new_era5l_ds['basin_id'].to_numpy()
     # 不要从自己的工作文件夹中转，直接生成到相应文件夹即可，以防cp命令改变数据
     new_era5l_ds.to_netcdf('/ftproot/632_basins_era5land_fixed.nc')
 

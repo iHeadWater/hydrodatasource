@@ -2,7 +2,7 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-19 14:00:16
 LastEditors: liutiaxqabs 1498093445@qq.com
-LastEditTime: 2024-08-05 11:50:28
+LastEditTime: 2024-10-18 18:49:24
 FilePath: /hydrodatasource/hydrodatasource/cleaner/streamflow_cleaner.py
 Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
 '''
@@ -316,7 +316,10 @@ class StreamflowCleaner(Cleaner):
                 end_date = date + pd.DateOffset(hours=half_window)
 
             # 计算窗口内的平均值
-            window_data = streamflow_data[start_date:end_date]
+            try:
+                window_data = streamflow_data[start_date:end_date]
+            except KeyError:
+                print('WTF')
             smoothed_value = window_data.mean()
             smoothed_data.loc[date] = smoothed_value
 
@@ -355,10 +358,10 @@ class StreamflowCleaner(Cleaner):
         # 分段处理
         # 计算不同窗口的滑动平均
         df["INQA"] = self.adaptive_moving_average(
-            df["INQQ"], threshold=200, initial_window=56, min_window=4, max_window=56
+            df["INQQ"], threshold=200, initial_window=24, min_window=6, max_window=48
         )
         df["INQB"] = self.adaptive_moving_average(
-            df["INQQ"], threshold=200, initial_window=140, min_window=28, max_window=140
+            df["INQQ"], threshold=200, initial_window=168, min_window=48, max_window=336
         )
 
         # 创建新的INQQ列，根据月份替换数据
@@ -383,10 +386,24 @@ class StreamflowCleaner(Cleaner):
 
         return df["EMA"]
 
+    def ewma(self,streamflow):
+        # 计算 EWMA，指定平滑系数 alpha
+        ewma_data = streamflow.ewm(alpha=0.7).mean()
+        return self.data_balanced(streamflow, ewma_data)
+
     def anomaly_process(self, methods=None):
         super().anomaly_process(methods)
+        if "INQ" not in self.origin_df.columns:
+            if 'q' in self.origin_df.columns:
+                self.origin_df = self.origin_df.rename(columns={'q':'INQ'})
+            elif "inq" in self.origin_df.columns:
+                self.origin_df = self.origin_df.rename(columns={'inq':'INQ'})
         self.origin_df["INQ"] = pd.to_numeric(self.origin_df["INQ"], errors="coerce")
+        if "TM" not in self.origin_df.columns:
+            if "tm" in self.origin_df.columns:
+                self.origin_df = self.origin_df.rename(columns={'tm':'TM'})
         self.origin_df["TM"] = pd.to_datetime(self.origin_df["TM"], errors="coerce")
+        self.origin_df = self.origin_df.sort_values(by="TM")
         streamflow_data = self.origin_df["INQ"].copy()
         # 使用插值填充缺失值
         streamflow_data = streamflow_data.interpolate().fillna(0)
@@ -418,6 +435,8 @@ class StreamflowCleaner(Cleaner):
             elif method == "EMA":
                 streamflow_data = self.EMA(streamflow_data=streamflow_data)
                 streamflow_data.index = self.origin_df["INQ"].index
+            elif method == "ewma":
+                streamflow_data = self.ewma(streamflow_data=streamflow_data)
 
             else:
                 print("please check your method name")
@@ -432,22 +451,19 @@ class StreamflowCleaner(Cleaner):
 class StreamflowBacktrack:
     def __init__(self, data_folder, output_folder,file_name = None):
         self.data_folder = data_folder
-        self.output_folder = data_folder
+        self.output_folder = output_folder
         self.file_name = file_name
 
     def clean_W(self, file_path, output_folder):
         data = pd.read_csv(file_path)
         # 计算与前一行的差异
-        data["diff_prev"] = abs(data["W"] - data["W"].shift(1))
-
+        data["diff_prev"] = abs(data["RZ"] - data["RZ"].shift(1))
         # 计算与后一行的差异
-        data["diff_next"] = abs(data["W"] - data["W"].shift(-1))
-
+        data["diff_next"] = abs(data["RZ"] - data["RZ"].shift(-1))
         # 标记需要设置为 NaN 的行
-        data["set_nan"] = (data["diff_prev"] > 200) | (data["diff_next"] > 200)
-
+        data["set_nan"] = (data["diff_prev"] > 50) | (data["diff_next"] > 50)
         # 如果与前一行或后一行的差异超过200，则设置为 NaN
-        data.loc[data["set_nan"], "W"] = np.nan
+        data.loc[data["set_nan"], "RZ"] = np.nan
 
         # 输出被设置为 NaN 的行
         print(data[data["set_nan"]])
@@ -456,30 +472,56 @@ class StreamflowBacktrack:
         data[data["set_nan"]].to_csv(
             os.path.join(output_folder, "库容异常的数据行.csv"), index=False
         )
-        # 绘制图形
-        # plt.figure(figsize=(14, 7))
-        # plt.plot(data["TM"], data["W"], label="Water Level")
-        # plt.xlabel("Time")
-        # plt.ylabel("Water Level (W)")
-        # plt.title("Water Level Analysis with Outliers Removed")
-        # plt.legend()
-        # plt.show()
+        try:
+            # 拟合库容曲线
+            # 只提取 RZ 和 W 列中同时非 NaN 的行
+            valid_data = data.dropna(subset=["RZ", "W"])
+
+            # 执行二次拟合，计算 RZ 和 W 之间的关系
+            coefficients = np.polyfit(valid_data["RZ"], valid_data["W"], 2)
+
+            # 根据拟合的多项式关系更新 W 列
+            data["W"] = coefficients[0] * data["RZ"]**2 + coefficients[1] * data["RZ"] + coefficients[2]
+        except np.linalg.LinAlgError:
+            print("SVD did not converge during polynomial fitting, skipping this step.")
 
         cleaned_path = os.path.join(output_folder, "去除库容异常的数据.csv")
         data.to_csv(cleaned_path)
+
+        # 添加绘制图形功能，不改变原有代码
+        plt.figure(figsize=(14, 7))
+        
+        # 绘制原始数据
+        original_data = pd.read_csv(file_path)
+        plt.plot(original_data["TM"], original_data["W"], label="Original Water Level", color='blue', linestyle='--')
+        
+        # 绘制清洗后的数据
+        plt.plot(data["TM"], data["W"], label="Cleaned Water Level", color='red')
+        
+        plt.xlabel("Time")
+        plt.ylabel("Water Level (W)")
+        plt.title("Water Level Analysis with Outliers Removed")
+        plt.legend()
+        
+        # 保存图像到与CSV文件相同的目录
+        plot_path = os.path.join(output_folder, "水位清洗对比图.png")
+        plt.savefig(plot_path)
         return cleaned_path
 
     def back_calculation(self,data_path, file, output_folder):
         # 反推数据
         data = pd.read_csv(data_path)
+        # 将时间列转换为日期时间格式
         data["TM"] = pd.to_datetime(data["TM"])
+
+        # 将时间列偏移一行，使每行的时间等于上一时段的时间
+        data['TM'] = data['TM'] - pd.Timedelta(hours=1)
+
         data["Time_Diff"] = data["TM"].diff().dt.total_seconds().fillna(0)
         data["INQ_ACC"] = data["OTQ"] + (10**6 * (data["W"].diff() / data["Time_Diff"]))
-        data["INQ_CB"] = data["INQ"].fillna(data["INQ_ACC"])
+        data["INQ"] = data["INQ_ACC"]
         data["Month"] = data["TM"].dt.month
         print(data)
-        data["INQ"] = data["INQ_CB"]
-
         back_calc_path = os.path.join(output_folder, file[:-4] + "_径流直接反推数据.csv")
         data[
             [
@@ -652,7 +694,7 @@ class StreamflowBacktrack:
             ]
         ].to_csv(
             os.path.join(
-                "/home/liutianxv1/水库流量数据小时插值并保持水量平衡版本", file
+                "/ftproot/basins-origin/basins-streamflow-with BSAD/", file
             ),
             index=False,
         )
@@ -674,6 +716,6 @@ class StreamflowBacktrack:
                 # 去除反推异常值
                 nonan_data = self.delete_nan_inq(back_data, file, output_folder)
                 # 插值平衡
-                #insert_data = self.insert_inq(nonan_data, file, output_folder)
+                insert_data = self.insert_inq(nonan_data, file, output_folder)
                 # 绘图
-                
+
