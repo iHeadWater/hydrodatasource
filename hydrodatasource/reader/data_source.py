@@ -161,7 +161,7 @@ class SelfMadeHydroDataset(HydroData):
             A dictionary containing data with different time scales.
         """
         time_units = kwargs.get("time_units", ["1D"])
-        region = kwargs.get("region", None)
+        region = kwargs.get("region", "Caravan")
         start0101_freq = kwargs.get("start0101_freq", False)
 
         results = {}
@@ -204,7 +204,7 @@ class SelfMadeHydroDataset(HydroData):
                 prefix_ = "" if region is None else region + "_"
                 ts_file = os.path.join(
                     ts_dir,
-                    prefix_ + object_ids[k] + ".csv",
+                    prefix_ + str(object_ids[k]) + ".csv",
                 )
                 if "s3://" in ts_file:
                     with conf.FS.open(ts_file, mode="rb") as f:
