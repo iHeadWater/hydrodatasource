@@ -605,7 +605,7 @@ class SelfMadeHydroDataset(HydroData):
         """read area of each basin/unit"""
         return self.read_attr_xrdataset(gage_id_lst, ["area"])
 
-    def read_mean_prcp(self, gage_id_lst=None, unit="mm/d"):
+    def read_mean_prcp(self, gage_id_lst=None, unit="mm/M"):
         """read mean precipitation of each basin
         default unit is mm/d, but one can chose other units and we will convert the unit to the specified unit
 
@@ -632,6 +632,8 @@ class SelfMadeHydroDataset(HydroData):
             converted_data = da / (8760 / 3)
         elif unit in ["mm/8d", "mm/8day"]:
             converted_data = da / (365 / 8)
+        elif unit in ["mm/M"]:
+            converted_data = da / 12
         else:
             raise ValueError(
                 "unit must be one of ['mm/d', 'mm/day', 'mm/h', 'mm/hour', 'mm/3h', 'mm/3hour', 'mm/8d', 'mm/8day']"
@@ -710,23 +712,17 @@ class LongTermDataset(SelfMadeHydroDataset):
         except FileNotFoundError:
             self.cache_xrdataset(time_units=self.time_unit)
             attr = xr.open_dataset(os.path.join(CACHE_DIR, f"{prefix_}attributes.nc"))
-        # return attr.sel(basin=gage_id_lst)
-        # return attr
+        attr = attr.sel(basin=~attr.indexes['basin'].duplicated())
         gage_id_lst = [str(i) for i in gage_id_lst]
         return attr[var_lst].sel(basin=gage_id_lst)
 
     def read_global_data(
         self, object_ids: list = None, t_range_list: list = None
     ) -> dict:
-        """
-        读取全球数据，返回一个字典，其中每个键是时间单位，每个值是一个 xarray.Dataset。
-        """
-        # self.cache_global_dataset(object_ids, t_range_list)
 
         if not os.path.exists(os.path.join(CACHE_DIR, "global_data.nc")):
             self.cache_global_dataset(object_ids, t_range_list)
         netcdf_file = os.path.join(CACHE_DIR, "global_data.nc")
-        # print(netcdf_file)
         ds = xr.open_dataset(netcdf_file)
 
         return {"global_dataset": ds}
@@ -764,6 +760,7 @@ class LongTermDataset(SelfMadeHydroDataset):
         ds.to_netcdf(os.path.join(CACHE_DIR, "global_data.nc"))
         print("NetCDF 文件已成功保存为 global_data.nc")
         del global_data
+
 
     def cache_timeseries_xrdataset(self, region=None, t_range=None, **kwargs):
         """Save all timeseries data in separate NetCDF files for each time unit.
