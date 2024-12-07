@@ -2,7 +2,7 @@ geopandas
 openpyxl~=3.1
 xlrd
 requests
-
+polars
 psycopg2-binary
 sqlalchemy
 loguru
