@@ -14,7 +14,7 @@ import pandas as pd
 import pytest
 import xarray as xr
 from hydrodatasource.configs.config import SETTING
-from hydrodatasource.reader.data_source import CACHE_DIR, SelfMadeHydroDataset
+from hydrodatasource.reader.data_source import CACHE_DIR, SelfMadeHydroDataset, SelfMadeHydroDataset_PQ
 
 
 @pytest.fixture
@@ -34,6 +34,13 @@ def three_hour_dataset():
     # selfmadehydrodataset_path = "s3://basins-interim"
     return SelfMadeHydroDataset(data_path=selfmadehydrodataset_path, time_unit=["3h"])
 
+@pytest.fixture
+def three_hour_pqdataset():
+    # local
+    selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
+    # minio
+    # selfmadehydrodataset_path = "s3://basins-interim"
+    return SelfMadeHydroDataset_PQ(data_path=selfmadehydrodataset_path, time_unit=["3h"])
 
 @pytest.fixture
 def one_day_dataset():
@@ -128,6 +135,11 @@ def test_selfmadehydrodataset_cache_timeseries_xrdataset(
     # 1D
     one_day_dataset.cache_timeseries_xrdataset()
 
+def test_selfmadehydrodataset_cache_pqds(three_hour_pqdataset):
+    three_hour_pqdataset.cache_timeseries_xrdataset(
+        time_units=["3h"],
+        t_range=["1980-01-01 01", "2023-12-31 22"],
+    )
 
 def test_selfmadehydrodataset_cache_xrdataset(one_day_dataset):
     one_day_dataset.cache_xrdataset()

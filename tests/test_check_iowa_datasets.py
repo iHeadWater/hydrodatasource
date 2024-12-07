@@ -59,63 +59,8 @@ def test_check_stream_tables():
     total_ds = xr.Dataset.from_dataframe(total_df[~total_df.index.duplicated()])
     total_ds.to_netcdf('/ftproot/iowa_streamflow_stas.nc')
 
-def test_read_iowa_by_camels():
-    # 检查NOAA站点的数据；
-    # 使用iowa的1833个站点（放弃时间要求）
-    node_shp_gdf = gpd.read_file('iowa_all_locs/_ALL__locs.shp', engine='pyogrio')
-    basin_shp_gdf = gpd.read_file('iowa_all_locs/basins_shp.shp', engine='pyogrio')
-    nodes_intersect = gpd.sjoin(node_shp_gdf, basin_shp_gdf)
-    local_nodes = nodes_intersect[nodes_intersect['NETWORK'].str.contains('|'.join(['DCP', 'COOP', 'ASOS']))]
-    true_file_paths = infer_path_from_shp(local_nodes)
-    # 先统计一下数据缺失率
-    loss_dict = {}
-    for file in true_file_paths:
-        name = file.split('/')[-1].split('.')[0]
-        df = pd.read_csv(file, engine='c')
-        if 'DCP' in name:
-            if 'key' in df.columns:
-                df = df.rename(columns={'Unnamed: 0_level_0': 'station', 'key': 'utc_valid'})
-                df = df.drop(0).reset_index()
-            df['utc_valid'] = pd.to_datetime(df['utc_valid'])
-            df = df.set_index('utc_valid')
-        elif 'COOP' in name:
-            df['valid_time'] = pd.to_datetime(df['date']+' '+df['time'])
-            df = df[~df['valid_time'].isna()].reset_index()
-            if len(df)!=0:
-                df = df.set_index('valid_time')
-            else:
-                loss_dict[name]=1
-                continue
-        elif 'ASOS' in name:
-            df['valid'] = pd.to_datetime(df['valid'])
-            df = df.set_index('valid')
-        else:
-            loss_dict[name]=1
-            continue
-        resample_df = df.resample('h').last()
-        loss_dict[name] = max(0.0, 1 - len(df) / len(resample_df))
-    res_df = pd.DataFrame.from_dict(loss_dict, orient='index').reset_index().rename(columns={'index':'name', 0: 'loss_rate'})
-    res_df.to_csv('iowa_time_loss_rate.csv')
-
-def test_analyze_iowa_loss():
-    # 23/24 = 0.958, 故如果按日取数，缺失率将在0.96左右，再高就是连日尺度都缺失严重
-    loss_df = pd.read_csv('iowa_time_loss_rate.csv', engine='c')
-    better_names = loss_df['name'][loss_df['loss_rate']<0.5]
-    ids = better_names.apply(lambda x: x.split('_')[-1])
-    node_shp_gdf = gpd.read_file('iowa_all_locs/_ALL__locs.shp', engine='pyogrio')
-    inter_node_shp_gdf = node_shp_gdf[node_shp_gdf['ID'].isin(ids)]
-    true_file_paths = infer_path_from_shp(inter_node_shp_gdf)
-    pp_stas = []
-    for file in true_file_paths:
-        df = pd.read_csv(file, engine='c')
-        prcp_columns = df.columns[df.columns.str.startswith('P')]
-        if len(prcp_columns) > 0:
-            pp_stas.append(file.split('_')[-1].split('.')[0])
-    pp_inter_node_shp_gdf = inter_node_shp_gdf[inter_node_shp_gdf['ID'].isin(pp_stas)]
-    pp_inter_node_shp_gdf.to_file('iowa_all_locs/iowa_pp_stations.shp')
-
 def test_check_iowa_pp_data():
-    iowa_pp_node_gdf = gpd.read_file('iowa_all_locs/iowa_pp_stations.shp', engine='pyogrio')
+    iowa_pp_node_gdf = gpd.read_file('iowa_all_locs/iowa_pp_stations_day.shp', engine='pyogrio')
     true_file_paths = infer_path_from_shp(iowa_pp_node_gdf)
     total_prcp_df = pd.DataFrame()
     for file in true_file_paths:
@@ -136,10 +81,12 @@ def test_check_iowa_pp_data():
                 prcp_df['year'] = df.index.year
                 prcp_df = prcp_df.groupby('year').apply(calculate_differences, pc_max_count_col).drop('year', axis=1)
                 prcp_df = prcp_df.reset_index().drop(columns=['year']).set_index('utc_valid')
-            else:
+            elif pc_max_count_col.startswith('PP') or pc_max_count_col.startswith('PR'):
                 prcp_df = prcp_df[prcp_df.columns[prcp_df.columns.str.startswith('PP') | prcp_df.columns.str.startswith('PR')]]
                 prcp_df[pc_max_count_col] = prcp_df.apply(fill_na_with_other_cols, args=(pc_max_count_col,), axis=1)
                 prcp_df = prcp_df.rename(columns={pc_max_count_col: 'prcp_inch'})
+            else:
+                continue
             prcp_arr = prcp_df['prcp_inch'].astype(float).to_numpy()
             minus_index = np.argwhere(prcp_arr<0)
             oppo_index = np.add(minus_index, 1)
@@ -163,8 +110,85 @@ def test_check_iowa_pp_data():
         total_prcp_df = pd.concat([total_prcp_df, prcp_df])
     total_prcp_df = total_prcp_df.set_index(['station_id', 'utc_valid'])
     res_ds = xr.Dataset.from_dataframe(total_prcp_df.dropna())
-    res_ds = res_ds.to_netcdf('iowa_prcp_data.nc')
+    res_ds = res_ds.to_netcdf('/ftproot/iowa_prcp_data_day.nc')
     return res_ds
+
+def test_read_iowa_by_camels():
+    # 检查NOAA站点的数据；
+    # 使用iowa的1833个站点（放弃时间要求）
+    node_shp_gdf = gpd.read_file('iowa_all_locs/_ALL__locs.shp', engine='pyogrio')
+    basin_shp_gdf = gpd.read_file('iowa_all_locs/basins_shp.shp', engine='pyogrio')
+    nodes_intersect = gpd.sjoin(node_shp_gdf, basin_shp_gdf)
+    local_nodes = nodes_intersect[nodes_intersect['NETWORK'].str.contains('|'.join(['DCP', 'COOP', 'ASOS']))]
+    true_file_paths = infer_path_from_shp(local_nodes)
+    # 先统计一下数据缺失率(按小时或按天)
+    # 不跳空是因为站点可能会换变量统计，跳空无意义
+    loss_dict = {}
+    start_times = []
+    end_times = []
+    for file in np.unique(true_file_paths):
+        name = file.split('/')[-1].split('.')[0]
+        df = pd.read_csv(file, engine='c')
+        if 'DCP' in name:
+            if 'key' in df.columns:
+                df = df.rename(columns={'Unnamed: 0_level_0': 'station', 'key': 'utc_valid'})
+                df = df.drop(0).reset_index()
+            df['utc_valid'] = pd.to_datetime(df['utc_valid'])
+            start_times.append(df['utc_valid'][0])
+            end_times.append(df['utc_valid'].iloc[-1])
+            df = df.set_index('utc_valid')
+        elif 'COOP' in name:
+            df['valid_time'] = pd.to_datetime(df['date']+' '+df['time'])
+            df = df[~df['valid_time'].isna()].reset_index()
+            if len(df)!=0:
+                start_times.append(df['valid_time'][0])
+                end_times.append(df['valid_time'].iloc[-1])
+                df = df.set_index('valid_time')
+            else:
+                start_times.append(np.nan)
+                end_times.append(np.nan)
+                loss_dict[name]=1
+                continue
+        elif 'ASOS' in name:
+            df['valid'] = pd.to_datetime(df['valid'])
+            start_times.append(df['valid'][0])
+            end_times.append(df['valid'].iloc[-1])
+            df = df.set_index('valid')
+        else:
+            loss_dict[name]=1
+            continue
+        resample_df = df.resample('d').last()
+        loss_dict[name] = max(0.0, 1 - len(df) / len(resample_df))
+    res_df = pd.DataFrame.from_dict(loss_dict, orient='index').reset_index().rename(columns={'index':'name', 0: 'loss_rate'})
+    res_df['start_time'] = start_times
+    res_df['end_time'] = end_times
+    res_df.to_csv('iowa_time_loss_rate_day.csv')
+
+def test_gen_iowa_stream_gdf():
+    sta_all = gpd.read_file('iowa_all_locs/_ALL__locs.shp')
+    stations_ds = xr.open_dataset('/ftproot/iowa_streamflow_stas.nc')
+    stations = stations_ds['station'].values
+    iowa_ids = [sta.split('_')[-1] for sta in stations]
+    stream_stations = sta_all[sta_all['ID'].isin(iowa_ids)]
+    stream_stations['ID'] = stream_stations['NETWORK'] + '_' + stream_stations['ID']
+    stream_stations.to_file('iowa_all_locs/iowa_stream_stations.shp')
+
+def test_analyze_iowa_loss():
+    # 23/24 = 0.958, 故如果按日取数，缺失率将在0.96左右，再高就是连日尺度都缺失严重
+    loss_df = pd.read_csv('iowa_time_loss_rate_day.csv', engine='c')
+    better_names = loss_df['name'][loss_df['loss_rate']<0.5]
+    ids = better_names.apply(lambda x: x.split('_')[-1])
+    node_shp_gdf = gpd.read_file('iowa_all_locs/_ALL__locs.shp', engine='pyogrio')
+    inter_node_shp_gdf = node_shp_gdf[node_shp_gdf['ID'].isin(ids)]
+    true_file_paths = infer_path_from_shp(inter_node_shp_gdf)
+    pp_stas = []
+    for file in true_file_paths:
+        df = pd.read_csv(file, engine='c')
+        prcp_columns = df.columns[df.columns.str.startswith('P')]
+        if len(prcp_columns) > 0:
+            pp_stas.append(file.split('_')[-1].split('.')[0])
+    pp_inter_node_shp_gdf = inter_node_shp_gdf[inter_node_shp_gdf['ID'].isin(pp_stas)]
+    pp_inter_node_shp_gdf.to_file('iowa_all_locs/iowa_pp_stations_day.shp')
 
 def infer_path_from_list(local_file_names):
     true_file_paths = []

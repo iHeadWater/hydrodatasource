@@ -7,6 +7,7 @@ import pandas as pd
 import xarray as xr
 from abc import ABC
 from tqdm import tqdm
+import polars as pl
 
 from hydroutils import hydro_file
 from hydroutils.hydro_time import generate_start0101_time_range
@@ -642,3 +643,80 @@ class SelfMadeHydroDataset(HydroData):
         # Assign the modified DataArray back to the Dataset
         pre_mm_syr["pre_mm_syr"] = converted_data
         return pre_mm_syr
+
+class SelfMadeHydroDataset_PQ(SelfMadeHydroDataset):
+    def __init__(self, data_path, download=False, time_unit=None):
+        super().__init__(data_path, download, time_unit)
+
+    def cache_timeseries_xrdataset(self, region=None, t_range=None, **kwargs):
+        """Save all timeseries data in separate Parquet files for each time unit.
+
+        Parameters
+        ----------
+        region : str, optional
+            A prefix used in cache file, by default None
+        t_range : list, optional
+            Time range for the data, by default ["1980-01-01", "2023-12-31"]
+        kwargs : dict, optional
+            batchsize -- Number of basins to process per batch, by default 100
+            time_units -- List of time units to process, by default None
+            start0101_freq -- for freq setting, if the start date is 01-01, set True, by default False
+        """
+        batchsize = kwargs.get("batchsize", 100)
+        time_units = kwargs.get("time_units", self.time_unit) or ["1D"]  # Default to ["1D"] if not specified or if time_units is None
+        start0101_freq = kwargs.get("start0101_freq", False)
+
+        variables = self.get_timeseries_cols()
+        basins = self.camels_sites["basin_id"].values
+
+        # Define the generator function for batching
+        def data_generator(basins, batch_size):
+            for i in range(0, len(basins), batch_size):
+                yield basins[i : i + batch_size]
+
+        for time_unit in time_units:
+            if t_range is None:
+                if time_unit != "3h":
+                    t_range = ["1980-01-01", "2023-12-31"]
+                else:
+                    t_range = ["1980-01-01 01", "2023-12-31 22"]
+
+            # Generate the time range specific to the time unit
+            if start0101_freq:
+                times = (
+                    generate_start0101_time_range(
+                        start_time=t_range[0], end_time=t_range[-1], freq=time_unit
+                    )
+                    .strftime("%Y-%m-%d %H:%M:%S")
+                    .tolist()
+                )
+            else:
+                times = pl.datetime_range(start=pd.to_datetime(t_range[0]), end=pd.to_datetime(t_range[-1]), interval=time_unit, eager=True)
+            for basin_batch in data_generator(basins, batchsize):
+                data = self.read_timeseries(
+                    object_ids=basin_batch,
+                    t_range_list=t_range,
+                    relevant_cols=variables[
+                        time_unit
+                    ],  # Ensure we use the right columns for the time unit
+                    time_units=[
+                        time_unit
+                    ],  # Pass the time unit to ensure correct data retrieval
+                    start0101_freq=start0101_freq,
+                )
+                pl_df = pl.DataFrame()
+                for i in range(data[time_unit].shape[0]):
+                    slice_df = pl.DataFrame(data=data[time_unit][i], schema=variables[time_unit].tolist())
+                    slice_df = slice_df.with_columns([pl.Series('basin_id', np.repeat(basin_batch[i], slice_df.shape[0])),
+                                           pl.Series('time', times)])
+                    pl_df = pl_df.vstack(slice_df)
+                # Save the dataset to a Parquet file for the current batch and time unit
+                prefix_ = "" if region is None else region + "_"
+                batch_file_path = os.path.join(
+                    CACHE_DIR,
+                    f"{prefix_}timeseries_{time_unit}_batch_{basin_batch[0]}_{basin_batch[-1]}.parquet",
+                )
+                pl_df.write_parquet(batch_file_path)
+                # Release memory by deleting the dataset
+                del pl_df
+                del data

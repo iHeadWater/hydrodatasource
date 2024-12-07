@@ -1,6 +1,8 @@
 import glob
+import json
 import os
-import scipy
+import time
+import polars as pol
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -8,6 +10,9 @@ import requests
 import xarray as xr
 import tzfpy
 import dataretrieval.nwis as nwis
+from geopandas import points_from_xy
+import urllib3 as ur
+from pandas.errors import ParserError
 
 from hydrodatasource.reader.spliter_grid import read_streamflow_from_minio
 from hydrodatasource.configs.config import FS
@@ -93,6 +98,33 @@ def test_download_from_usgs():
                 continue
             site_df.to_csv(site_path)
 
+def test_gen_usgs_camels_gdf():
+    '''
+    basin_shp_gdf = gpd.read_file('iowa_all_locs/basins_shp.shp', engine='pyogrio')
+    usa_basins = basin_shp_gdf['BASIN_ID'][basin_shp_gdf['country']=='US'].to_list()
+    '''
+    usa_basins = ['08171300', '08164600', '06879650', '06746095',
+    '05413500', '01022500', '02056900', '03574500', '03604000']
+    try:
+        site_df = nwis.get_record(sites=usa_basins, service='site')
+    except requests.exceptions.ConnectionError:
+        print('Failed!')
+    camels_gdf = gpd.GeoDataFrame(geometry=points_from_xy(x=site_df['dec_long_va'], y=site_df['dec_lat_va'])).set_crs(4326)
+    camels_gdf['BASIN_ID'] = site_df['site_no'].astype('str')
+    camels_gdf.to_file('iowa_all_locs/patched_camels_us_basins.shp')
+
+def test_gen_usgs_camels_gdf_2():
+    usgs_points_gdf = gpd.read_file('iowa_all_locs/camels_us_basins.shp').to_crs(4326)
+    usgs_points_gdf = usgs_points_gdf.rename(columns={'BASIN_ID': 'ID'})
+    iowa_stream_gdf = gpd.read_file('iowa_all_locs/iowa_stream_stations.shp').to_crs(4326)
+    iowa_usgs_gdf = gpd.GeoDataFrame(pd.concat([iowa_stream_gdf[['ID', 'geometry']], usgs_points_gdf[['ID', 'geometry']]]))
+    iowa_usgs_gdf.to_file('iowa_all_locs/iowa_usgs_stations.shp')
+
+def test_gen_usgs_camels_gdf_3():
+    usa_dots_shp = gpd.read_file('iowa_all_locs/iowa_usgs_stations.shp')
+    sl_dots_shp = gpd.read_file('sl_stcd_locs/100_sl_stcds.shp').rename(columns={'STCD': 'ID'})
+    sl_usa_gdf = gpd.GeoDataFrame(pd.concat([usa_dots_shp, sl_dots_shp]))
+    sl_usa_gdf.to_file('sl_stcd_locs/iowa_usgs_sl_stations.shp')
 
 def test_dload_usgs_prcp_stations():
     import re
@@ -129,12 +161,32 @@ def test_gen_usgs_prcp_shp():
     camels_gpd_csv_df = gpd.sjoin(gpd_csv_df, basin_shp_gdf)
     camels_gpd_csv_df.to_file('usgs_prcp_shp/camels_usgs_prcp_stations.shp')
 
+def test_gen_usgs_prcp_nc():
+    # USGS变量意义：https://waterservices.usgs.gov/docs/site-service/site-service-details/
+    usgs_camels_shp = gpd.read_file('usgs_prcp_shp/camels_usgs_prcp_stations.shp')
+    total_site_df = pd.DataFrame()
+    for i in range(len(usgs_camels_shp)):
+        site_no = usgs_camels_shp['site_no'][i].astype(str).zfill(8)
+        site_path = f'/ftproot/usgs_prcp_stations/pp_USA_usgs_{site_no}.csv'
+        try:
+            site_df = pd.read_csv(site_path, engine='c')
+        except FileNotFoundError:
+            site_df = nwis.get_record(sites=site_no, service='iv', start='2000-01-01')
+            site_df.to_csv(site_path)
+        if 'datetime' not in site_df.columns:
+            site_df = site_df.reset_index()
+        site_df['datetime'] = pd.to_datetime(site_df['datetime']).dt.tz_convert('UTC').dt.tz_localize(None)
+        total_site_df = pd.concat([total_site_df, site_df])
+    total_site_df = total_site_df.set_index(['site_no', 'datetime'])
+    total_site_ds = xr.Dataset.from_dataframe(total_site_df)
+    total_site_ds.to_netcdf('/ftproot/usgs_prcp_camels.nc')
 
 def test_read_ghcnh_data():
     ghcnh_files = glob.glob('/ftproot/ghcnh/*.psv', recursive=True)
     lon_list = []
     lat_list = []
     error_list = []
+    name_list = []
     for file in ghcnh_files:
         try:
             ghcnh_df = pd.read_csv(file, engine='c', delimiter='|')
@@ -142,12 +194,14 @@ def test_read_ghcnh_data():
             error_list.append(file)
             continue
         if len(ghcnh_df) > 0:
+            name = file.split('/')[-1].split('.')[0]
             lon = ghcnh_df['Longitude'][0]
             lat = ghcnh_df['Latitude'][0]
             lon_list.append(lon)
             lat_list.append(lat)
+            name_list.append(name)
     print(error_list)
-    gpd_pos_df = gpd.GeoDataFrame(geometry=gpd.points_from_xy(lon_list, lat_list))
+    gpd_pos_df = gpd.GeoDataFrame({'name': name_list}, geometry=gpd.points_from_xy(lon_list, lat_list))
     gpd_pos_df.to_file('ghcnh_stations.shp')
 
 
@@ -156,3 +210,124 @@ def test_intersect_ghcnh_data():
     basin_shps = gpd.read_file('iowa_all_locs/basins_shp.shp')
     intersection = gpd.sjoin(ghcnh_locs, basin_shps)
     intersection.to_file('ghcnh_locs/ghcnh_intersect_basins.shp')
+
+def test_check_ghcnh_data():
+    intersect_gdf = gpd.read_file('ghcnh_locs/ghcnh_intersect_basins.shp')
+    ghcnh_gdf = gpd.read_file('ghcnh_locs/ghcnh_stations.shp')
+    sta_indexes = ghcnh_gdf.index[ghcnh_gdf.geometry.isin(intersect_gdf.geometry)]
+    ghcnh_files = glob.glob('/ftproot/ghcnh/*.psv', recursive=True)
+    sta_df = pd.read_csv(ghcnh_files[sta_indexes[0]], engine='c', delimiter='|')
+    sta_df
+
+def test_gen_iowa_paths():
+    import hydrotopo.ig_path as htip
+    usa_nodes_shp = gpd.read_file('iowa_all_locs/iowa_usgs_stations.shp')
+    nw_shp = gpd.read_file("/home/wangyang1/sl_sx_usa_shps/SL_USA_HydroRiver_single.shp", engine='pyogrio')
+    path = htip.find_edge_nodes(usa_nodes_shp, nw_shp, 100)
+    print(path)
+
+def test_dload_hml_metadata():
+    if os.path.exists('gauges.json'):
+        res = json.load(open('gauges.json', 'r'))
+    else:
+        http = ur.PoolManager()
+        r = http.request('GET',
+                     'https://api.water.noaa.gov/nwps/v1/gauges?bbox.xmin=-130&bbox.ymin=25&bbox.xmax=-70&bbox.ymax=50&srid=EPSG_4326',
+                     timeout=1000)
+        res = json.loads(r.data)
+        json.dump(res, open('gauges.json', 'w'))
+    lon_list = []
+    lat_list = []
+    name_list = []
+    for i in range(len(res['gauges'])):
+        lon_list.append(res['gauges'][i]['longitude'])
+        lat_list.append(res['gauges'][i]['latitude'])
+        name_list.append(res['gauges'][i]['lid'])
+    gdf = gpd.GeoDataFrame({'LID': name_list}, geometry=points_from_xy(x=lon_list, y=lat_list))
+    gdf.to_file('IOWA_NOAA_HML.shp')
+
+def test_intersect_hml_data():
+    ghcnh_locs = gpd.read_file('IOWA_NOAA_HML.shp').set_crs(4326)
+    basin_shps = gpd.read_file('iowa_all_locs/basins_shp.shp')
+    intersection = gpd.sjoin(ghcnh_locs, basin_shps)
+    urpool = ur.PoolManager()
+    error_list = []
+    for name in intersection['LID']:
+        try:
+            dload_data(urpool, name)
+        except ParserError:
+            error_list.append(name)
+            continue
+    other_names = [name for name in ghcnh_locs['LID'].to_list() if name not in intersection['LID'].to_list()]
+    for name in other_names:
+        try:
+            dload_data(urpool, name)
+        except ParserError:
+            error_list.append(name)
+            continue
+    np.save('error_hml.npy', np.array(error_list))
+
+def dload_data(urpool, name):
+    import io
+    url_name = f'https://mesonet.agron.iastate.edu/cgi-bin/request/hml.py?station={name}&kind=obs&tz=UTC&year1=2012&month1=1&day1=1&year2=2024&month2=11&day2=25&fmt=csv'
+    hml_path = f'/ftproot/hml_stations/hml_{name}.csv'
+    if not os.path.exists(hml_path):
+        req = urpool.request('GET', url_name, timeout=1200)
+        df = pd.read_csv(io.BytesIO(req.data))
+        df.to_csv(hml_path)
+
+def test_calc_loss_rate_hml():
+    rate_list = []
+    name_list = []
+    syear_list = []
+    eyear_list = []
+    hml_locs = gpd.read_file('IOWA_NOAA_HML.shp').set_crs(4326)
+    basin_shps = gpd.read_file('iowa_all_locs/basins_shp.shp')
+    intersection = gpd.sjoin(hml_locs, basin_shps)
+    for name in intersection['LID']:
+        hml_path = f'/ftproot/hml_stations/hml_{name}.csv'
+        if os.path.exists(hml_path):
+            name_list.append(name)
+            df = pol.read_csv(hml_path, schema_overrides={'valid[UTC]': pol.Datetime,'Flow[kcfs]': pol.Float32}, ignore_errors=True)
+            if 'Flow[kcfs]' not in df.columns:
+                rate_list.append(0)
+                if len(df)!=0:
+                    syear_list.append(df['valid[UTC]'].dt.year()[0])
+                    eyear_list.append(df['valid[UTC]'].dt.year()[-1])
+                else:
+                    syear_list.append(9999)
+                    eyear_list.append(0)
+            else:
+                nonnull_df = df.filter(~df['Flow[kcfs]'].is_nan())
+                rate = len(nonnull_df) / len(df)
+                rate_list.append(rate)
+                syear_list.append(nonnull_df['valid[UTC]'].dt.year()[0])
+                eyear_list.append(nonnull_df['valid[UTC]'].dt.year()[-1])
+    rate_df = pol.DataFrame({'LID': name_list, 'rate':rate_list, 'start_year': syear_list, 'end_year':eyear_list})
+    files_df = rate_df.filter((rate_df['rate'] >=0.2) & (rate_df['start_year'] <=2023) & (rate_df['end_year'] >=2023))
+    rate_df.write_csv('loss_rate_hml.csv')
+    files_df.write_csv('ready_files_hml.csv')
+
+def test_concat_hml_parquet():
+    files_df = pol.read_csv('ready_files_hml.csv')
+    total_df = pol.DataFrame()
+    for name in files_df['LID']:
+        hml_path = f'/ftproot/hml_stations/hml_{name}.csv'
+        hml_df = pol.read_csv(hml_path, schema_overrides={'valid[UTC]': pol.Datetime,'Flow[kcfs]': pol.Float32})
+        hml_df = (hml_df.group_by_dynamic(index_column="valid[UTC]", every="1h", closed="both", include_boundaries=True,).
+                  agg(pol.col('station').first(), pol.col('Stage[ft]').mean(), pol.col('Flow[kcfs]').mean()))
+        hml_df = hml_df[['station', 'valid[UTC]', 'Flow[kcfs]', 'Stage[ft]']]
+        total_df = pol.concat([total_df, hml_df])
+    total_df.write_parquet('hml_camels_stations.parquet')
+
+def test_concat_hml_netcdf():
+    files_df = pd.read_csv('ready_files_hml.csv')
+    total_df = pd.DataFrame()
+    for name in files_df['LID']:
+        hml_path = f'/ftproot/hml_stations/hml_{name}.csv'
+        hml_df = pd.read_csv(hml_path, engine='c', parse_dates=['valid[UTC]'])
+        hml_df = hml_df.set_index('valid[UTC]').resample('1h').last().reset_index()
+        hml_df = hml_df[['station', 'valid[UTC]', 'Flow[kcfs]', 'Stage[ft]']]
+        total_df = pd.concat([total_df, hml_df])
+    total_ds = xr.Dataset.from_dataframe(total_df)
+    total_ds.to_netcdf('hml_camels_stations.nc')
