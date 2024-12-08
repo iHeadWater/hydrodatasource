@@ -1,21 +1,21 @@
 import glob
 import json
 import os
-import time
-import polars as pol
+
+import dataretrieval.nwis as nwis
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+import polars as pol
 import requests
-import xarray as xr
 import tzfpy
-import dataretrieval.nwis as nwis
-from geopandas import points_from_xy
 import urllib3 as ur
+import xarray as xr
+from geopandas import points_from_xy
 from pandas.errors import ParserError
 
-from hydrodatasource.reader.spliter_grid import read_streamflow_from_minio
 from hydrodatasource.configs.config import FS
+from hydrodatasource.reader.spliter_grid import read_streamflow_from_minio
 
 
 def test_gen_camels_hourly_shp():
@@ -118,13 +118,18 @@ def test_gen_usgs_camels_gdf_2():
     usgs_points_gdf = usgs_points_gdf.rename(columns={'BASIN_ID': 'ID'})
     iowa_stream_gdf = gpd.read_file('iowa_all_locs/iowa_stream_stations.shp').to_crs(4326)
     iowa_usgs_gdf = gpd.GeoDataFrame(pd.concat([iowa_stream_gdf[['ID', 'geometry']], usgs_points_gdf[['ID', 'geometry']]]))
-    iowa_usgs_gdf.to_file('iowa_all_locs/iowa_usgs_stations.shp')
-
-def test_gen_usgs_camels_gdf_3():
-    usa_dots_shp = gpd.read_file('iowa_all_locs/iowa_usgs_stations.shp')
     sl_dots_shp = gpd.read_file('sl_stcd_locs/100_sl_stcds.shp').rename(columns={'STCD': 'ID'})
-    sl_usa_gdf = gpd.GeoDataFrame(pd.concat([usa_dots_shp, sl_dots_shp]))
+    sl_usa_gdf = gpd.GeoDataFrame(pd.concat([iowa_usgs_gdf, sl_dots_shp]))
     sl_usa_gdf.to_file('sl_stcd_locs/iowa_usgs_sl_stations.shp')
+
+def test_gen_hml_usgs_camels_gdf():
+    usa_dots_shp = gpd.read_file('sl_stcd_locs/iowa_usgs_sl_stations.shp')
+    hml_stcds = gpd.read_file('CAMELS_CHN_HML_intersect_basins.shp')
+    hml_stcds = hml_stcds.rename(columns={'LID': 'ID'})
+    hml_stcds['ID'] = hml_stcds['ID'].apply(lambda x: f'HML_{x}')
+    hml_slice = hml_stcds[['ID', 'geometry']]
+    total_gdf = gpd.GeoDataFrame(pd.concat([usa_dots_shp, hml_slice]).reset_index(drop=True))
+    total_gdf.to_file('sl_stcd_locs/iowa_usgs_hml_sl_stations.shp')
 
 def test_dload_usgs_prcp_stations():
     import re

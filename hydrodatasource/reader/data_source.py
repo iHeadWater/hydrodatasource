@@ -720,3 +720,81 @@ class SelfMadeHydroDataset_PQ(SelfMadeHydroDataset):
                 # Release memory by deleting the dataset
                 del pl_df
                 del data
+
+    def read_ts_xrdataset(
+        self,
+        gage_id_lst: list = None,
+        t_range: list = None,
+        var_lst: list = None,
+        **kwargs,
+    ) -> dict:
+        """
+        Read time-series xarray dataset from multiple NetCDF files and organize them by time units.
+
+        Parameters:
+        ----------
+        gage_id_lst: list - List of gage IDs to select.
+        t_range: list - List of two elements [start_time, end_time] to select time range.
+        var_lst: list - List of variables to select.
+        **kwargs: Additional arguments.
+
+        Returns:
+        ----------
+        dict: A dictionary where each key is a time unit and each value is an xarray.Dataset containing the selected gage IDs, time range, and variables.
+        """
+        region = kwargs.get("region", None)
+        time_units = kwargs.get("time_units", self.time_unit)
+        if var_lst is None:
+            return None
+
+        # Initialize a dictionary to hold datasets for each time unit
+        datasets_by_time_unit = {}
+
+        prefix_ = "" if region is None else f"{region}_"
+
+        for time_unit in time_units:
+            # Collect batch files specific to the current time unit
+            batch_files = [
+                os.path.join(CACHE_DIR, f)
+                for f in os.listdir(CACHE_DIR)
+                if re.match(
+                    rf"^{prefix_}timeseries_{time_unit}_batch_[A-Za-z0-9_]+_[A-Za-z0-9_]+\.parquet$",
+                    f,
+                )
+            ]
+
+            if not batch_files:
+                # Cache the data if no batch files are found for the current time unit
+                self.cache_timeseries_xrdataset(region=region, **kwargs)
+                batch_files = [
+                    os.path.join(CACHE_DIR, f)
+                    for f in os.listdir(CACHE_DIR)
+                    if re.match(
+                        rf"^{prefix_}timeseries_{time_unit}_batch_[A-Za-z0-9_]+_[A-Za-z0-9_]+\.parquet$",
+                        f,
+                    )
+                ]
+            selected_datasets = []
+            for batch_file in batch_files:
+                ds = pl.read_parquet(batch_file)
+                all_vars = ds.columns
+                if any(var not in ds.columns for var in var_lst):
+                    raise ValueError(f"var_lst must all be in {all_vars}")
+                if valid_gage_ids := [
+                    gid for gid in gage_id_lst if gid in ds["basin_id"].unique(maintain_order=True)
+                ]:
+                    pl_t_range = pl.datetime_range(start=pd.to_datetime(t_range[0]), end=pd.to_datetime(t_range[1]), interval=time_unit, eager=True)
+                    var_lst.extend(['basin_id', 'time'])
+                    ds_selected = ds[var_lst].filter(
+                        ds[var_lst]['basin_id'].is_in(valid_gage_ids), ds[var_lst]['time'].is_in(pl_t_range)
+                    )
+                    selected_datasets.append(ds_selected)
+
+                del ds  # Close the dataset to free memory
+            # If any datasets were selected, concatenate them along the 'basin' dimension
+            if selected_datasets:
+                datasets_by_time_unit[time_unit] = pl.concat(selected_datasets)
+            else:
+                datasets_by_time_unit[time_unit] = pl.DataFrame()
+        return datasets_by_time_unit
+

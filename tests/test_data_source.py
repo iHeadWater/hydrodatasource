@@ -219,6 +219,14 @@ def test_selfmadehydrodataset_read_ts_xrdataset(
         xrdataset_dict["1D"]["streamflow"].values, target_cols["1D"][:, :, 0]
     )
 
+def test_read_pdts_cache(three_hour_pqdataset):
+    pqdataset_dict = three_hour_pqdataset.read_ts_xrdataset(
+        gage_id_lst=["camels_01013500", "camels_01022500"],
+        t_range=["2020-01-01 01", "2020-12-31 22"],
+        var_lst=["streamflow"],
+        time_units=["3h"],
+    )
+    assert isinstance(pqdataset_dict, dict)
 
 def test_selfmadehydrodataset_read_attr_xrdataset(one_day_dataset):
     xrdataset = one_day_dataset.read_attr_xrdataset(
