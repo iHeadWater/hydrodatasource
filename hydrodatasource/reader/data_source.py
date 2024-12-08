@@ -668,12 +668,6 @@ class SelfMadeHydroDataset_PQ(SelfMadeHydroDataset):
 
         variables = self.get_timeseries_cols()
         basins = self.camels_sites["basin_id"].values
-
-        # Define the generator function for batching
-        def data_generator(basins, batch_size):
-            for i in range(0, len(basins), batch_size):
-                yield basins[i : i + batch_size]
-
         for time_unit in time_units:
             if t_range is None:
                 if time_unit != "3h":
@@ -692,34 +686,31 @@ class SelfMadeHydroDataset_PQ(SelfMadeHydroDataset):
                 )
             else:
                 times = pl.datetime_range(start=pd.to_datetime(t_range[0]), end=pd.to_datetime(t_range[-1]), interval=time_unit, eager=True)
-            for basin_batch in data_generator(basins, batchsize):
-                data = self.read_timeseries(
-                    object_ids=basin_batch,
-                    t_range_list=t_range,
-                    relevant_cols=variables[
-                        time_unit
-                    ],  # Ensure we use the right columns for the time unit
-                    time_units=[
-                        time_unit
-                    ],  # Pass the time unit to ensure correct data retrieval
-                    start0101_freq=start0101_freq,
-                )
-                pl_df = pl.DataFrame()
-                for i in range(data[time_unit].shape[0]):
-                    slice_df = pl.DataFrame(data=data[time_unit][i], schema=variables[time_unit].tolist())
-                    slice_df = slice_df.with_columns([pl.Series('basin_id', np.repeat(basin_batch[i], slice_df.shape[0])),
-                                           pl.Series('time', times)])
-                    pl_df = pl_df.vstack(slice_df)
-                # Save the dataset to a Parquet file for the current batch and time unit
-                prefix_ = "" if region is None else region + "_"
-                batch_file_path = os.path.join(
-                    CACHE_DIR,
-                    f"{prefix_}timeseries_{time_unit}_batch_{basin_batch[0]}_{basin_batch[-1]}.parquet",
-                )
-                pl_df.write_parquet(batch_file_path)
-                # Release memory by deleting the dataset
-                del pl_df
-                del data
+            data = self.read_timeseries(
+                object_ids=basins,
+                t_range_list=t_range,
+                relevant_cols=variables[
+                    time_unit
+                ],  # Ensure we use the right columns for the time unit
+                time_units=[
+                    time_unit
+                ],  # Pass the time unit to ensure correct data retrieval
+                start0101_freq=start0101_freq,
+            )
+            pl_df = pl.DataFrame()
+            for i in range(data[time_unit].shape[0]):
+                slice_df = pl.DataFrame(data=data[time_unit][i], schema=variables[time_unit].tolist())
+                slice_df = slice_df.with_columns([pl.Series('basin_id', np.repeat(basins[i], slice_df.shape[0])),
+                                       pl.Series('time', times)])
+                pl_df = pl_df.vstack(slice_df)
+            # Save the dataset to a Parquet file for the current batch and time unit
+            prefix_ = "" if region is None else region + "_"
+            batch_file_path = os.path.join(
+                CACHE_DIR,
+                f"{prefix_}timeseries_{time_unit}_batch_{basins[0]}_{basins[-1]}.parquet",
+            )
+            pl_df.write_parquet(batch_file_path)
+
 
     def read_ts_xrdataset(
         self,
@@ -746,7 +737,8 @@ class SelfMadeHydroDataset_PQ(SelfMadeHydroDataset):
         time_units = kwargs.get("time_units", self.time_unit)
         if var_lst is None:
             return None
-
+        if ('basin_id' not in var_lst) | ('time' not in var_lst):
+            var_lst.extend(['basin_id', 'time'])
         # Initialize a dictionary to hold datasets for each time unit
         datasets_by_time_unit = {}
 
@@ -780,17 +772,16 @@ class SelfMadeHydroDataset_PQ(SelfMadeHydroDataset):
                 all_vars = ds.columns
                 if any(var not in ds.columns for var in var_lst):
                     raise ValueError(f"var_lst must all be in {all_vars}")
+                # split ds['basin_id'] out to avoid performance problem
+                basin_ids = ds['basin_id'].unique(maintain_order=True)
                 if valid_gage_ids := [
-                    gid for gid in gage_id_lst if gid in ds["basin_id"].unique(maintain_order=True)
+                    gid for gid in gage_id_lst if gid in basin_ids
                 ]:
                     pl_t_range = pl.datetime_range(start=pd.to_datetime(t_range[0]), end=pd.to_datetime(t_range[1]), interval=time_unit, eager=True)
-                    var_lst.extend(['basin_id', 'time'])
                     ds_selected = ds[var_lst].filter(
                         ds[var_lst]['basin_id'].is_in(valid_gage_ids), ds[var_lst]['time'].is_in(pl_t_range)
                     )
                     selected_datasets.append(ds_selected)
-
-                del ds  # Close the dataset to free memory
             # If any datasets were selected, concatenate them along the 'basin' dimension
             if selected_datasets:
                 datasets_by_time_unit[time_unit] = pl.concat(selected_datasets)
