@@ -834,7 +834,7 @@ class SelfMadeHydroDataset_PQ(SelfMadeHydroDataset):
                 if valid_gage_ids := [
                     gid for gid in gage_id_lst if gid in basin_ids
                 ]:
-                    pl_t_range = pl.datetime_range(start=pd.to_datetime(t_range[0]), end=pd.to_datetime(t_range[1]), interval=time_unit, eager=True)
+                    pl_t_range = pl.datetime_range(start=pd.to_datetime(t_range[0]), end=pd.to_datetime(t_range[1]), interval='1h', eager=True)
                     ds_selected = ds[var_lst].filter(
                         ds[var_lst]['basin_id'].is_in(valid_gage_ids), ds[var_lst]['time'].is_in(pl_t_range))
                     selected_datasets.append(ds_selected)
