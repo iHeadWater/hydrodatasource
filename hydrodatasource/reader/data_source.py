@@ -597,7 +597,8 @@ class SelfMadeHydroDataset(HydroData):
         try:
             attr = xr.open_dataset(os.path.join(CACHE_DIR, f"{prefix_}attributes.nc"))
         except FileNotFoundError:
-            self.cache_xrdataset(time_units=self.time_unit)
+            # TODO: check if it fits for all situations
+            self.cache_attributes_xrdataset(region=region)
             attr = xr.open_dataset(os.path.join(CACHE_DIR, f"{prefix_}attributes.nc"))
         return attr[var_lst].sel(basin=gage_id_lst)
 
