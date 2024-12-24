@@ -383,7 +383,10 @@ def calculate_basin_offsets(shp_file_path):
 
     for index, row in gdf.iterrows():
         outlet = row["geometry"]
-        offset = calculate_utc_offset(outlet.y, outlet.x)
+        # TODO: Only for temp use.
+        offset = calculate_utc_offset(
+            outlet.y, outlet.x, datetime(2024, 8, 14, 0, 0, 0)
+        )
         basin_id = row.get(
             "BASIN_ID", index
         )  # Use the index as the default value if "BASIN_ID" is not found

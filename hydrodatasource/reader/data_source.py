@@ -209,9 +209,9 @@ class SelfMadeHydroDataset(HydroData):
                 )
                 if "s3://" in ts_file:
                     with conf.FS.open(ts_file, mode="rb") as f:
-                        ts_data = pd.read_csv(f, engine='c')
+                        ts_data = pd.read_csv(f, engine="c")
                 else:
-                    ts_data = pd.read_csv(ts_file, engine='c')
+                    ts_data = pd.read_csv(ts_file, engine="c")
                 date = pd.to_datetime(ts_data["time"]).values
                 if offset_to_utc:
                     date = date - np.timedelta64(offset_dict[object_ids[k]], "h")
@@ -741,19 +741,19 @@ class SelfMadeHydroDataset_PQ(SelfMadeHydroDataset):
                 t_range = generate_start0101_time_range(
                     start_time=t_range_list[0],
                     end_time=t_range_list[-1],
-                    freq='1h')
+                    freq="1h")
             else:
-                t_range = pd.date_range(start=t_range_list[0], end=t_range_list[-1], freq='1h')
+                t_range = pd.date_range(start=t_range_list[0], end=t_range_list[-1], freq="1h")
             xk_list = []
             for k in tqdm(range(len(object_ids)), desc=f"Reading timeseries data with {time_unit}"):
                 prefix_ = "" if region is None else region + "_"
                 ts_file = os.path.join(ts_dir, prefix_ + object_ids[k] + ".csv")
                 if "s3://" in ts_file:
                     with conf.FS.open(ts_file, mode="rb") as f:
-                        ts_data = pl.read_csv(f, schema_overrides={'time': pl.Datetime})
+                        ts_data = pl.read_csv(f, schema_overrides={"time": pl.Datetime})
                         ts_data = ts_data.with_columns(pl.col(pl.String).cast(pl.Float32))
                 else:
-                    ts_data = pl.read_csv(ts_file, schema_overrides={'time': pl.Datetime})
+                    ts_data = pl.read_csv(ts_file, schema_overrides={"time": pl.Datetime})
                     ts_data = ts_data.with_columns(pl.col(pl.String).cast(pl.Float32))
                 date = pd.to_datetime(ts_data["time"]).values
                 if offset_to_utc:
@@ -762,7 +762,7 @@ class SelfMadeHydroDataset_PQ(SelfMadeHydroDataset):
                 offset_date_np = np.intersect1d(date, t_range, return_indices=True)
                 ts_data = ts_data.pipe(self._read_timeseries_1basin1var, ts_data.columns[1:])[offset_date_np[1]]
                 ts_data = ts_data.with_columns([pl.Series(np.repeat(object_ids[k], len(ts_data))).alias("basin_id")])
-                ts_data_id = ts_data[np.append(relevant_cols, ['basin_id', 'time'])]
+                ts_data_id = ts_data[np.append(relevant_cols, ["basin_id", "time"])]
                 ts_data_id = ts_data_id.with_columns(pl.col(pl.Float64).cast(pl.Float32))
                 xk_list.append(ts_data_id)
             results[time_unit] = xk_list
@@ -794,8 +794,8 @@ class SelfMadeHydroDataset_PQ(SelfMadeHydroDataset):
         time_units = kwargs.get("time_units", self.time_unit)
         if var_lst is None:
             return None
-        if ('basin_id' not in var_lst) | ('time' not in var_lst):
-            var_lst.extend(['basin_id', 'time'])
+        if ("basin_id" not in var_lst) | ("time" not in var_lst):
+            var_lst.extend(["basin_id", "time"])
         # Initialize a dictionary to hold datasets for each time unit
         datasets_by_time_unit = {}
 
@@ -829,15 +829,15 @@ class SelfMadeHydroDataset_PQ(SelfMadeHydroDataset):
                 all_vars = ds.columns
                 if any(var not in ds.columns for var in var_lst):
                     raise ValueError(f"var_lst must all be in {all_vars}")
-                # split ds['basin_id'] out to avoid performance problem
-                basin_ids = ds.select('basin_id').unique(maintain_order=True).collect()
+                # split ds["basin_id"] out to avoid performance problem
+                basin_ids = ds.select("basin_id").unique(maintain_order=True).collect()
                 if valid_gage_ids := [
                     gid for gid in gage_id_lst if gid in basin_ids.to_numpy()
                 ]:
-                    pl_t_range = pl.datetime_range(start=pd.to_datetime(t_range[0]), end=pd.to_datetime(t_range[1]), interval='1h', eager=True)
-                    ds_selected = ds.select(var_lst).filter(pl.col('basin_id').is_in(valid_gage_ids), pl.col('time').is_in(pl_t_range)).collect()
+                    pl_t_range = pl.datetime_range(start=pd.to_datetime(t_range[0]), end=pd.to_datetime(t_range[1]), interval="1h", eager=True)
+                    ds_selected = ds.select(var_lst).filter(pl.col("basin_id").is_in(valid_gage_ids), pl.col("time").is_in(pl_t_range)).collect()
                     selected_datasets.append(ds_selected)
-            # If any datasets were selected, concatenate them along the 'basin' dimension
+            # If any datasets were selected, concatenate them along the "basin" dimension
             if selected_datasets:
                 datasets_by_time_unit[time_unit] = pl.concat(selected_datasets)
             else:
@@ -845,12 +845,12 @@ class SelfMadeHydroDataset_PQ(SelfMadeHydroDataset):
         return datasets_by_time_unit
 
     def _read_timeseries_1basin1var(self, ts_data, relevant_col):
-        if 'precipitation' in ts_data.columns:
+        if "precipitation" in ts_data.columns:
             prcp = ts_data["precipitation"].to_numpy()
             prcp[prcp < 0] = 0.0
             ts_data = ts_data.with_columns([pl.Series(prcp).cast(pl.Float32).alias("precipitation")])
         evap_prcp_cols = [col for col in ts_data.columns if col in ERA5LAND_ET_REALATED_VARS]
-        if len(evap_prcp_cols)>0:
+        if len(evap_prcp_cols) > 0:
             ts_data = ts_data.with_columns([pl.when(pl.col(evap_prcp_cols) > 0).then(pl.col(evap_prcp_cols)).otherwise(pl.col(evap_prcp_cols) * -1)])
             ts_data = ts_data.with_columns([pl.col(evap_prcp_cols).cast(pl.Float32)])
         modis_et_cols = [col for col in ts_data.columns if col in MODIS_ET_PET_8D_VARS]
@@ -876,4 +876,4 @@ class SelfMadeHydroDataset_PQ(SelfMadeHydroDataset):
                 if delta_days > 0:
                     modis_values[idx - 1] = modis_values[idx - 1] * 8 / delta_days
         # NOTE: MODIS ET values are ACTUALLY in 0.1mm/day, so we need to convert to mm/day
-        return ts_data.with_columns((modis_values*0.1).cast(pl.Float32).get_columns())
+        return ts_data.with_columns((modis_values * 0.1).cast(pl.Float32).get_columns())
