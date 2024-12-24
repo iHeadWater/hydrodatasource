@@ -825,18 +825,17 @@ class SelfMadeHydroDataset_PQ(SelfMadeHydroDataset):
                 ]
             selected_datasets = []
             for batch_file in batch_files:
-                ds = pl.read_parquet(batch_file)
+                ds = pl.scan_parquet(batch_file)
                 all_vars = ds.columns
                 if any(var not in ds.columns for var in var_lst):
                     raise ValueError(f"var_lst must all be in {all_vars}")
                 # split ds['basin_id'] out to avoid performance problem
-                basin_ids = ds['basin_id'].unique(maintain_order=True)
+                basin_ids = ds.select('basin_id').unique(maintain_order=True).collect()
                 if valid_gage_ids := [
-                    gid for gid in gage_id_lst if gid in basin_ids
+                    gid for gid in gage_id_lst if gid in basin_ids.to_numpy()
                 ]:
                     pl_t_range = pl.datetime_range(start=pd.to_datetime(t_range[0]), end=pd.to_datetime(t_range[1]), interval='1h', eager=True)
-                    ds_selected = ds[var_lst].filter(
-                        ds[var_lst]['basin_id'].is_in(valid_gage_ids), ds[var_lst]['time'].is_in(pl_t_range))
+                    ds_selected = ds.select(var_lst).filter(pl.col('basin_id').is_in(valid_gage_ids), pl.col('time').is_in(pl_t_range)).collect()
                     selected_datasets.append(ds_selected)
             # If any datasets were selected, concatenate them along the 'basin' dimension
             if selected_datasets:
