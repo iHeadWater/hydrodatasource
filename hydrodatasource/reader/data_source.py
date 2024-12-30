@@ -71,10 +71,10 @@ class SelfMadeHydroDataset(HydroData):
             _description_, by default
         """
         if time_unit is None:
-            time_unit = ["1D"]
-        if any(unit not in ["1h", "3h", "1D", "8D"] for unit in time_unit):
+            time_unit = ["1MS"]
+        if any(unit not in ["1h", "3h", "1D", "8D", "1MS"] for unit in time_unit):
             raise ValueError(
-                "time_unit must be one of ['1h', '3h', '1D', '8D']. We only support these time units now."
+                "time_unit must be one of ['1h', '3h', '1D', '8D','1MS']. We only support these time units now."
             )
         # TODO: maybe starting with "s3://" is a better idea?
         self.head = "minio" if "s3://" in data_path else "local"
@@ -87,7 +87,7 @@ class SelfMadeHydroDataset(HydroData):
 
     @property
     def streamflow_unit(self):
-        unit_mapping = {"1h": "mm/h", "3h": "mm/3h", "1D": "mm/d"}
+        unit_mapping = {"1h": "mm/h", "3h": "mm/3h", "1D": "mm/d", "1MS": "mm/M"}
         return {unit: unit_mapping[unit] for unit in self.time_unit}
 
     def get_name(self):
@@ -648,21 +648,7 @@ class SelfMadeHydroDataset(HydroData):
 
 class LongTermDataset(SelfMadeHydroDataset):
     def __init__(self, data_path, download=False, time_unit=None):
-        super(LongTermDataset, self).__init__(data_path)
-        if time_unit is None:
-            time_unit = ["1MS"]
-        if any(unit not in ["1h", "3h", "1D", "8D", "1MS"] for unit in time_unit):
-            raise ValueError(
-                "time_unit must be one of ['1h', '3h', '1D', '8D', '1MS']. We only support these time units now."
-            )
-        # TODO: maybe starting with "s3://" is a better idea?
-        self.head = "minio" if "s3://" in data_path else "local"
         super().__init__(data_path)
-        self.data_source_description = self.set_data_source_describe()
-        if download:
-            self.download_data_source()
-        self.camels_sites = self.read_site_info()
-        self.time_unit = time_unit
 
     def read_site_info(self):
         camels_file = self.data_source_description["ATTR_FILE"]
@@ -688,7 +674,7 @@ class LongTermDataset(SelfMadeHydroDataset):
             ]
         unit_files = [folder + "_units_info.json" for folder in time_units_dir]
         attr_dir = os.path.join(data_root_dir, "attributes")
-        attr_file = os.path.join(attr_dir, "grdc_attributes1.csv")
+        attr_file = os.path.join(attr_dir, "grdc_attr_178.csv")
         shape_dir = os.path.join(data_root_dir, "shapes")
         global_dir = os.path.join(data_root_dir, "attributes")
         return collections.OrderedDict(
@@ -701,38 +687,40 @@ class LongTermDataset(SelfMadeHydroDataset):
             GLOBAL_DIR=global_dir,
         )
 
-    def read_attr_xrdataset(self, gage_id_lst=None, var_lst=None, **kwargs):
-        region = kwargs.get("region", None)
+    # def read_attr_xrdataset(self, gage_id_lst=None, var_lst=None, **kwargs):
+    #     region = kwargs.get("region", None)
 
-        prefix_ = "" if region is None else region + "_"
-        if var_lst is None or len(var_lst) == 0:
-            return None
-        try:
-            attr = xr.open_dataset(os.path.join(CACHE_DIR, f"{prefix_}attributes.nc"))
-        except FileNotFoundError:
-            self.cache_xrdataset(time_units=self.time_unit)
-            attr = xr.open_dataset(os.path.join(CACHE_DIR, f"{prefix_}attributes.nc"))
-        attr = attr.sel(basin=~attr.indexes['basin'].duplicated())
-        gage_id_lst = [str(i) for i in gage_id_lst]
-        return attr[var_lst].sel(basin=gage_id_lst)
+    #     prefix_ = "" if region is None else region + "_"
+    #     if var_lst is None or len(var_lst) == 0:
+    #         return None
+    #     try:
+    #         attr = xr.open_dataset(os.path.join(CACHE_DIR, f"{prefix_}attributes.nc"))
+    #     except FileNotFoundError:
+    #         self.cache_xrdataset(time_units=self.time_unit)
+    #         attr = xr.open_dataset(os.path.join(CACHE_DIR, f"{prefix_}attributes.nc"))
+    #     attr = attr.sel(basin=~attr.indexes['basin'].duplicated())
+    #     gage_id_lst = [str(i) for i in gage_id_lst]
+    #     return attr[var_lst].sel(basin=gage_id_lst)
 
     def read_global_data(
-        self, object_ids: list = None, t_range_list: list = None
+        self, object_ids: list = None, t_range_list: list = None, var_lst: list = None
     ) -> dict:
-
+        if var_lst is None or len(var_lst) == 0:
+            return None
         if not os.path.exists(os.path.join(CACHE_DIR, "global_data.nc")):
             self.cache_global_dataset(object_ids, t_range_list)
         netcdf_file = os.path.join(CACHE_DIR, "global_data.nc")
-        ds = xr.open_dataset(netcdf_file)
+        global_data = xr.open_dataset(netcdf_file)
 
-        return {"global_dataset": ds}
+        return global_data[var_lst].sel(basin=object_ids)
+        # return {"global_dataset": global_data}
 
     def cache_global_dataset(self, object_ids: list = None, t_range_list: list = None):
         """
         读取 CSV 数据并将其转换为 xarray 数据集并保存为 NetCDF 文件。
         """
         global_data_file = os.path.join(
-            self.data_source_description["GLOBAL_DIR"], "global.csv"
+            self.data_source_description["GLOBAL_DIR"], "global_data.csv"
         )
         if not os.path.exists(global_data_file):
             raise FileNotFoundError(f"Global data file not found at {global_data_file}")
@@ -748,19 +736,11 @@ class LongTermDataset(SelfMadeHydroDataset):
         ds = xr.Dataset(coords={"basin": object_ids, "time": time_col})
 
         for var in variable_names:
-            # 由于没有单位信息，我们只传递数据
-            data_array = np.tile(
-                filtered_data[var].values, (len(object_ids), 1)
-            )  # 复制变量数据以适应 (basin, time)
-
-            # 添加变量到 Dataset
+            data_array = np.tile(filtered_data[var].values, (len(object_ids), 1))
             ds[var] = (("basin", "time"), data_array)
 
-        # 保存为 NetCDF 文件
         ds.to_netcdf(os.path.join(CACHE_DIR, "global_data.nc"))
-        print("NetCDF 文件已成功保存为 global_data.nc")
         del global_data
-
 
     def cache_xrdataset(self, region=None, t_range=None, time_units=None):
         """Save all data in a netcdf file in the cache directory"""
