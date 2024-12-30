@@ -7,6 +7,7 @@ import pandas as pd
 import xarray as xr
 from abc import ABC
 from tqdm import tqdm
+import polars as pl
 
 from hydroutils import hydro_file
 from hydroutils.hydro_time import generate_start0101_time_range
@@ -208,9 +209,9 @@ class SelfMadeHydroDataset(HydroData):
                 )
                 if "s3://" in ts_file:
                     with conf.FS.open(ts_file, mode="rb") as f:
-                        ts_data = pd.read_csv(f)
+                        ts_data = pd.read_csv(f, engine="c")
                 else:
-                    ts_data = pd.read_csv(ts_file)
+                    ts_data = pd.read_csv(ts_file, engine="c")
                 date = pd.to_datetime(ts_data["time"]).values
                 if offset_to_utc:
                     date = date - np.timedelta64(offset_dict[object_ids[k]], "h")
@@ -580,9 +581,10 @@ class SelfMadeHydroDataset(HydroData):
 
             # If any datasets were selected, concatenate them along the 'basin' dimension
             if selected_datasets:
+                # NOTE: the chosen part must be sorted by basin, or there will be some negative sideeffect for continue usage of this repo
                 datasets_by_time_unit[time_unit] = xr.concat(
                     selected_datasets, dim="basin"
-                )
+                ).sortby("basin")
             else:
                 datasets_by_time_unit[time_unit] = xr.Dataset()
 
