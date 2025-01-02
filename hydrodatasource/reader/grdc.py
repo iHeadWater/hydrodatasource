@@ -1,7 +1,7 @@
 """
 Author: Wenyu Ouyang
 Date: 2023-11-03 09:16:41
-LastEditTime: 2025-01-02 19:47:49
+LastEditTime: 2025-01-02 20:40:12
 LastEditors: Wenyu Ouyang
 Description: Reading GRDC data
 FilePath: \hydrodatasource\hydrodatasource\reader\grdc.py
@@ -13,6 +13,7 @@ import os
 import datetime
 import logging
 from pathlib import Path
+import re
 import pandas as pd
 import xarray as xr
 import geopandas as gpd
@@ -199,7 +200,7 @@ class Grdc(HydroData):
 
         return df, metadata
 
-    def cache_grdc_daily(self, station_ids=None, time_range=None):
+    def cache_grdc_daily(self, station_ids=None, time_range=None, batch_size=1000):
         """
         Save GRDC daily data to a NetCDF file.
 
@@ -210,90 +211,175 @@ class Grdc(HydroData):
         time_range: list of str
             List of [start_time, end_time] in UTC and ISO format strings e.g.
             ['YYYY-MM-DDTHH:MM:SSZ', 'YYYY-MM-DDTHH:MM:SSZ'].
+        batch_size: int
+            Number of stations to process in each batch
         """
-        nc_file = os.path.join(CACHE_DIR, "grdc_daily_streamflow_data.nc")
-        # if os.path.exists(nc_file):
-        #     return
         if time_range is None:
             time_range = ["1980-01-01", "2023-12-31"]
         start_date, end_date = time_range
         catalogue = self.grdc_site_info
-        # Create empty lists to store data and metadata
-        data_list = []
-        meta_list = []
         if station_ids is None:
             station_ids = catalogue["grdc_no"].tolist()
         catalogue = catalogue[catalogue["grdc_no"].isin(station_ids)]
 
+        def data_generator(station_ids, batch_size):
+            for i in range(0, len(station_ids), batch_size):
+                yield station_ids[i : i + batch_size]
+
+        # Split station IDs into batches
+        station_batches = list(data_generator(station_ids, batch_size))
+
         # Loop over each station in the catalogue
-        for station_id in catalogue["grdc_no"]:
-            try:
-                st = datetime.datetime.strptime(start_date, "%Y-%m-%d").strftime(
-                    "%Y-%m-%dT%H:%M:%SZ"
-                )
-                et = datetime.datetime.strptime(end_date, "%Y-%m-%d").strftime(
-                    "%Y-%m-%dT%H:%M:%SZ"
-                )
-                df, meta = self.read_grdc_daily_data(str(station_id), [st, et])
-            except Exception as e:
-                print(f"Error reading data for station {station_id}: {e}")
-                # Create an empty DataFrame with the same structure
-                df = pd.DataFrame(
-                    columns=["streamflow"],
-                    index=pd.date_range(start=start_date, end=end_date),
-                )
-                df["streamflow"] = float("nan")
-                meta = {
-                    "grdc_file_name": "",
-                    "id_from_grdc": station_id,
-                    "river_name": "",
-                    "station_name": "",
-                    "country_code": "",
-                    "grdc_latitude_in_arc_degree": float("nan"),
-                    "grdc_longitude_in_arc_degree": float("nan"),
-                    "grdc_catchment_area_in_km2": float("nan"),
-                    "altitude_masl": float("nan"),
-                    "dataSetContent": "",
-                    "units": "m³/s",
-                    "time_series": "",
-                    "no_of_years": 0,
-                    "last_update": "",
-                    "nrMeasurements": "NA",
-                    "UserStartTime": start_date,
-                    "UserEndTime": end_date,
-                    "nrMissingData": 0,
-                }
+        for batch_index, batch in enumerate(station_batches):
+            # Create empty lists to store data and metadata
+            data_list = []
+            meta_list = []
+            for station_id in batch:
+                try:
+                    st = datetime.datetime.strptime(start_date, "%Y-%m-%d").strftime(
+                        "%Y-%m-%dT%H:%M:%SZ"
+                    )
+                    et = datetime.datetime.strptime(end_date, "%Y-%m-%d").strftime(
+                        "%Y-%m-%dT%H:%M:%SZ"
+                    )
+                    df, meta = self.read_grdc_daily_data(str(station_id), [st, et])
+                except Exception as e:
+                    print(f"Error reading data for station {station_id}: {e}")
+                    # Create an empty DataFrame with the same structure
+                    df = pd.DataFrame(
+                        columns=["streamflow"],
+                        index=pd.date_range(start=start_date, end=end_date),
+                    )
+                    df["streamflow"] = float("nan")
+                    meta = {
+                        "grdc_file_name": "",
+                        "id_from_grdc": station_id,
+                        "river_name": "",
+                        "station_name": "",
+                        "country_code": "",
+                        "grdc_latitude_in_arc_degree": float("nan"),
+                        "grdc_longitude_in_arc_degree": float("nan"),
+                        "grdc_catchment_area_in_km2": float("nan"),
+                        "altitude_masl": float("nan"),
+                        "dataSetContent": "",
+                        "units": "m³/s",
+                        "time_series": "",
+                        "no_of_years": 0,
+                        "last_update": "",
+                        "nrMeasurements": "NA",
+                        "UserStartTime": start_date,
+                        "UserEndTime": end_date,
+                        "nrMissingData": _count_missing_data(df, "streamflow"),
+                    }
 
-            # Convert the DataFrame to an xarray DataArray and append to the list
-            # da = xr.DataArray(
-            #     df["streamflow"].values,
-            #     coords=[df.index, [station_id]],
-            #     dims=["time", "station"],
-            # )
-            coords_dict = {"time": df.index, "station": [station_id]}
-            da = xr.DataArray(
-                data=df["streamflow"].values.reshape(-1, 1),
-                coords=coords_dict,
-                dims=["time", "station"],
-                name="streamflow",
-                attrs={"units": meta.get("units", "unknown")},
+                coords_dict = {"time": df.index, "station": [station_id]}
+                da = xr.DataArray(
+                    data=df["streamflow"].values.reshape(-1, 1),
+                    coords=coords_dict,
+                    dims=["time", "station"],
+                    name="streamflow",
+                    attrs={"units": meta.get("units", "unknown")},
+                )
+                data_list.append(da)
+
+                # Append metadata
+                meta_list.append(meta)
+
+            # Concatenate all DataArrays along the 'station' dimension
+            ds = xr.concat(data_list, dim="station")
+
+            # Assign attributes
+            ds.attrs["description"] = "Daily river discharge"
+            ds.station.attrs["description"] = "GRDC station number"
+
+            # Write the xarray Dataset to a NetCDF file
+            batch_file_path = os.path.join(
+                CACHE_DIR,
+                f"grdc_daily_streamflow_data_batch_{batch[0]}_{batch[-1]}.nc",
             )
-            data_list.append(da)
+            ds.to_netcdf(batch_file_path)
+            print(
+                f"Batch {batch_index + 1}/{len(station_batches)} NetCDF file created successfully!"
+            )
+            # Release memory by deleting the dataset
+            del ds
+            del data_list
+            del meta_list
 
-            # Append metadata
-            meta_list.append(meta)
+    def read_streamflow_xrdataset(
+        self,
+        station_id_lst: list = None,
+        time_range: list = None,
+        **kwargs,
+    ) -> dict:
+        """
+        Read GRDC daily data from multiple NetCDF files and organize them by station IDs.
 
-        # Concatenate all DataArrays along the 'station' dimension
-        ds = xr.concat(data_list, dim="station")
+        Parameters
+        ----------
+        station_id_lst : list
+            List of station IDs to select.
+        time_range : list
+            List of two elements [start_time, end_time] to select time range.
+        **kwargs: Additional arguments.
 
-        # Assign attributes
-        ds.attrs["description"] = "Daily river discharge"
-        ds.station.attrs["description"] = "GRDC station number"
+        Returns
+        ----------
+        dict: A dictionary where each key is a station ID and each value is an xarray.Dataset containing the selected station IDs, time range, and variable.
+        """
+        if station_id_lst is None or time_range is None:
+            return None
 
-        # Write the xarray Dataset to a NetCDF file
-        ds.to_netcdf(nc_file)
+        # Initialize a dictionary to hold datasets for each station ID
+        datasets_by_station_id = {}
 
-        print("NetCDF file created successfully!")
+        # Collect batch files
+        batch_files = [
+            os.path.join(CACHE_DIR, f)
+            for f in os.listdir(CACHE_DIR)
+            if re.match(
+                rf"^grdc_daily_streamflow_data_batch_[A-Za-z0-9_]+_[A-Za-z0-9_]+\.nc$",
+                f,
+            )
+        ]
+
+        if not batch_files:
+            # Cache the data if no batch files are found
+            self.cache_grdc_daily(
+                station_ids=station_id_lst, time_range=time_range, **kwargs
+            )
+            batch_files = [
+                os.path.join(CACHE_DIR, f)
+                for f in os.listdir(CACHE_DIR)
+                if re.match(
+                    rf"^grdc_daily_streamflow_data_batch_[A-Za-z0-9_]+_[A-Za-z0-9_]+\.nc$",
+                    f,
+                )
+            ]
+
+        selected_datasets = []
+
+        for batch_file in batch_files:
+            ds = xr.open_dataset(batch_file)
+            if valid_station_ids := [
+                sid for sid in station_id_lst if sid in ds["station"].values
+            ]:
+                ds_selected = ds[["streamflow"]].sel(
+                    station=valid_station_ids, time=slice(time_range[0], time_range[1])
+                )
+                selected_datasets.append(ds_selected)
+
+            ds.close()  # Close the dataset to free memory
+
+        # If any datasets were selected, concatenate them along the 'station' dimension
+        if selected_datasets:
+            datasets_by_station_id = xr.concat(selected_datasets, dim="station").sortby(
+                "station"
+            )
+        else:
+            datasets_by_station_id = xr.Dataset()
+
+        return datasets_by_station_id
 
 
 def _get_time(time_iso: str) -> datetime.datetime:
@@ -496,4 +582,5 @@ if __name__ == "__main__":
     data_dir = os.path.join(SETTING["local_data_path"]["datasets-origin"], "GRDC")
     grdc = Grdc(data_dir)
     # grdc.cache_grdc_daily(["1107700", "4101200"], ["1990-10-01", "2000-10-01"])
-    grdc.cache_grdc_daily()
+    # grdc.cache_grdc_daily()
+    grdc.read_streamflow_xrdataset(["1107700", "4101200"], ["1990-10-01", "2000-10-01"])
