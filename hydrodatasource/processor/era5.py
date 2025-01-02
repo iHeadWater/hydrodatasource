@@ -1,7 +1,7 @@
 """
 Author: Jiaxu Wu
 Date: 2024-01-12 15:21:20
-LastEditTime: 2024-03-28 08:37:54
+LastEditTime: 2025-01-02 17:44:50
 LastEditors: Wenyu Ouyang
 Description: processor for era5 data
 FilePath: \hydrodatasource\hydrodatasource\processor\era5.py
@@ -12,8 +12,8 @@ import geopandas as gpd
 import xarray as xr
 
 from hydro_gistools.mean import gen_mask, mean_by_mask
+from hydrodatasource.reader.era5 import ERA5LReader
 
-from hydrodatasource.reader.minio import ERA5LReader
 
 def get_era5():
     era5_land = ERA5LReader()

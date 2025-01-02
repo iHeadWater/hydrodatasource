@@ -13,6 +13,7 @@ from hydroutils import hydro_file
 from hydroutils.hydro_time import generate_start0101_time_range
 
 import hydrodatasource.configs.config as conf
+from hydrodatasource.configs.config import CACHE_DIR
 from hydrodatasource.configs.data_consts import (
     ERA5LAND_ET_REALATED_VARS,
     MODIS_ET_PET_8D_VARS,
@@ -23,8 +24,6 @@ from hydrodatasource.utils.utils import (
     minio_file_list,
 )
 from hydrodatasource.reader import access_fs
-
-CACHE_DIR = hydro_file.get_cache_dir()
 
 
 class HydroData(ABC):

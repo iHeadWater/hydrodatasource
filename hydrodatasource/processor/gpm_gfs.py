@@ -14,9 +14,10 @@ from hydrodatasource.configs.config import (
     MC,
     RO,
 )
+import hydrodatasource.reader.gpm
 from hydrodatasource.utils.utils import generate_time_intervals
 from hydrodatasource.processor.mask import gen_single_mask
-from hydrodatasource.reader import minio
+from hydrodatasource.reader import gfs
 
 
 def process_data(initial_date, initial_time, mask, dataset):
@@ -27,7 +28,7 @@ def process_data(initial_date, initial_time, mask, dataset):
     initial_datetime = datetime.datetime.strptime(
         f"{initial_date} {initial_time}", "%Y-%m-%d %H"
     )
-    gfs_reader = minio.GFSReader()
+    gfs_reader = gfs.GFSReader()
     box = (
         mask.coords["lon"][0] - 0.2,
         mask.coords["lat"][0] - 0.2,
@@ -77,7 +78,7 @@ def make_gpm_dataset(
     dataset,
     mask,
 ):
-    gpm_reader = minio.GPMReader()
+    gpm_reader = hydrodatasource.reader.gpm.GPMReader()
     latest_data = xr.Dataset()
     box = (
         mask.coords["lon"][0],

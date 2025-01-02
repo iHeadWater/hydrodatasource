@@ -16,6 +16,8 @@ import yaml
 from minio import Minio
 import psycopg2
 
+from hydroutils import hydro_file
+
 
 def read_setting(setting_path):
     if not os.path.exists(setting_path):
@@ -72,6 +74,7 @@ def read_setting(setting_path):
     return setting
 
 
+CACHE_DIR = hydro_file.get_cache_dir()
 SETTING_FILE = os.path.join(Path.home(), "hydro_setting.yml")
 try:
     SETTING = read_setting(SETTING_FILE)

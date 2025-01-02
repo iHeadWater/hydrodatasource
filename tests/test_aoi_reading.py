@@ -13,7 +13,9 @@ import pytest
 import geopandas as gpd
 import numpy as np
 
-from hydrodatasource.reader.minio import ERA5LReader, GPMReader, GFSReader
+from hydrodatasource.reader.era5 import ERA5LReader
+from hydrodatasource.reader.gpm import GPMReader
+from hydrodatasource.reader.gfs import GFSReader
 
 
 @pytest.fixture()
