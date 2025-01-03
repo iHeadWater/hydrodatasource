@@ -1,7 +1,7 @@
 """
 Author: Wenyu Ouyang
 Date: 2023-11-03 09:16:41
-LastEditTime: 2025-01-02 20:40:12
+LastEditTime: 2025-01-03 15:40:58
 LastEditors: Wenyu Ouyang
 Description: Reading GRDC data
 FilePath: \hydrodatasource\hydrodatasource\reader\grdc.py
@@ -9,11 +9,13 @@ Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 
 import collections
+import json
 import os
 import datetime
 import logging
 from pathlib import Path
 import re
+import numpy as np
 import pandas as pd
 import xarray as xr
 import geopandas as gpd
@@ -60,7 +62,9 @@ class Grdc(HydroData):
         return collections.OrderedDict(
             DATA_DIR=data_root_dir,
             CONTINENT_DATA=data_description,
+            # shapfile: https://mrb.grdc.bafg.de/
             SHAPE_DIR=shape_dir,
+            # TODO: attribute: https://portal.grdc.bafg.de/applications/public.html?publicuser=PublicUser#dataDownload/StationCatalogue
         )
 
     def read_site_info(self):
@@ -301,6 +305,19 @@ class Grdc(HydroData):
             print(
                 f"Batch {batch_index + 1}/{len(station_batches)} NetCDF file created successfully!"
             )
+            # Convert meta_list to a serializable format
+            serializable_meta_list = _convert_to_serializable(meta_list)
+            # Write the metadata to a JSON file for the current batch
+            meta_file_path = os.path.join(
+                CACHE_DIR,
+                f"grdc_daily_streamflow_metadata_batch_{batch[0]}_{batch[-1]}.json",
+            )
+            with open(meta_file_path, "w") as meta_file:
+                json.dump(serializable_meta_list, meta_file)
+            print(
+                f"Batch {batch_index + 1}/{len(station_batches)} metadata file created successfully!"
+            )
+
             # Release memory by deleting the dataset
             del ds
             del data_list
@@ -578,9 +595,23 @@ def _log_metadata(metadata):
     logger.info("%s", message)
 
 
+def _convert_to_serializable(obj):
+    if isinstance(obj, np.int64):
+        return int(obj)
+    elif isinstance(obj, np.float64):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {k: _convert_to_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_convert_to_serializable(i) for i in obj]
+    return obj
+
+
 if __name__ == "__main__":
     data_dir = os.path.join(SETTING["local_data_path"]["datasets-origin"], "GRDC")
     grdc = Grdc(data_dir)
     # grdc.cache_grdc_daily(["1107700", "4101200"], ["1990-10-01", "2000-10-01"])
-    # grdc.cache_grdc_daily()
+    grdc.cache_grdc_daily()
     grdc.read_streamflow_xrdataset(["1107700", "4101200"], ["1990-10-01", "2000-10-01"])
