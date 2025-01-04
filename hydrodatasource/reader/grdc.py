@@ -290,7 +290,7 @@ class Grdc(HydroData):
                 meta_list.append(meta)
 
             # Concatenate all DataArrays along the 'station' dimension
-            ds = xr.concat(data_list, dim="station")
+            ds = xr.concat(data_list, dim="station").sortby("station")
 
             # Assign attributes
             ds.attrs["description"] = "Daily river discharge"
