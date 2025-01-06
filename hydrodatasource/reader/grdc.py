@@ -47,7 +47,14 @@ class Grdc(HydroData):
             "europe",
         ]
         shape_dir = os.path.join(data_root_dir, "GRDC_Watersheds")
+        shp_files = [f for f in os.listdir(shape_dir) if f.endswith(".shp")]
 
+        if len(shp_files) != 1:
+            raise ValueError(
+                f"Expected one shapefile in {shape_dir}, found {len(shp_files)}"
+            )
+
+        shp_file_path = os.path.join(shape_dir, shp_files[0])
         data_description = {}
         for continent in continents:
             continent_dir = os.path.join(data_root_dir, continent)
@@ -63,21 +70,13 @@ class Grdc(HydroData):
             DATA_DIR=data_root_dir,
             CONTINENT_DATA=data_description,
             # shapfile: https://mrb.grdc.bafg.de/
-            SHAPE_DIR=shape_dir,
+            BASINS_SHP_FILE=shp_file_path,
             # TODO: attribute: https://portal.grdc.bafg.de/applications/public.html?publicuser=PublicUser#dataDownload/StationCatalogue
         )
 
     def read_site_info(self):
         """Reads the shapefile and extracts the 'id' column as a list."""
-        shape_dir = self.data_source_description["SHAPE_DIR"]
-        shp_files = [f for f in os.listdir(shape_dir) if f.endswith(".shp")]
-
-        if len(shp_files) != 1:
-            raise ValueError(
-                f"Expected one shapefile in {shape_dir}, found {len(shp_files)}"
-            )
-
-        shp_file_path = os.path.join(shape_dir, shp_files[0])
+        shp_file_path = self.data_source_description["BASINS_SHP_FILE"]
         gdf = gpd.read_file(shp_file_path)
         if "grdc_no" not in gdf.columns:
             raise ValueError(

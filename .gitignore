@@ -163,3 +163,5 @@ cython_debug/
 .vscode/
 
 tests/test.py
+definitions_private.py
+results/

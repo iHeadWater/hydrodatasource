@@ -1,9 +1,9 @@
 """
 Author: Wenyu Ouyang
 Date: 2025-01-02 17:31:19
-LastEditTime: 2025-01-02 19:43:57
+LastEditTime: 2025-01-06 16:07:06
 LastEditors: Wenyu Ouyang
-Description: 
+Description: basic test for grdc.py
 FilePath: \hydrodatasource\tests\test_grdc.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
@@ -14,6 +14,8 @@ import pytest
 from hydrodatasource.reader.grdc import Grdc
 import pandas as pd
 from hydrodatasource.reader.grdc import _grdc_read
+import geopandas as gpd
+from shapely.geometry import Polygon
 
 
 @pytest.fixture
@@ -33,6 +35,20 @@ def grdc_instance(tmp_path):
         (continent_path / "daily").mkdir()
         (continent_path / "monthly").mkdir()
     (data_path / "GRDC_Watersheds").mkdir()
+    # create a shp file
+    shp_file = data_path / "GRDC_Watersheds" / "watershed.shp"
+    # NEED to create a file to avoid FileNotFoundError and can be read by geopandas
+    gdf = gpd.GeoDataFrame(
+        [
+            {
+                "geometry": Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+                "grdc_no": 1,
+                "area": 100.0,
+            }
+        ],
+        crs="EPSG:4326",
+    )
+    gdf.to_file(shp_file)
     return Grdc(data_path)
 
 
@@ -68,7 +84,7 @@ def test_set_data_source_describe(grdc_instance):
                 "monthly": os.path.join(data_root_dir, "europe", "monthly"),
             },
         },
-        SHAPE_DIR=os.path.join(data_root_dir, "GRDC_Watersheds"),
+        BASINS_SHP_FILE=os.path.join(data_root_dir, "GRDC_Watersheds", "watershed.shp"),
     )
 
     assert description == expected_description

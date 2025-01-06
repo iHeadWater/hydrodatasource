@@ -1,11 +1,11 @@
-'''
+"""
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-19 14:00:16
-LastEditors: liutiaxqabs 1498093445@qq.com
-LastEditTime: 2024-10-18 18:49:24
-FilePath: /hydrodatasource/hydrodatasource/cleaner/streamflow_cleaner.py
-Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
-'''
+LastEditors: Wenyu Ouyang
+LastEditTime: 2025-01-06 14:41:41
+FilePath: \hydrodatasource\hydrodatasource\cleaner\streamflow_cleaner.py
+Description: calculate streamflow from reservoir timeseries data and clean it using moving average methods
+"""
 
 from .cleaner import Cleaner
 import xarray as xr
@@ -319,7 +319,7 @@ class StreamflowCleaner(Cleaner):
             try:
                 window_data = streamflow_data[start_date:end_date]
             except KeyError:
-                print('WTF')
+                print("WTF")
             smoothed_value = window_data.mean()
             smoothed_data.loc[date] = smoothed_value
 
@@ -386,7 +386,7 @@ class StreamflowCleaner(Cleaner):
 
         return df["EMA"]
 
-    def ewma(self,streamflow):
+    def ewma(self, streamflow):
         # 计算 EWMA，指定平滑系数 alpha
         ewma_data = streamflow.ewm(alpha=0.7).mean()
         return self.data_balanced(streamflow, ewma_data)
@@ -394,14 +394,13 @@ class StreamflowCleaner(Cleaner):
     def anomaly_process(self, methods=None):
         super().anomaly_process(methods)
         if "INQ" not in self.origin_df.columns:
-            if 'q' in self.origin_df.columns:
-                self.origin_df = self.origin_df.rename(columns={'q':'INQ'})
+            if "q" in self.origin_df.columns:
+                self.origin_df = self.origin_df.rename(columns={"q": "INQ"})
             elif "inq" in self.origin_df.columns:
-                self.origin_df = self.origin_df.rename(columns={'inq':'INQ'})
+                self.origin_df = self.origin_df.rename(columns={"inq": "INQ"})
         self.origin_df["INQ"] = pd.to_numeric(self.origin_df["INQ"], errors="coerce")
-        if "TM" not in self.origin_df.columns:
-            if "tm" in self.origin_df.columns:
-                self.origin_df = self.origin_df.rename(columns={'tm':'TM'})
+        if "TM" not in self.origin_df.columns and "tm" in self.origin_df.columns:
+            self.origin_df = self.origin_df.rename(columns={"tm": "TM"})
         self.origin_df["TM"] = pd.to_datetime(self.origin_df["TM"], errors="coerce")
         self.origin_df = self.origin_df.sort_values(by="TM")
         streamflow_data = self.origin_df["INQ"].copy()
@@ -449,7 +448,7 @@ class StreamflowCleaner(Cleaner):
 
 
 class StreamflowBacktrack:
-    def __init__(self, data_folder, output_folder,file_name = None):
+    def __init__(self, data_folder, output_folder, file_name=None):
         self.data_folder = data_folder
         self.output_folder = output_folder
         self.file_name = file_name
@@ -481,7 +480,11 @@ class StreamflowBacktrack:
             coefficients = np.polyfit(valid_data["RZ"], valid_data["W"], 2)
 
             # 根据拟合的多项式关系更新 W 列
-            data["W"] = coefficients[0] * data["RZ"]**2 + coefficients[1] * data["RZ"] + coefficients[2]
+            data["W"] = (
+                coefficients[0] * data["RZ"] ** 2
+                + coefficients[1] * data["RZ"]
+                + coefficients[2]
+            )
         except np.linalg.LinAlgError:
             print("SVD did not converge during polynomial fitting, skipping this step.")
 
@@ -490,39 +493,47 @@ class StreamflowBacktrack:
 
         # 添加绘制图形功能，不改变原有代码
         plt.figure(figsize=(14, 7))
-        
+
         # 绘制原始数据
         original_data = pd.read_csv(file_path)
-        plt.plot(original_data["TM"], original_data["W"], label="Original Water Level", color='blue', linestyle='--')
-        
+        plt.plot(
+            original_data["TM"],
+            original_data["W"],
+            label="Original Water Level",
+            color="blue",
+            linestyle="--",
+        )
+
         # 绘制清洗后的数据
-        plt.plot(data["TM"], data["W"], label="Cleaned Water Level", color='red')
-        
+        plt.plot(data["TM"], data["W"], label="Cleaned Water Level", color="red")
+
         plt.xlabel("Time")
         plt.ylabel("Water Level (W)")
         plt.title("Water Level Analysis with Outliers Removed")
         plt.legend()
-        
+
         # 保存图像到与CSV文件相同的目录
         plot_path = os.path.join(output_folder, "水位清洗对比图.png")
         plt.savefig(plot_path)
         return cleaned_path
 
-    def back_calculation(self,data_path, file, output_folder):
+    def back_calculation(self, data_path, file, output_folder):
         # 反推数据
         data = pd.read_csv(data_path)
         # 将时间列转换为日期时间格式
         data["TM"] = pd.to_datetime(data["TM"])
 
         # 将时间列偏移一行，使每行的时间等于上一时段的时间
-        data['TM'] = data['TM'] - pd.Timedelta(hours=1)
+        data["TM"] = data["TM"] - pd.Timedelta(hours=1)
 
         data["Time_Diff"] = data["TM"].diff().dt.total_seconds().fillna(0)
         data["INQ_ACC"] = data["OTQ"] + (10**6 * (data["W"].diff() / data["Time_Diff"]))
         data["INQ"] = data["INQ_ACC"]
         data["Month"] = data["TM"].dt.month
         print(data)
-        back_calc_path = os.path.join(output_folder, file[:-4] + "_径流直接反推数据.csv")
+        back_calc_path = os.path.join(
+            output_folder, file[:-4] + "_径流直接反推数据.csv"
+        )
         data[
             [
                 "STCD",
@@ -540,7 +551,7 @@ class StreamflowBacktrack:
         ].to_csv(back_calc_path)
         return back_calc_path
 
-    def delete_nan_inq(self,data_path, file, output_folder):
+    def delete_nan_inq(self, data_path, file, output_folder):
         # 读取CSV文件到DataFrame
         df = pd.read_csv(data_path)
         # 将'TM'列转换为日期时间格式并设置为索引
@@ -589,7 +600,9 @@ class StreamflowBacktrack:
 
         # 应用滚动窗口函数，这里设置步幅为4，窗口大小为7
         rolling_with_stride(df, "INQ", window_size=7, stride=4, func=adjust_window)
-        path = os.path.join(output_folder, file[:-4] + "_水量平衡后的日尺度反推数据.csv")
+        path = os.path.join(
+            output_folder, file[:-4] + "_水量平衡后的日尺度反推数据.csv"
+        )
 
         df["TM"] = df.index.strftime("%Y-%m-%d %H:%M:%S")
         df[
@@ -609,7 +622,7 @@ class StreamflowBacktrack:
         ].to_csv(path, index=False)
         return path
 
-    def insert_inq(self,data_path, file, output_folder):
+    def insert_inq(self, data_path, file, output_folder):
         # 读取CSV文件到DataFrame
         df = pd.read_csv(data_path)
         # 将'TM'列转换为日期时间格式并设置为索引
@@ -693,9 +706,7 @@ class StreamflowBacktrack:
                 "BLRZ",
             ]
         ].to_csv(
-            os.path.join(
-                "/ftproot/basins-origin/basins-streamflow-with BSAD/", file
-            ),
+            os.path.join("/ftproot/basins-origin/basins-streamflow-with BSAD/", file),
             index=False,
         )
 
@@ -718,4 +729,3 @@ class StreamflowBacktrack:
                 # 插值平衡
                 insert_data = self.insert_inq(nonan_data, file, output_folder)
                 # 绘图
-
