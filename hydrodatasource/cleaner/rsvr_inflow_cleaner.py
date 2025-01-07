@@ -2,7 +2,7 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-19 14:00:16
 LastEditors: Wenyu Ouyang
-LastEditTime: 2025-01-07 14:48:57
+LastEditTime: 2025-01-07 17:45:29
 FilePath: \hydrodatasource\hydrodatasource\cleaner\rsvr_inflow_cleaner.py
 Description: calculate streamflow from reservoir timeseries data and clean it using moving average methods
 """
@@ -695,8 +695,8 @@ class ReservoirInflowBacktrack:
 
         Returns
         -------
-        _type_
-            _description_
+        str
+            the path to the result file
         """
         data = pd.read_csv(clean_w_path)
         # 将时间列转换为日期时间格式
@@ -713,16 +713,39 @@ class ReservoirInflowBacktrack:
         data[RSVR_TS_TABLE_COLS].to_csv(back_calc_path)
         return back_calc_path
 
-    def delete_nan_inq(
+    def delete_negative_inq(
         self,
-        data_path,
-        file,
+        inflow_data_path,
+        original_file,
         output_folder,
         negative_deal_window=7,
         negative_deal_stride=4,
     ):
+        """remove negative inflow values with a rolling window
+        the negative value will be adjusted to positvie ones to make the total inflow consistent
+        for example,  1, -1, 1, -1 will be adjusted to 0, 0, 0, 0 so that wate balance is kept
+        but note that as the window has stride, maybe the final few values will not be adjusted
+
+        Parameters
+        ----------
+        inflow_data_path : str
+            the data file after back_calculation
+        original_file : str
+            the original file
+        output_folder : str
+            where to save the data
+        negative_deal_window : int, optional
+            the window to deal with negative values, by default 7
+        negative_deal_stride : int, optional
+            the stride of window, by default 4
+
+        Returns
+        -------
+        str
+            the path to the result file
+        """
         # 读取CSV文件到DataFrame
-        df = pd.read_csv(data_path)
+        df = pd.read_csv(inflow_data_path)
         # 将'TM'列转换为日期时间格式并设置为索引
         df["TM"] = pd.to_datetime(df["TM"])
 
@@ -788,16 +811,33 @@ class ReservoirInflowBacktrack:
             func=adjust_window,
         )
         path = os.path.join(
-            output_folder, file[:-4] + "_水量平衡后的日尺度反推数据.csv"
+            output_folder, original_file[:-4] + "_水量平衡后的日尺度反推数据.csv"
         )
 
         df["TM"] = df.index.strftime("%Y-%m-%d %H:%M:%S")
         df[RSVR_TS_TABLE_COLS].to_csv(path, index=False)
         return path
 
-    def insert_inq(self, data_path, file, output_folder):
+    def insert_inq(self, inflow_data_path, original_file, output_folder):
+        """make inflow data as hourly data as original data is not strictly hourly data
+        and insert inq with linear interpolation
+
+        Parameters
+        ----------
+        inflow_data_path : str
+            the data file after delete negative inflow values
+        original_file : str
+            the original file
+        output_folder : str
+            where to save the data
+
+        Returns
+        -------
+        str
+            the path to the result file
+        """
         # 读取CSV文件到DataFrame
-        df = pd.read_csv(data_path)
+        df = pd.read_csv(inflow_data_path)
         # 将'TM'列转换为日期时间格式并设置为索引
         df["TM"] = pd.to_datetime(df["TM"])
         # 设置调整后的时间为索引
@@ -809,52 +849,28 @@ class ReservoirInflowBacktrack:
         date_range = pd.date_range(start=df.index.min(), end=df.index.max(), freq="h")
         complete_df = pd.DataFrame(index=date_range)
 
-        # 将原始数据与完整时间序列表格全连接
+        # Perform a full outer join of the original data with the complete time series table, so that some sub-hourly data could still be saved here
         df = complete_df.join(df, how="outer")
+        # before we interpolate, we need to guarantee all data has same time interval
+        df = df.resample("H").asfreq()
+
+        # Ensure INQ values are not less than 0 -- mainly for final few values as previous steps may not adjust them
+        df["INQ"] = df["INQ"].where(df["INQ"] >= 0, np.nan)
 
         # 使用线性插值
         # 插值前检查连续缺失是否超过7天（7*24小时）
-        def linear_interpolate(df, column="INQ", threshold=168):
-            data = df[column]
-            start_index = None
+        df = linear_interpolate_wthresh(df)
 
-            for i in range(len(data)):
-                if not pd.isna(data.iloc[i]):
-                    if start_index is None:
-                        start_index = i
-                    else:
-                        # 检查当前点和上一个有数据点之间的间隔
-                        if i - start_index - 1 < threshold:
-                            # 如果间隔小于阈值，进行插值
-                            data.iloc[start_index : i + 1] = data.iloc[
-                                start_index : i + 1
-                            ].interpolate()
-                        # 更新起始点为当前点
-                        start_index = i
+        result_path = os.path.join(output_folder, original_file)
 
-            df[column] = data
-            return df
-
-        df = linear_interpolate(df)
-
-        # 确保INQ值不小于0
-        df["INQ"] = df["INQ"].clip(lower=0)
-
-        result_path = os.path.join(output_folder, file)
-
-        print("水量平衡的小时尺度滑动平均反推数据：输出行名称")
-        print(df.columns)
+        logging.debug("水量平衡的小时尺度滑动平均反推数据：输出行名称")
+        logging.debug(df.columns)
         df["TM"] = df.index.strftime("%Y-%m-%d %H:%M:%S")
         df["STCD"] = df["STCD"].dropna().iloc[0]
         # 最后一步转换为整数再转换为字符串
         df["STCD"] = df["STCD"].astype(int).astype(str)
-        print(df["STCD"])
+        logging.debug(df["STCD"])
         df[RSVR_TS_TABLE_COLS].to_csv(result_path, index=False)
-        df[RSVR_TS_TABLE_COLS].to_csv(
-            os.path.join("/ftproot/basins-origin/basins-streamflow-with BSAD/", file),
-            index=False,
-        )
-
         return result_path
 
     def process_backtrack(self):
@@ -871,7 +887,52 @@ class ReservoirInflowBacktrack:
                 cleaned_data_file, file, output_folder
             )
             # 去除反推异常值
-            nonan_data = self.delete_nan_inq(back_data_file, file, output_folder)
+            nonegative_data_file = self.delete_negative_inq(
+                back_data_file, file, output_folder
+            )
             # 插值平衡
-            insert_data = self.insert_inq(nonan_data, file, output_folder)
+            insert_data = self.insert_inq(nonegative_data_file, file, output_folder)
             # 绘图
+
+
+def linear_interpolate_wthresh(df, column="INQ", threshold=168):
+    """linear interpolation for inflow data with a threshod
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        pandas DataFrame containing the inflow data
+    column : str, optional
+        the chosen column, by default "INQ"
+    threshold : int, optional
+        under this threshold we interpolate, by default 168,
+        if the missing data is larger than 7 days, we didn't interpolate it
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with interpolated values
+    """
+    # Calculate the gap lengths of missing values
+    mask = df[column].isna()
+    gap_lengths = []
+    gap_length = 0
+    for is_na in mask:
+        if is_na:
+            gap_length += 1
+        else:
+            if gap_length > 0:
+                gap_lengths.extend([gap_length] * gap_length)
+                gap_length = 0
+            gap_lengths.append(0)
+    if gap_length > 0:
+        gap_lengths.extend([gap_length] * gap_length)
+
+    # Convert gap lengths to Series
+    gap_lengths = pd.Series(gap_lengths, index=df.index)
+    # Only interpolate missing values with gaps less than the threshold, and set limit_direction to 'both' to ensure extrapolation
+    df.loc[mask & (gap_lengths <= threshold), column] = df[column].interpolate(
+        limit_direction="both"
+    )
+
+    return df
