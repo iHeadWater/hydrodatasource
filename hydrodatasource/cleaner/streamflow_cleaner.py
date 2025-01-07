@@ -2,7 +2,7 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-19 14:00:16
 LastEditors: Wenyu Ouyang
-LastEditTime: 2025-01-07 13:14:17
+LastEditTime: 2025-01-07 14:33:59
 FilePath: \hydrodatasource\hydrodatasource\cleaner\streamflow_cleaner.py
 Description: calculate streamflow from reservoir timeseries data and clean it using moving average methods
 """
@@ -598,7 +598,7 @@ class StreamflowBacktrack:
         # 绘制原始数据
         original_data = pd.read_csv(original_file)
         plt.plot(
-            original_data["TM"],
+            pd.to_datetime(original_data["TM"]),
             original_data["W"],
             label="Original Reservoir Storage",
             color="blue",
@@ -606,7 +606,12 @@ class StreamflowBacktrack:
         )
 
         # 绘制清洗后的数据
-        plt.plot(df["TM"], df["W"], label="Cleaned Reservoir Storage", color="red")
+        plt.plot(
+            pd.to_datetime(df["TM"]),
+            df["W"],
+            label="Cleaned Reservoir Storage",
+            color="red",
+        )
 
         plt.xlabel("Time")
         plt.ylabel("Reservoir Storage (10^6 m^3)")
@@ -669,22 +674,41 @@ class StreamflowBacktrack:
         self._plot_w_clean(data, file_path, output_folder)
         return cleaned_path
 
-    def back_calculation(self, data_path, file, output_folder):
-        # 反推数据
-        data = pd.read_csv(data_path)
+    def back_calculation(self, clean_w_path, original_file, output_folder):
+        """Back-calculate inflow from reservoir storage data
+        NOTE: each time has three columns: I Q W -- I is the inflow, Q is the outflow, W is the reservoir storage
+        Generally, in sql database, a time means the end of previous time period
+        For example, a hourly database, 13:00 means 12:00-13:00 period because the data is GOT at 13:00 (we cannot observe future)
+        Hence, for this function, W means the storage at the end of the time period, I and Q means the inflow and outflow of the time period
+        So we need to use W of the previous time as the initial water storage of the time period.
+        Hence, I1 = Q1 + (W1 - W0)
+
+
+        Parameters
+        ----------
+        data_path : str
+            the path to the cleaned_w_data file
+        original_file: str
+            the path to the original file
+        output_folder : str
+            where to save the back calculated data
+
+        Returns
+        -------
+        _type_
+            _description_
+        """
+        data = pd.read_csv(clean_w_path)
         # 将时间列转换为日期时间格式
         data["TM"] = pd.to_datetime(data["TM"])
-
-        # 将时间列偏移一行，使每行的时间等于上一时段的时间
-        data["TM"] = data["TM"] - pd.Timedelta(hours=1)
-
+        # diff means the difference between this time and the previous time -- the first will be 0 as fillna(0)
         data["Time_Diff"] = data["TM"].diff().dt.total_seconds().fillna(0)
         data["INQ_ACC"] = data["OTQ"] + (10**6 * (data["W"].diff() / data["Time_Diff"]))
         data["INQ"] = data["INQ_ACC"]
-        data["Month"] = data["TM"].dt.month
-        print(data)
+        # data["Month"] = data["TM"].dt.month
+        logging.debug(data)
         back_calc_path = os.path.join(
-            output_folder, file[:-4] + "_径流直接反推数据.csv"
+            output_folder, original_file[:-4] + "_径流直接反推数据.csv"
         )
         data[RSVR_TS_TABLE_COLS].to_csv(back_calc_path)
         return back_calc_path
@@ -816,11 +840,11 @@ class StreamflowBacktrack:
                 os.makedirs(output_folder)
             # Process each file step by step
             # 去除库容异常
-            cleaned_data = self.clean_w(file_path, output_folder)
+            cleaned_data_file = self.clean_w(file_path, output_folder)
             # 公式计算反推
-            back_data = self.back_calculation(cleaned_data, file, output_folder)
+            back_data_file = self.back_calculation(cleaned_data_file, file, output_folder)
             # 去除反推异常值
-            nonan_data = self.delete_nan_inq(back_data, file, output_folder)
+            nonan_data = self.delete_nan_inq(back_data_file, file, output_folder)
             # 插值平衡
             insert_data = self.insert_inq(nonan_data, file, output_folder)
             # 绘图
