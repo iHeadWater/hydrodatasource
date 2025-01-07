@@ -2,8 +2,8 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-19 14:00:16
 LastEditors: Wenyu Ouyang
-LastEditTime: 2025-01-07 14:33:59
-FilePath: \hydrodatasource\hydrodatasource\cleaner\streamflow_cleaner.py
+LastEditTime: 2025-01-07 14:48:57
+FilePath: \hydrodatasource\hydrodatasource\cleaner\rsvr_inflow_cleaner.py
 Description: calculate streamflow from reservoir timeseries data and clean it using moving average methods
 """
 
@@ -455,7 +455,7 @@ logging.basicConfig(
 )
 
 
-class StreamflowBacktrack:
+class ReservoirInflowBacktrack:
     def __init__(self, data_folder, output_folder):
         """
         Back-calculating inflow of reservior
@@ -713,7 +713,14 @@ class StreamflowBacktrack:
         data[RSVR_TS_TABLE_COLS].to_csv(back_calc_path)
         return back_calc_path
 
-    def delete_nan_inq(self, data_path, file, output_folder):
+    def delete_nan_inq(
+        self,
+        data_path,
+        file,
+        output_folder,
+        negative_deal_window=7,
+        negative_deal_stride=4,
+    ):
         # 读取CSV文件到DataFrame
         df = pd.read_csv(data_path)
         # 将'TM'列转换为日期时间格式并设置为索引
@@ -722,11 +729,23 @@ class StreamflowBacktrack:
         # 设置调整后的时间为索引
         df = df.set_index("TM")
 
-        print(df["INQ"].sum())
-        # 确保'INQ'列是数值类型
+        logging.debug(df["INQ"].sum())
+        # Ensure the 'INQ' column is numeric. If a value cannot be parsed as a number, the errors="coerce" parameter will set it to NaN (i.e., missing value)
         df["INQ"] = pd.to_numeric(df["INQ"], errors="coerce")
 
         def adjust_window(window):
+            """adjust window for delete negative inflow values
+
+            Parameters
+            ----------
+            window : pd.Series
+                the data in the window
+
+            Returns
+            -------
+            _type_
+                _description_
+            """
             if window.count() == 0:
                 return window  # 如果窗口内全是NaN，返回原窗口
 
@@ -761,7 +780,13 @@ class StreamflowBacktrack:
                 )
 
         # 应用滚动窗口函数，这里设置步幅为4，窗口大小为7
-        rolling_with_stride(df, "INQ", window_size=7, stride=4, func=adjust_window)
+        rolling_with_stride(
+            df,
+            "INQ",
+            window_size=negative_deal_window,
+            stride=negative_deal_stride,
+            func=adjust_window,
+        )
         path = os.path.join(
             output_folder, file[:-4] + "_水量平衡后的日尺度反推数据.csv"
         )
@@ -842,7 +867,9 @@ class StreamflowBacktrack:
             # 去除库容异常
             cleaned_data_file = self.clean_w(file_path, output_folder)
             # 公式计算反推
-            back_data_file = self.back_calculation(cleaned_data_file, file, output_folder)
+            back_data_file = self.back_calculation(
+                cleaned_data_file, file, output_folder
+            )
             # 去除反推异常值
             nonan_data = self.delete_nan_inq(back_data_file, file, output_folder)
             # 插值平衡

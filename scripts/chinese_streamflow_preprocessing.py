@@ -15,12 +15,12 @@ from pathlib import Path
 
 sys.path.append(os.path.dirname(Path(os.path.abspath(__file__)).parent))
 from const4scripts import RESULT_DIR, DATASET_DIR
-from hydrodatasource.cleaner.streamflow_cleaner import StreamflowBacktrack
+from hydrodatasource.cleaner.rsvr_inflow_cleaner import ReservoirInflowBacktrack
 
 # 测试径流数据反推处理功能
 original_reservoir_data_dir = os.path.join(DATASET_DIR, "数据库原始流量")
 tmp_dir = os.path.join(RESULT_DIR, "反推流量")
-cleaner = StreamflowBacktrack(
+cleaner = ReservoirInflowBacktrack(
     data_folder=original_reservoir_data_dir,
     output_folder=tmp_dir,
 )
@@ -29,7 +29,7 @@ cleaner.process_backtrack()
 
 def test_delete_nan_inq():
     # 测试径流数据反推处理功能
-    cleaner = StreamflowBacktrack(
+    cleaner = ReservoirInflowBacktrack(
         "/ftproot/tests_stations_anomaly_detection/streamflow_backtrack/",
         "/ftproot/tests_stations_anomaly_detection/streamflow_backtrack/",
     )

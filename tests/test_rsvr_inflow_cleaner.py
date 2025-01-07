@@ -2,19 +2,20 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-22 13:38:07
 LastEditors: Wenyu Ouyang
-LastEditTime: 2025-01-07 14:26:40
-FilePath: \hydrodatasource\tests\test_streamflow_cleaner.py
+LastEditTime: 2025-01-07 15:30:00
+FilePath: \hydrodatasource\tests\test_rsvr_inflow_cleaner.py
 Description: Test funcs for streamflow data cleaning
 """
 
 import os
 import glob
+import numpy as np
 from tqdm import tqdm
 import pandas as pd
 import pytest
-from hydrodatasource.cleaner.streamflow_cleaner import StreamflowBacktrack
+from hydrodatasource.cleaner.rsvr_inflow_cleaner import ReservoirInflowBacktrack
 
-from hydrodatasource.cleaner.streamflow_cleaner import (
+from hydrodatasource.cleaner.rsvr_inflow_cleaner import (
     StreamflowCleaner,
 )
 
@@ -42,7 +43,7 @@ def test_clean_w(setup_test_environment):
     input_file, output_dir = setup_test_environment
 
     # Initialize the StreamflowBacktrack object
-    backtrack = StreamflowBacktrack(data_folder="", output_folder="")
+    backtrack = ReservoirInflowBacktrack(data_folder="", output_folder="")
 
     # Call the clean_w method
     cleaned_file = backtrack.clean_w(input_file, output_dir)
@@ -80,7 +81,7 @@ def test_clean_w_no_nan(setup_test_environment):
     test_df.to_csv(input_file, index=False)
 
     # Initialize the StreamflowBacktrack object
-    backtrack = StreamflowBacktrack(data_folder="", output_folder="")
+    backtrack = ReservoirInflowBacktrack(data_folder="", output_folder="")
 
     # Call the clean_w method
     cleaned_file = backtrack.clean_w(input_file, output_dir)
@@ -122,7 +123,7 @@ def test_back_calculation(setup_test_environment):
     test_df.to_csv(input_file, index=False)
 
     # Initialize the StreamflowBacktrack object
-    backtrack = StreamflowBacktrack(data_folder="", output_folder="")
+    backtrack = ReservoirInflowBacktrack(data_folder="", output_folder="")
 
     # Call the back_calculation method
     back_calc_file = backtrack.back_calculation(input_file, "test_data.csv", output_dir)
@@ -154,6 +155,74 @@ def test_back_calculation(setup_test_environment):
     assert (
         back_calc_data["INQ"][1:].notna().all()
     ), "INQ values were not calculated correctly."
+
+
+def test_delete_nan_inq(setup_test_environment):
+    input_file, output_dir = setup_test_environment
+
+    # Modify the test data to include necessary columns for delete_nan_inq
+    test_data = {
+        "TM": pd.date_range(start="2023-01-01", periods=10, freq="D"),
+        "INQ": [10, -5, 15, -10, 20, -15, 25, -20, 30, -25],
+        "RZ": [100, 150, 200, 250, 300, 350, 400, 450, 500, 550],
+        "W": [10, 15, 20, 25, 30, 35, 40, 45, 50, 55],
+        "OTQ": [5, 10, 15, 20, 25, 30, 35, 40, 45, 50],
+        "STCD": [1] * 10,
+        "BLRZ": [0] * 10,
+        "RWCHRCD": [0] * 10,
+        "RWPTN": [0] * 10,
+        "INQDR": [0] * 10,
+        "MSQMT": [0] * 10,
+    }
+    test_df = pd.DataFrame(test_data)
+    test_df.to_csv(input_file, index=False)
+
+    # Initialize the StreamflowBacktrack object
+    backtrack = ReservoirInflowBacktrack(data_folder="", output_folder="")
+
+    # Call the delete_nan_inq method
+    cleaned_file = backtrack.delete_nan_inq(
+        input_file,
+        "test_data.csv",
+        output_dir,
+        negative_deal_window=5,
+        negative_deal_stride=3,
+    )
+
+    # Check if the cleaned file exists
+    assert os.path.exists(cleaned_file), "Cleaned file was not created."
+
+    # Load the cleaned data
+    cleaned_data = pd.read_csv(cleaned_file)
+
+    # Check if the cleaned data file has the expected columns
+    expected_columns = [
+        "TM",
+        "RZ",
+        "INQ",
+        "W",
+        "BLRZ",
+        "OTQ",
+        "RWCHRCD",
+        "RWPTN",
+        "INQDR",
+        "MSQMT",
+    ]
+    assert all(
+        column in cleaned_data.columns for column in expected_columns
+    ), "Cleaned data does not have the expected columns."
+
+    # Check if the INQ values were adjusted correctly, as stride exist, cannot deal tiwh all data
+    assert (
+        cleaned_data["INQ"][:-1] >= 0
+    ).all(), "INQ values were not adjusted correctly."
+
+    # Check if the sum of INQ values is balanced
+    original_sum = test_df["INQ"].sum()
+    cleaned_sum = cleaned_data["INQ"].sum()
+    assert (
+        abs(original_sum - cleaned_sum) < 1e-6
+    ), "INQ values are not balanced correctly."
 
 
 def test_anomaly_process():
