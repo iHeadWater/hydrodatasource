@@ -2,21 +2,24 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-19 14:00:16
 LastEditors: Wenyu Ouyang
-LastEditTime: 2025-01-06 14:41:41
+LastEditTime: 2025-01-07 13:14:17
 FilePath: \hydrodatasource\hydrodatasource\cleaner\streamflow_cleaner.py
 Description: calculate streamflow from reservoir timeseries data and clean it using moving average methods
 """
 
-from .cleaner import Cleaner
-import xarray as xr
+import logging
+import os
+import re
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.signal import cwt, morlet, butter, filtfilt
-from scipy.fft import fft, ifft, fftfreq
-from scipy.optimize import curve_fit
-import os
 from tqdm import tqdm
+from scipy.optimize import curve_fit
+from scipy.fft import fft, ifft, fftfreq
+from scipy.signal import cwt, morlet, butter, filtfilt
+
+from .cleaner import Cleaner
+from hydrodatasource.configs.table_name import RSVR_TS_TABLE_COLS
 
 
 class StreamflowCleaner(Cleaner):
@@ -447,25 +450,196 @@ class StreamflowCleaner(Cleaner):
         self.processed_df[methods[0]][self.origin_df["INQ"].isna()] = np.nan
 
 
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
+
 class StreamflowBacktrack:
-    def __init__(self, data_folder, output_folder, file_name=None):
+    def __init__(self, data_folder, output_folder):
+        """
+        Back-calculating inflow of reservior
+
+        Parameters
+        ----------
+        data_folder : str
+            the folder of reservoir data
+        output_folder : _type_
+            where we put inflow data
+        """
         self.data_folder = data_folder
         self.output_folder = output_folder
-        self.file_name = file_name
+        logging.info(
+            "Please make sure the data is in the right format. We are checking now ..."
+        )
+        self._check_file_format(data_folder)
 
-    def clean_W(self, file_path, output_folder):
-        data = pd.read_csv(file_path)
-        # 计算与前一行的差异
-        data["diff_prev"] = abs(data["RZ"] - data["RZ"].shift(1))
+    def _check_file_format(self, folder_path):
+        """
+        Check if the files in the given folder match the specified format.
+
+        Parameters
+        ----------
+        folder_path : str
+            The path of the folder to check.
+
+        Raises
+        ----------
+        ValueError
+            If a file name does not match the specified format, an error is raised with the specific file name.
+        """
+        pattern = re.compile(r".+_rsvr_data\.csv$")
+        for root, dirs, files in os.walk(folder_path):
+            for file in files:
+                if not pattern.match(file):
+                    raise ValueError(f"File name does not match the format: {file}")
+                file_path = os.path.join(root, file)
+                try:
+                    df = pd.read_csv(file_path)
+                except Exception as e:
+                    raise ValueError(f"Unable to read file: {file}, error: {e}") from e
+
+                if any(column not in df.columns for column in RSVR_TS_TABLE_COLS):
+                    raise ValueError(
+                        f"File content does not match the format: {file}, missing columns: {set(RSVR_TS_TABLE_COLS) - set(df.columns)}"
+                    )
+        logging.info("All files are in the right format.")
+
+    def _rsvr_rz_rolling_window_abnormal_rm(self, df, window_size=5):
+        """
+        Detect and remove abnormal reservoir water level data using a rolling window.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            The DataFrame containing the reservoir data.
+        window_size : int
+            The size of the rolling window.
+
+        Returns
+        -------
+        pd.DataFrame
+            The DataFrame with an additional column indicating abnormal data.
+        """
+
+        # 计算滑动窗口的中位数
+        df["median"] = df["RZ"].rolling(window=window_size, center=True).median()
+
+        # 计算当前值与中位数的差异
+        df["diff_median"] = abs(df["RZ"] - df["median"])
+
+        # 如果差异超过阈值，则标记为异常
+        threshold = 50
+        df["set_nan"] = df["diff_median"] > threshold
+
+        # 将异常值设置为 NaN
+        df.loc[df["set_nan"], "RZ"] = np.nan
+        return df
+
+    def _rsvr_rz_conservative_abnormal_rm(self, df):
+        """TODO: this method is not right, need to be fixed
+
+        Parameters
+        ----------
+        data : _type_
+            _description_
+        """
+        df["diff_prev"] = abs(df["RZ"] - df["RZ"].shift(1))
         # 计算与后一行的差异
-        data["diff_next"] = abs(data["RZ"] - data["RZ"].shift(-1))
+        df["diff_next"] = abs(df["RZ"] - df["RZ"].shift(-1))
         # 标记需要设置为 NaN 的行
-        data["set_nan"] = (data["diff_prev"] > 50) | (data["diff_next"] > 50)
-        # 如果与前一行或后一行的差异超过200，则设置为 NaN
-        data.loc[data["set_nan"], "RZ"] = np.nan
+        df["set_nan"] = (df["diff_prev"] > 50) | (df["diff_next"] > 50)
+        # 如果与前一行或后一行的差异超过50，则设置为 NaN
+        df.loc[df["set_nan"], "RZ"] = np.nan
+        return df
+
+    def _save_fitted_zw_curve(self, df, quadratic_fit_curve_coeff, output_folder):
+        """Save a plot of the RZ and W points along with the fitted curve so that
+        the relationship between RZ and W can be visualized and verified
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            _description_
+        quadratic_fit_curve_coeff : _type_
+            a list of coefficients of the quadratic fit curve
+        output_folder : _type_
+            _description_
+        """
+        plt.scatter(df["RZ"], df["W"], label="Data Points")
+        rz_range = np.linspace(df["RZ"].min(), df["RZ"].max(), 100)
+        w_fit = (
+            quadratic_fit_curve_coeff[0] * rz_range**2
+            + quadratic_fit_curve_coeff[1] * rz_range
+            + quadratic_fit_curve_coeff[2]
+        )
+        plt.plot(rz_range, w_fit, color="red", label="Fitted Curve")
+        plt.xlabel("RZ (m)")
+        plt.ylabel("W (10^6 m^3)")
+        plt.legend()
+        plt.title("RZ vs W with Fitted Curve")
+        plot_path = os.path.join(output_folder, "fit_zw_curve.png")
+        plt.savefig(plot_path)
+
+    def _plot_w_clean(self, df, original_file, output_folder):
+        """Plot the original and cleaned Reservoir Storage data for comparison
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            the cleaned data
+        original_file : str
+            the path to the original file
+        output_folder : str
+            where to save the plot
+        """
+        plt.figure(figsize=(14, 7))
+
+        # 绘制原始数据
+        original_data = pd.read_csv(original_file)
+        plt.plot(
+            original_data["TM"],
+            original_data["W"],
+            label="Original Reservoir Storage",
+            color="blue",
+            linestyle="--",
+        )
+
+        # 绘制清洗后的数据
+        plt.plot(df["TM"], df["W"], label="Cleaned Reservoir Storage", color="red")
+
+        plt.xlabel("Time")
+        plt.ylabel("Reservoir Storage (10^6 m^3)")
+        plt.title("Reservoir Storage Analysis with Outliers Removed")
+        plt.legend()
+
+        # 保存图像到与CSV文件相同的目录
+        plot_path = os.path.join(output_folder, "rsvr_w_clean.png")
+        plt.savefig(plot_path)
+
+    def clean_w(self, file_path, output_folder):
+        """
+        Remove abnormal reservoir capacity data
+
+        Parameters
+        ----------
+        file_path : str
+            Path to the input file
+        output_folder : str
+            Path to the output folder
+
+        Returns
+        -------
+        str
+            Path to the cleaned data file
+        """
+        data = pd.read_csv(file_path)
+
+        # remove abnormal reservoir water level data
+        data = self._rsvr_rz_conservative_abnormal_rm(data)
 
         # 输出被设置为 NaN 的行
-        print(data[data["set_nan"]])
+        logging.debug(data[data["set_nan"]])
 
         # 保存被设置为 NaN 的行到 CSV 文件
         data[data["set_nan"]].to_csv(
@@ -478,7 +652,8 @@ class StreamflowBacktrack:
 
             # 执行二次拟合，计算 RZ 和 W 之间的关系
             coefficients = np.polyfit(valid_data["RZ"], valid_data["W"], 2)
-
+            # Plot RZ and W points along with the fitted curve
+            self._save_fitted_zw_curve(valid_data, coefficients, output_folder)
             # 根据拟合的多项式关系更新 W 列
             data["W"] = (
                 coefficients[0] * data["RZ"] ** 2
@@ -491,30 +666,7 @@ class StreamflowBacktrack:
         cleaned_path = os.path.join(output_folder, "去除库容异常的数据.csv")
         data.to_csv(cleaned_path)
 
-        # 添加绘制图形功能，不改变原有代码
-        plt.figure(figsize=(14, 7))
-
-        # 绘制原始数据
-        original_data = pd.read_csv(file_path)
-        plt.plot(
-            original_data["TM"],
-            original_data["W"],
-            label="Original Water Level",
-            color="blue",
-            linestyle="--",
-        )
-
-        # 绘制清洗后的数据
-        plt.plot(data["TM"], data["W"], label="Cleaned Water Level", color="red")
-
-        plt.xlabel("Time")
-        plt.ylabel("Water Level (W)")
-        plt.title("Water Level Analysis with Outliers Removed")
-        plt.legend()
-
-        # 保存图像到与CSV文件相同的目录
-        plot_path = os.path.join(output_folder, "水位清洗对比图.png")
-        plt.savefig(plot_path)
+        self._plot_w_clean(data, file_path, output_folder)
         return cleaned_path
 
     def back_calculation(self, data_path, file, output_folder):
@@ -534,21 +686,7 @@ class StreamflowBacktrack:
         back_calc_path = os.path.join(
             output_folder, file[:-4] + "_径流直接反推数据.csv"
         )
-        data[
-            [
-                "STCD",
-                "TM",
-                "RZ",
-                "INQ",
-                "W",
-                "OTQ",
-                "RWCHRCD",
-                "RWPTN",
-                "INQDR",
-                "MSQMT",
-                "BLRZ",
-            ]
-        ].to_csv(back_calc_path)
+        data[RSVR_TS_TABLE_COLS].to_csv(back_calc_path)
         return back_calc_path
 
     def delete_nan_inq(self, data_path, file, output_folder):
@@ -605,21 +743,7 @@ class StreamflowBacktrack:
         )
 
         df["TM"] = df.index.strftime("%Y-%m-%d %H:%M:%S")
-        df[
-            [
-                "STCD",
-                "TM",
-                "RZ",
-                "INQ",
-                "W",
-                "OTQ",
-                "RWCHRCD",
-                "RWPTN",
-                "INQDR",
-                "MSQMT",
-                "BLRZ",
-            ]
-        ].to_csv(path, index=False)
+        df[RSVR_TS_TABLE_COLS].to_csv(path, index=False)
         return path
 
     def insert_inq(self, data_path, file, output_folder):
@@ -676,36 +800,8 @@ class StreamflowBacktrack:
         # 最后一步转换为整数再转换为字符串
         df["STCD"] = df["STCD"].astype(int).astype(str)
         print(df["STCD"])
-        df[
-            [
-                "STCD",
-                "TM",
-                "RZ",
-                "INQ",
-                "W",
-                "OTQ",
-                "RWCHRCD",
-                "RWPTN",
-                "INQDR",
-                "MSQMT",
-                "BLRZ",
-            ]
-        ].to_csv(result_path, index=False)
-        df[
-            [
-                "STCD",
-                "TM",
-                "RZ",
-                "INQ",
-                "W",
-                "OTQ",
-                "RWCHRCD",
-                "RWPTN",
-                "INQDR",
-                "MSQMT",
-                "BLRZ",
-            ]
-        ].to_csv(
+        df[RSVR_TS_TABLE_COLS].to_csv(result_path, index=False)
+        df[RSVR_TS_TABLE_COLS].to_csv(
             os.path.join("/ftproot/basins-origin/basins-streamflow-with BSAD/", file),
             index=False,
         )
@@ -714,18 +810,17 @@ class StreamflowBacktrack:
 
     def process_backtrack(self):
         for file in tqdm(os.listdir(self.data_folder)):
-            if file.endswith(".csv"):
-                file_path = os.path.join(self.data_folder, file)
-                output_folder = os.path.join(self.output_folder, file[:-4])
-                if not os.path.exists(output_folder):
-                    os.makedirs(output_folder)
-                # Process each file step by step
-                # 去除库容异常
-                cleaned_data = self.clean_W(file_path, output_folder)
-                # 公式计算反推
-                back_data = self.back_calculation(cleaned_data, file, output_folder)
-                # 去除反推异常值
-                nonan_data = self.delete_nan_inq(back_data, file, output_folder)
-                # 插值平衡
-                insert_data = self.insert_inq(nonan_data, file, output_folder)
-                # 绘图
+            file_path = os.path.join(self.data_folder, file)
+            output_folder = os.path.join(self.output_folder, file[:-4])
+            if not os.path.exists(output_folder):
+                os.makedirs(output_folder)
+            # Process each file step by step
+            # 去除库容异常
+            cleaned_data = self.clean_w(file_path, output_folder)
+            # 公式计算反推
+            back_data = self.back_calculation(cleaned_data, file, output_folder)
+            # 去除反推异常值
+            nonan_data = self.delete_nan_inq(back_data, file, output_folder)
+            # 插值平衡
+            insert_data = self.insert_inq(nonan_data, file, output_folder)
+            # 绘图

@@ -2,7 +2,7 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-22 13:38:07
 LastEditors: Wenyu Ouyang
-LastEditTime: 2025-01-06 14:38:13
+LastEditTime: 2025-01-07 09:27:15
 FilePath: \hydrodatasource\tests\test_streamflow_cleaner.py
 Description: Test funcs for streamflow data cleaning
 """
@@ -10,12 +10,96 @@ Description: Test funcs for streamflow data cleaning
 import os
 import glob
 from tqdm import tqdm
+import pandas as pd
+import pytest
+from hydrodatasource.cleaner.streamflow_cleaner import StreamflowBacktrack
 
-from definitions import DATASET_DIR, RESULT_DIR
 from hydrodatasource.cleaner.streamflow_cleaner import (
     StreamflowCleaner,
-    StreamflowBacktrack,
 )
+
+
+@pytest.fixture
+def setup_test_environment(tmpdir):
+    # Create a temporary directory for test files
+    input_dir = tmpdir.mkdir("input")
+    output_dir = tmpdir.mkdir("output")
+
+    # Create a sample CSV file with test data
+    test_data = {
+        "TM": pd.date_range(start="2023-01-01", periods=10, freq="D"),
+        "RZ": [100, 150, 300, 350, 400, 450, 500, 550, 600, 650],
+        "W": [10, 15, 20, 25, 30, 35, 40, 45, 50, 55],
+    }
+    test_df = pd.DataFrame(test_data)
+    input_file = os.path.join(input_dir, "test_data.csv")
+    test_df.to_csv(input_file, index=False)
+
+    return input_file, output_dir
+
+
+def test_clean_w(setup_test_environment):
+    input_file, output_dir = setup_test_environment
+
+    # Initialize the StreamflowBacktrack object
+    backtrack = StreamflowBacktrack(data_folder="", output_folder="")
+
+    # Call the clean_w method
+    cleaned_file = backtrack.clean_w(input_file, output_dir)
+
+    # Check if the cleaned file exists
+    assert os.path.exists(cleaned_file), "Cleaned file was not created."
+
+    # Load the cleaned data
+    cleaned_data = pd.read_csv(cleaned_file)
+
+    # Check if the NaN values were set correctly
+    assert cleaned_data["RZ"].isna().sum() > 0, "NaN values were not set correctly."
+
+    # Check if the cleaned data file has the expected columns
+    expected_columns = ["TM", "RZ", "W", "diff_prev", "diff_next", "set_nan"]
+    assert all(
+        column in cleaned_data.columns for column in expected_columns
+    ), "Cleaned data does not have the expected columns."
+
+    # Check if the plot file was created
+    plot_file = os.path.join(output_dir, "水位清洗对比图.png")
+    assert os.path.exists(plot_file), "Plot file was not created."
+
+
+def test_clean_w_no_nan(setup_test_environment):
+    input_file, output_dir = setup_test_environment
+
+    # Modify the test data to have no NaN values
+    test_data = {
+        "TM": pd.date_range(start="2023-01-01", periods=10, freq="D"),
+        "RZ": [100, 150, 200, 250, 300, 350, 400, 450, 500, 550],
+        "W": [10, 15, 20, 25, 30, 35, 40, 45, 50, 55],
+    }
+    test_df = pd.DataFrame(test_data)
+    test_df.to_csv(input_file, index=False)
+
+    # Initialize the StreamflowBacktrack object
+    backtrack = StreamflowBacktrack(data_folder="", output_folder="")
+
+    # Call the clean_w method
+    cleaned_file = backtrack.clean_w(input_file, output_dir)
+
+    # Load the cleaned data
+    cleaned_data = pd.read_csv(cleaned_file)
+
+    # Check if no NaN values were set
+    assert cleaned_data["RZ"].isna().sum() == 0, "Unexpected NaN values were set."
+
+    # Check if the cleaned data file has the expected columns
+    expected_columns = ["TM", "RZ", "W", "diff_prev", "diff_next", "set_nan"]
+    assert all(
+        column in cleaned_data.columns for column in expected_columns
+    ), "Cleaned data does not have the expected columns."
+
+    # Check if the plot file was created
+    plot_file = os.path.join(output_dir, "水位清洗对比图.png")
+    assert os.path.exists(plot_file), "Plot file was not created."
 
 
 def test_anomaly_process():
@@ -61,27 +145,3 @@ def test_anomaly_process_folder():
             print(f"Processed {csv_file} and saved to {output_file}")
         except Exception as e:
             print(f"Error processing {csv_file}: {e}")
-
-
-def test_process_backtrack():
-    # 测试径流数据反推处理功能
-    original_reservoir_data_dir = os.path.join(DATASET_DIR, "数据库原始流量")
-    tmp_dir = os.path.join(RESULT_DIR, "反推流量")
-    cleaner = StreamflowBacktrack(
-        data_folder=original_reservoir_data_dir,
-        output_folder=tmp_dir,
-    )
-    cleaner.process_backtrack()
-
-
-def test_delete_nan_inq():
-    # 测试径流数据反推处理功能
-    cleaner = StreamflowBacktrack(
-        "/ftproot/tests_stations_anomaly_detection/streamflow_backtrack/",
-        "/ftproot/tests_stations_anomaly_detection/streamflow_backtrack/",
-    )
-    cleaner.delete_nan_inq(
-        data_path="/ftproot/tests_stations_anomaly_detection/streamflow_backtrack/zq_CHN_songliao_21401550.csv",
-        file="zq_CHN_songliao_21401550.csv",
-        output_folder="/ftproot/tests_stations_anomaly_detection/streamflow_backtrack/",
-    )

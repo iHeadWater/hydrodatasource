@@ -1,10 +1,10 @@
 """
 Author: Wenyu Ouyang
 Date: 2024-12-29 15:12:55
-LastEditTime: 2025-01-03 09:16:41
+LastEditTime: 2025-01-06 20:44:09
 LastEditors: Wenyu Ouyang
 Description: We set some project-wide definitions here so that we can easily unify the paths in the project
-FilePath: \hydradatasource\definitions.py
+FilePath: \hydrodatasource\scripts\const4scripts.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 
@@ -16,11 +16,11 @@ import os
 from hydrodataset import SETTING
 
 try:
-    import definitions_private
+    import const4scripts_private
 
-    PROJECT_DIR = definitions_private.PROJECT_DIR
-    RESULT_DIR = definitions_private.RESULT_DIR
-    DATASET_DIR = definitions_private.DATASET_DIR
+    PROJECT_DIR = const4scripts_private.PROJECT_DIR
+    RESULT_DIR = const4scripts_private.RESULT_DIR
+    DATASET_DIR = const4scripts_private.DATASET_DIR
 except ImportError:
     # point to this project
     PROJECT_DIR = os.getcwd()
