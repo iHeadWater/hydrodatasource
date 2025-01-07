@@ -1,10 +1,10 @@
 """
 Author: Wenyu Ouyang
 Date: 2025-01-06 20:34:34
-LastEditTime: 2025-01-07 16:29:20
+LastEditTime: 2025-01-07 20:50:48
 LastEditors: Wenyu Ouyang
 Description: script for chinese streamflow preprocessing
-FilePath: \hydrodatasource\scripts\chinese_streamflow_preprocessing.py
+FilePath: \hydrodatasource\scripts\chinese_rsvr_inflow_preprocessing.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 
@@ -15,11 +15,12 @@ from pathlib import Path
 
 from tqdm import tqdm
 
+from hydrodatasource.cleaner.streamflow_cleaner import StreamflowCleaner
+
 
 sys.path.append(os.path.dirname(Path(os.path.abspath(__file__)).parent))
 from const4scripts import RESULT_DIR, DATASET_DIR
 from hydrodatasource.cleaner.rsvr_inflow_cleaner import (
-    StreamflowCleaner,
     ReservoirInflowBacktrack,
 )
 
@@ -27,28 +28,27 @@ from hydrodatasource.cleaner.rsvr_inflow_cleaner import (
 # 测试径流数据反推处理功能
 original_reservoir_data_dir = os.path.join(DATASET_DIR, "数据库原始流量")
 tmp_dir = os.path.join(RESULT_DIR, "反推流量")
-cleaner = ReservoirInflowBacktrack(
+rsvr_inflow_backtrack = ReservoirInflowBacktrack(
     data_folder=original_reservoir_data_dir,
     output_folder=tmp_dir,
 )
-cleaner.process_backtrack()
+rsvr_inflow_backtrack.process_backtrack()
 
 
-def test_anomaly_process():
-    # 测试径流数据处理功能，单独处理csv文件，修改该过程可实现文件夹批处理多个文件
-    cleaner = StreamflowCleaner(
-        "/ftproot/tests_stations_anomaly_detection/streamflow_cleaner/21312150.csv",
-        window_size=7,
-    )
-    # methods默认可以联合调用，也可以单独调用。大多数情况下，默认调用moving_average
-    methods = ["EMA"]
-    cleaner.anomaly_process(methods)
-    print(cleaner.origin_df)
-    print(cleaner.processed_df)
-    cleaner.processed_df.to_csv(
-        "/ftproot/tests_stations_anomaly_detection/streamflow_cleaner/21312150.csv",
-        index=False,
-    )
+# 测试径流数据处理功能，单独处理csv文件，修改该过程可实现文件夹批处理多个文件
+cleaner = StreamflowCleaner(
+    "/ftproot/tests_stations_anomaly_detection/streamflow_cleaner/21312150.csv",
+    window_size=7,
+)
+# methods默认可以联合调用，也可以单独调用。大多数情况下，默认调用moving_average
+methods = ["EMA"]
+cleaner.anomaly_process(methods)
+print(cleaner.origin_df)
+print(cleaner.processed_df)
+cleaner.processed_df.to_csv(
+    "/ftproot/tests_stations_anomaly_detection/streamflow_cleaner/21312150.csv",
+    index=False,
+)
 
 
 def test_anomaly_process_folder():
