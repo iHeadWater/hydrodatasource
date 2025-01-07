@@ -2,7 +2,7 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-19 14:00:16
 LastEditors: Wenyu Ouyang
-LastEditTime: 2025-01-07 17:45:29
+LastEditTime: 2025-01-07 19:11:49
 FilePath: \hydrodatasource\hydrodatasource\cleaner\rsvr_inflow_cleaner.py
 Description: calculate streamflow from reservoir timeseries data and clean it using moving average methods
 """
@@ -566,6 +566,7 @@ class ReservoirInflowBacktrack:
         output_folder : _type_
             _description_
         """
+        plt.figure(figsize=(14, 7))
         plt.scatter(df["RZ"], df["W"], label="Data Points")
         rz_range = np.linspace(df["RZ"].min(), df["RZ"].max(), 100)
         w_fit = (
@@ -581,26 +582,37 @@ class ReservoirInflowBacktrack:
         plot_path = os.path.join(output_folder, "fit_zw_curve.png")
         plt.savefig(plot_path)
 
-    def _plot_w_clean(self, df, original_file, output_folder):
+    def _plot_var_before_after_clean(
+        self,
+        df_origin,
+        df,
+        plot_column,
+        plot_path,
+        label_orginal="Original Reservoir Storage",
+        label_cleaned="Cleaned Reservoir Storage",
+        ylab="Reservoir Storage (10^6 m^3)",
+        title="Reservoir Storage Analysis with Outliers Removed",
+    ):
         """Plot the original and cleaned Reservoir Storage data for comparison
 
         Parameters
         ----------
+        df_origin : str
+            the original data
         df : pd.DataFrame
             the cleaned data
-        original_file : str
-            the path to the original file
-        output_folder : str
+        plot_path : str
             where to save the plot
+        plot_column: str
+            the column to show; note same name for df and df_origin
         """
         plt.figure(figsize=(14, 7))
 
         # 绘制原始数据
-        original_data = pd.read_csv(original_file)
         plt.plot(
-            pd.to_datetime(original_data["TM"]),
-            original_data["W"],
-            label="Original Reservoir Storage",
+            pd.to_datetime(df_origin["TM"]),
+            df_origin[plot_column],
+            label=label_orginal,
             color="blue",
             linestyle="--",
         )
@@ -608,18 +620,17 @@ class ReservoirInflowBacktrack:
         # 绘制清洗后的数据
         plt.plot(
             pd.to_datetime(df["TM"]),
-            df["W"],
-            label="Cleaned Reservoir Storage",
+            df[plot_column],
+            label=label_cleaned,
             color="red",
         )
 
         plt.xlabel("Time")
-        plt.ylabel("Reservoir Storage (10^6 m^3)")
-        plt.title("Reservoir Storage Analysis with Outliers Removed")
+        plt.ylabel(ylab)
+        plt.title(title)
         plt.legend()
 
         # 保存图像到与CSV文件相同的目录
-        plot_path = os.path.join(output_folder, "rsvr_w_clean.png")
         plt.savefig(plot_path)
 
     def clean_w(self, file_path, output_folder):
@@ -670,8 +681,9 @@ class ReservoirInflowBacktrack:
 
         cleaned_path = os.path.join(output_folder, "去除库容异常的数据.csv")
         data.to_csv(cleaned_path)
-
-        self._plot_w_clean(data, file_path, output_folder)
+        original_data = pd.read_csv(file_path)
+        plot_path = os.path.join(output_folder, "rsvr_w_clean.png")
+        self._plot_var_before_after_clean(original_data, data, "W", plot_path)
         return cleaned_path
 
     def back_calculation(self, clean_w_path, original_file, output_folder):
@@ -708,9 +720,21 @@ class ReservoirInflowBacktrack:
         # data["Month"] = data["TM"].dt.month
         logging.debug(data)
         back_calc_path = os.path.join(
-            output_folder, original_file[:-4] + "_径流直接反推数据.csv"
+            output_folder, f"{int(data['STCD'][0])}_径流直接反推数据.csv"
         )
         data[RSVR_TS_TABLE_COLS].to_csv(back_calc_path)
+        # plot the inflow data and compare with the original data
+        original_data = pd.read_csv(original_file)
+        self._plot_var_before_after_clean(
+            original_data,
+            data,
+            "INQ",
+            os.path.join(output_folder, "inflow_comparison.png"),
+            label_orginal="Original Inflow",
+            label_cleaned="Back-calculated Inflow",
+            ylab="Inflow (m^3/s)",
+            title="Inflow Analysis with Back-calculation",
+        )
         return back_calc_path
 
     def delete_negative_inq(
@@ -811,11 +835,23 @@ class ReservoirInflowBacktrack:
             func=adjust_window,
         )
         path = os.path.join(
-            output_folder, original_file[:-4] + "_水量平衡后的日尺度反推数据.csv"
+            output_folder, f"{int(df['STCD'][0])}_水量平衡后的日尺度反推数据.csv"
         )
 
         df["TM"] = df.index.strftime("%Y-%m-%d %H:%M:%S")
         df[RSVR_TS_TABLE_COLS].to_csv(path, index=False)
+        # plot the inflow data and compare with the original data
+        original_data = pd.read_csv(original_file)
+        self._plot_var_before_after_clean(
+            original_data,
+            df,
+            "INQ",
+            os.path.join(output_folder, "inflow_comparison_after_negative.png"),
+            label_orginal="Original Inflow",
+            label_cleaned="Inflow After Negative Removal",
+            ylab="Inflow (m^3/s)",
+            title="Inflow Analysis with Negative Removal",
+        )
         return path
 
     def insert_inq(self, inflow_data_path, original_file, output_folder):
@@ -861,7 +897,7 @@ class ReservoirInflowBacktrack:
         # 插值前检查连续缺失是否超过7天（7*24小时）
         df = linear_interpolate_wthresh(df)
 
-        result_path = os.path.join(output_folder, original_file)
+        result_path = os.path.join(output_folder, f"{int(df['STCD'][0])}_rsvr_data.csv")
 
         logging.debug("水量平衡的小时尺度滑动平均反推数据：输出行名称")
         logging.debug(df.columns)
@@ -871,6 +907,18 @@ class ReservoirInflowBacktrack:
         df["STCD"] = df["STCD"].astype(int).astype(str)
         logging.debug(df["STCD"])
         df[RSVR_TS_TABLE_COLS].to_csv(result_path, index=False)
+        # plot the inflow data and compare with the original data
+        original_data = pd.read_csv(original_file)
+        self._plot_var_before_after_clean(
+            original_data,
+            df,
+            "INQ",
+            os.path.join(output_folder, "inflow_comparison_after_interpolation.png"),
+            label_orginal="Original Inflow",
+            label_cleaned="Inflow After Interpolation",
+            ylab="Inflow (m^3/s)",
+            title="Inflow Analysis with Interpolation",
+        )
         return result_path
 
     def process_backtrack(self):
@@ -884,15 +932,14 @@ class ReservoirInflowBacktrack:
             cleaned_data_file = self.clean_w(file_path, output_folder)
             # 公式计算反推
             back_data_file = self.back_calculation(
-                cleaned_data_file, file, output_folder
+                cleaned_data_file, file_path, output_folder
             )
             # 去除反推异常值
             nonegative_data_file = self.delete_negative_inq(
-                back_data_file, file, output_folder
+                back_data_file, file_path, output_folder
             )
             # 插值平衡
-            insert_data = self.insert_inq(nonegative_data_file, file, output_folder)
-            # 绘图
+            self.insert_inq(nonegative_data_file, file_path, output_folder)
 
 
 def linear_interpolate_wthresh(df, column="INQ", threshold=168):
