@@ -1,7 +1,7 @@
 """
 Author: Wenyu Ouyang
 Date: 2025-01-06 20:34:34
-LastEditTime: 2025-01-07 20:50:48
+LastEditTime: 2025-01-08 11:13:52
 LastEditors: Wenyu Ouyang
 Description: script for chinese streamflow preprocessing
 FilePath: \hydrodatasource\scripts\chinese_rsvr_inflow_preprocessing.py
@@ -12,10 +12,7 @@ import glob
 import os
 import sys
 from pathlib import Path
-
 from tqdm import tqdm
-
-from hydrodatasource.cleaner.streamflow_cleaner import StreamflowCleaner
 
 
 sys.path.append(os.path.dirname(Path(os.path.abspath(__file__)).parent))
@@ -23,7 +20,10 @@ from const4scripts import RESULT_DIR, DATASET_DIR
 from hydrodatasource.cleaner.rsvr_inflow_cleaner import (
     ReservoirInflowBacktrack,
 )
+from hydrodatasource.cleaner.streamflow_cleaner import StreamflowCleaner
+from hydrodatasource.reader.reservoir_datasets import Crd
 
+# crd = Crd(data_path=os.path.join(DATASET_DIR, "CRD"))
 
 # 测试径流数据反推处理功能
 original_reservoir_data_dir = os.path.join(DATASET_DIR, "数据库原始流量")

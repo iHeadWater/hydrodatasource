@@ -1,7 +1,7 @@
 """
 Author: Wenyu Ouyang
 Date: 2023-10-25 17:12:30
-LastEditTime: 2025-01-07 21:37:35
+LastEditTime: 2025-01-08 11:10:46
 LastEditors: Wenyu Ouyang
 Description: Reading public reservoir datasets
 FilePath: \hydrodatasource\hydrodatasource\reader\reservoir_datasets.py
@@ -40,4 +40,12 @@ class Crd(HydroData):
     def read_reservoir_info(self):
         all_rsvrs_shpfile = self.data_source_description["ALL_RSVRS_SHPFILE"]
         all_rsvrs_shp = gpd.read_file(all_rsvrs_shpfile)
+        # add unit metadata
+        all_rsvrs_shp.attrs["units"] = {
+            "Area": "km^2",
+            "STOR": "km^3",
+            "DIS_AV_CMS": "m^3/s",
+            "Shape_Leng": "degree",  # Shape_Leng unit is degree (lat lon)
+            "Shape_Area": "degree^2",
+        }
         return all_rsvrs_shp

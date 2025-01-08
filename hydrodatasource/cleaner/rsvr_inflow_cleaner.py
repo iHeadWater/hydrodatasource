@@ -2,11 +2,12 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-19 14:00:16
 LastEditors: Wenyu Ouyang
-LastEditTime: 2025-01-08 10:00:18
+LastEditTime: 2025-01-08 20:50:57
 FilePath: \hydrodatasource\hydrodatasource\cleaner\rsvr_inflow_cleaner.py
 Description: calculate streamflow from reservoir timeseries data
 """
 
+import collections
 import logging
 import os
 import re
@@ -37,10 +38,30 @@ class ReservoirInflowBacktrack:
         """
         self.data_folder = data_folder
         self.output_folder = output_folder
-        logging.info(
-            "Please make sure the data is in the right format. We are checking now ..."
-        )
+        self.data_source_description = self.set_data_source_describe()
         self._check_file_format(data_folder)
+        self.rsvr_info = self.read_rsvr_info()
+
+    def set_data_source_describe(self):
+        data_source_dir = self.data_folder
+        # we must have a file to provide the reservoir basic information
+        rsvr_idname_file = os.path.join(data_source_dir, "rsvr_stcd_stnm.xlsx")
+        rsvr_charact_waterlevel_file = os.path.join(
+            data_source_dir, "rsvr_charact_waterlevel.csv"
+        )
+        # all files in data_source_dir other than rsvr_idname_file and rsvr_charact_waterlevel_file
+        rsvr_inflow_files = [
+            os.path.join(data_source_dir, f)
+            for f in os.listdir(data_source_dir)
+            if f not in {"rsvr_stcd_stnm.xlsx", "rsvr_charact_waterlevel.csv"}
+        ]
+        # sort these files -- list
+        rsvr_inflow_files.sort()
+        return collections.OrderedDict(
+            RSVR_IDNAME_FILE=rsvr_idname_file,
+            RSVR_CHARACT_WATERLEVEL_FILE=rsvr_charact_waterlevel_file,
+            RSVR_INFLOW_FILES=rsvr_inflow_files,
+        )
 
     def _check_file_format(self, folder_path):
         """
@@ -56,24 +77,85 @@ class ReservoirInflowBacktrack:
         ValueError
             If a file name does not match the specified format, an error is raised with the specific file name.
         """
+        logging.info(
+            "Please make sure the data is in the right format. We are checking now ..."
+        )
+        rsvr_idname_file = self.data_source_description["RSVR_IDNAME_FILE"]
+        rsvr_charact_waterlevel_file = self.data_source_description[
+            "RSVR_CHARACT_WATERLEVEL_FILE"
+        ]
+        if not os.path.exists(rsvr_idname_file) or not os.path.exists(
+            rsvr_charact_waterlevel_file
+        ):
+            raise FileNotFoundError(
+                f"{rsvr_idname_file} or {rsvr_charact_waterlevel_file} not found. please provide them both. If you don't have them, please contact the data provider or the author of this code."
+            )
         pattern = re.compile(r".+_rsvr_data\.csv$")
-        for root, dirs, files in os.walk(folder_path):
-            for file in files:
-                if not pattern.match(file):
-                    raise ValueError(f"File name does not match the format: {file}")
-                file_path = os.path.join(root, file)
-                try:
-                    df = pd.read_csv(file_path)
-                except Exception as e:
-                    raise ValueError(f"Unable to read file: {file}, error: {e}") from e
-
-                if any(column not in df.columns for column in RSVR_TS_TABLE_COLS):
+        for file_path in self.data_source_description["RSVR_INFLOW_FILES"]:
+            if not pattern.match(file_path):
+                raise ValueError(f"File name does not match the format: {file_path}")
+            try:
+                df = pd.read_csv(file_path)
+                # if all rows length is less than 2, we will not process this file and raise an error to inform the user delete it
+                # if most RZ values are NaN, we will not process this file and raise an error to inform the user delete it
+                # we think at least 72 values (maybe 3 days) should exist
+                if len(df) < 72 or df["RZ"].isna().sum() > len(df) - 72:
                     raise ValueError(
-                        f"File content does not match the format: {file}, missing columns: {set(RSVR_TS_TABLE_COLS) - set(df.columns)}"
+                        f"There are too few values in the file: {file_path}, hence it is useless. Please manually delete it."
                     )
+            except Exception as e:
+                raise ValueError(f"Unable to read file: {file_path}, error: {e}") from e
+
+            if any(column not in df.columns for column in RSVR_TS_TABLE_COLS):
+                raise ValueError(
+                    f"File content does not match the format: {file_path}, missing columns: {set(RSVR_TS_TABLE_COLS) - set(df.columns)}"
+                )
         logging.info("All files are in the right format.")
 
-    def _rsvr_rolling_window_abnormal_rm(
+    def read_rsvr_info(self):
+        rsvr_idname_file = self.data_source_description["RSVR_IDNAME_FILE"]
+        rsvr_info = pd.read_excel(rsvr_idname_file, dtype={"STCD": str})
+        # check if it has two columns: STCD and STNM
+        if "STCD" not in rsvr_info.columns or "STNM" not in rsvr_info.columns:
+            raise ValueError(
+                "rsvr_stcd_stnm.xlsx should have two columns: STCD and STNM"
+            )
+        # sort by STCD, and reindex
+        rsvr_info = rsvr_info.sort_values(by="STCD").reset_index(drop=True)
+        # read the reservoir characteristic water level data
+        rsvr_charact_waterlevel_file = self.data_source_description[
+            "RSVR_CHARACT_WATERLEVEL_FILE"
+        ]
+        rsvr_charact_waterlevel = pd.read_csv(rsvr_charact_waterlevel_file)
+        # find the NORMZ, DDZ, ... in rsvr_charact_waterlevel of STCD in rsvr_info
+        rsvr_info = rsvr_info.merge(rsvr_charact_waterlevel, on="STCD", how="left")
+        # if a rsvr has no inflow file, we will remove it and not process it
+        rsvr_info = rsvr_info[
+            rsvr_info["STCD"].isin(
+                [
+                    os.path.basename(f)[:8]
+                    for f in self.data_source_description["RSVR_INFLOW_FILES"]
+                ]
+            )
+        ]
+        # assert if STCD is sorted
+        assert rsvr_info["STCD"].tolist() == sorted(rsvr_info["STCD"].tolist())
+        logging.info(
+            "Reservoir information read successfully. Note we only process the reservoirs with inflow data."
+        )
+        # update the rsvr inflow files, later we only process these reservoirs
+        rsvr_info["RSVR_INFLOW_FILES"] = [
+            os.path.join(self.data_folder, f"{stcd}_rsvr_data.csv")
+            for stcd in rsvr_info["STCD"]
+        ]
+        # check if each STCD row has same name in RSVR_INFLOW_FILES
+        assert all(
+            rsvr_info.loc[i, "STCD"] in rsvr_info.loc[i, "RSVR_INFLOW_FILES"]
+            for i in rsvr_info.index
+        )
+        return rsvr_info
+
+    def _rsvr_rolling_window_abrupt_abnormal_rm(
         self, df, var_col="RZ", threshold=50, window_size=5
     ):
         """
@@ -106,7 +188,7 @@ class ReservoirInflowBacktrack:
         df.loc[df["set_nan"], var_col] = np.nan
         return df
 
-    def _rsvr_conservative_abnormal_rm(self, df, var_col="RZ", threshold=50):
+    def _rsvr_conservative_abrupt_abnormal_rm(self, df, var_col="RZ", threshold=50):
         """TODO: this method is not right, need to be fixed
 
         Parameters
@@ -207,12 +289,50 @@ class ReservoirInflowBacktrack:
         # 保存图像到与CSV文件相同的目录
         plt.savefig(plot_path)
 
-    def clean_w(self, file_path, output_folder):
+    def _rsvr_valuerange_abnormal_rm(self, df, var_col, range):
+        """Remove abnormal reservoir data based on a range of values
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            _description_
+        var_col : str
+            the column to check
+        range : list
+            [lower_bound, upper_bound]
+
+        Returns
+        -------
+        pd.DataFrame
+            the cleaned data
+        """
+        lower_bound, upper_bound = range
+
+        if lower_bound is not None and not np.isnan(lower_bound):
+            df["set_nan_lower"] = df[var_col] < lower_bound
+        else:
+            df["set_nan_lower"] = False
+
+        if upper_bound is not None and not np.isnan(upper_bound):
+            df["set_nan_upper"] = df[var_col] > upper_bound
+        else:
+            df["set_nan_upper"] = False
+
+        df["set_nan"] = df["set_nan_lower"] | df["set_nan_upper"]
+        df.loc[df["set_nan"], var_col] = np.nan
+
+        # 删除临时列
+        df = df.drop(columns=["set_nan_lower", "set_nan_upper"])
+        return df
+
+    def clean_w(self, rsvr_id, file_path, output_folder):
         """
         Remove abnormal reservoir capacity data
 
         Parameters
         ----------
+        rsvr_id : str
+            The ID of the reservoir
         file_path : str
             Path to the input file
         output_folder : str
@@ -224,12 +344,53 @@ class ReservoirInflowBacktrack:
             Path to the cleaned data file
         """
         data = pd.read_csv(file_path)
+        rsvr_info = self.rsvr_info[self.rsvr_info["STCD"] == rsvr_id]
+
+        def _not_reasonable_value(the_value):
+            return the_value is None or the_value < 0 or np.isnan(the_value)
 
         # remove abnormal reservoir water level data
-        # 50 means 50m difference between the current value and the median
-        data = self._rsvr_conservative_abnormal_rm(data, "RZ", threshold=50)
-        # 100 means 0.1 billion m^3 difference between the current value and the median
-        data = self._rsvr_conservative_abnormal_rm(data, "W", threshold=100)
+        rsvr_dead_waterlevel = rsvr_info["DDZ"].values[0]
+        rsvr_normal_waterlevel = rsvr_info["NORMZ"].values[0]
+        rsvr_desighflood_waterlevel = rsvr_info["DSFLZ"].values[0]
+        rz_threshold = rsvr_normal_waterlevel - rsvr_dead_waterlevel
+        if _not_reasonable_value(rsvr_normal_waterlevel) and not _not_reasonable_value(
+            rsvr_desighflood_waterlevel
+        ):
+            rz_threshold = rsvr_desighflood_waterlevel - rsvr_dead_waterlevel
+        if _not_reasonable_value(rz_threshold):
+            rz_threshold = 50
+        if _not_reasonable_value(rsvr_dead_waterlevel):
+            # to avoid negative and very small values
+            rsvr_dead_waterlevel = 1
+        if _not_reasonable_value(rsvr_desighflood_waterlevel):
+            # no such level data, so we have to set it with normal level
+            rsvr_desighflood_waterlevel = rsvr_normal_waterlevel
+        rz_range = [rsvr_dead_waterlevel, rsvr_desighflood_waterlevel]
+        data = self._rsvr_conservative_abrupt_abnormal_rm(
+            data, "RZ", threshold=rz_threshold
+        )
+        data = self._rsvr_valuerange_abnormal_rm(data, "RZ", range=rz_range)
+
+        # remove abnormal reservoir storage data
+        rsvr_dead_storage = rsvr_info["DDCP"].values[0]
+        rsvr_total_storage = rsvr_info["TTCP"].values[0]
+        w_threshold = rsvr_total_storage - rsvr_dead_storage
+        if _not_reasonable_value(w_threshold):
+            # 100 means 0.1 billion m^3 difference between the current value and the median
+            w_threshold = 100
+        if _not_reasonable_value(rsvr_dead_storage):
+            # to avoid negative and very small values
+            rsvr_dead_storage = 0.001
+        w_range = [rsvr_dead_storage, rsvr_total_storage]
+        data = self._rsvr_conservative_abrupt_abnormal_rm(
+            data, "W", threshold=w_threshold
+        )
+        data = self._rsvr_valuerange_abnormal_rm(data, "W", range=w_range)
+
+        # for row of ["RZ", "W"], if any value is NaN meaning set_nan is True, we set both "RZ", "W" in the row to NaN
+        data.loc[data["set_nan"], "RZ"] = np.nan
+        data.loc[data["set_nan"], "W"] = np.nan
 
         # 输出被设置为 NaN 的行
         logging.debug(data[data["set_nan"]])
@@ -263,7 +424,7 @@ class ReservoirInflowBacktrack:
         self._plot_var_before_after_clean(original_data, data, "W", plot_path)
         return cleaned_path
 
-    def back_calculation(self, clean_w_path, original_file, output_folder):
+    def back_calculation(self, rsvr_id, clean_w_path, original_file, output_folder):
         """Back-calculate inflow from reservoir storage data
         NOTE: each time has three columns: I Q W -- I is the inflow, Q is the outflow, W is the reservoir storage
         Generally, in sql database, a time means the end of previous time period
@@ -275,6 +436,8 @@ class ReservoirInflowBacktrack:
 
         Parameters
         ----------
+        rsvr_id : str
+            The ID of the reservoir
         data_path : str
             the path to the cleaned_w_data file
         original_file: str
@@ -296,9 +459,7 @@ class ReservoirInflowBacktrack:
         data["INQ"] = data["INQ_ACC"]
         # data["Month"] = data["TM"].dt.month
         logging.debug(data)
-        back_calc_path = os.path.join(
-            output_folder, f"{int(data['STCD'][0])}_径流直接反推数据.csv"
-        )
+        back_calc_path = os.path.join(output_folder, f"{rsvr_id}_径流直接反推数据.csv")
         data[RSVR_TS_TABLE_COLS].to_csv(back_calc_path)
         # plot the inflow data and compare with the original data
         original_data = pd.read_csv(original_file)
@@ -316,6 +477,7 @@ class ReservoirInflowBacktrack:
 
     def delete_negative_inq(
         self,
+        rsvr_id,
         inflow_data_path,
         original_file,
         output_folder,
@@ -329,6 +491,8 @@ class ReservoirInflowBacktrack:
 
         Parameters
         ----------
+        rsvr_id : str
+            the id of the reservoir
         inflow_data_path : str
             the data file after back_calculation
         original_file : str
@@ -411,9 +575,7 @@ class ReservoirInflowBacktrack:
             stride=negative_deal_stride,
             func=adjust_window,
         )
-        path = os.path.join(
-            output_folder, f"{int(df['STCD'][0])}_水量平衡后的日尺度反推数据.csv"
-        )
+        path = os.path.join(output_folder, f"{rsvr_id}_水量平衡后的日尺度反推数据.csv")
 
         df["TM"] = df.index.strftime("%Y-%m-%d %H:%M:%S")
         df[RSVR_TS_TABLE_COLS].to_csv(path, index=False)
@@ -431,12 +593,14 @@ class ReservoirInflowBacktrack:
         )
         return path
 
-    def insert_inq(self, inflow_data_path, original_file, output_folder):
+    def insert_inq(self, rsvr_id, inflow_data_path, original_file, output_folder):
         """make inflow data as hourly data as original data is not strictly hourly data
         and insert inq with linear interpolation
 
         Parameters
         ----------
+        rsvr_id : str
+            the id of the reservoir
         inflow_data_path : str
             the data file after delete negative inflow values
         original_file : str
@@ -474,7 +638,7 @@ class ReservoirInflowBacktrack:
         # 插值前检查连续缺失是否超过7天（7*24小时）
         df = linear_interpolate_wthresh(df)
 
-        result_path = os.path.join(output_folder, f"{int(df['STCD'][0])}_rsvr_data.csv")
+        result_path = os.path.join(output_folder, f"{rsvr_id}_rsvr_data.csv")
 
         logging.debug("水量平衡的小时尺度滑动平均反推数据：输出行名称")
         logging.debug(df.columns)
@@ -499,24 +663,28 @@ class ReservoirInflowBacktrack:
         return result_path
 
     def process_backtrack(self):
-        for file in tqdm(os.listdir(self.data_folder)):
-            file_path = os.path.join(self.data_folder, file)
-            output_folder = os.path.join(self.output_folder, file[:-4])
+        rsvr_info = self.rsvr_info
+        for i, rsvr_id in tqdm(enumerate(rsvr_info["STCD"].values)):
+            # for debug
+            if i < 66:
+                continue
+            file_path = rsvr_info["RSVR_INFLOW_FILES"].iloc[i]
+            output_folder = os.path.join(self.output_folder, rsvr_id)
             if not os.path.exists(output_folder):
                 os.makedirs(output_folder)
             # Process each file step by step
             # 去除库容异常
-            cleaned_data_file = self.clean_w(file_path, output_folder)
+            cleaned_data_file = self.clean_w(rsvr_id, file_path, output_folder)
             # 公式计算反推
             back_data_file = self.back_calculation(
-                cleaned_data_file, file_path, output_folder
+                rsvr_id, cleaned_data_file, file_path, output_folder
             )
             # 去除反推异常值
             nonegative_data_file = self.delete_negative_inq(
-                back_data_file, file_path, output_folder
+                rsvr_id, back_data_file, file_path, output_folder
             )
             # 插值平衡
-            self.insert_inq(nonegative_data_file, file_path, output_folder)
+            self.insert_inq(rsvr_id, nonegative_data_file, file_path, output_folder)
 
 
 def linear_interpolate_wthresh(df, column="INQ", threshold=168):
