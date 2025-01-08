@@ -2,7 +2,7 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-19 14:00:16
 LastEditors: Wenyu Ouyang
-LastEditTime: 2025-01-08 20:50:57
+LastEditTime: 2025-01-08 21:47:07
 FilePath: \hydrodatasource\hydrodatasource\cleaner\rsvr_inflow_cleaner.py
 Description: calculate streamflow from reservoir timeseries data
 """
@@ -665,9 +665,6 @@ class ReservoirInflowBacktrack:
     def process_backtrack(self):
         rsvr_info = self.rsvr_info
         for i, rsvr_id in tqdm(enumerate(rsvr_info["STCD"].values)):
-            # for debug
-            if i < 66:
-                continue
             file_path = rsvr_info["RSVR_INFLOW_FILES"].iloc[i]
             output_folder = os.path.join(self.output_folder, rsvr_id)
             if not os.path.exists(output_folder):
