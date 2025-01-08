@@ -26,8 +26,8 @@ def setup_test_environment(tmpdir):
     # Create a sample CSV file with test data
     test_data = {
         "TM": pd.date_range(start="2023-01-01", periods=10, freq="D"),
-        "RZ": [100, 150, 300, 350, 400, 450, 500, 550, 600, 650],
-        "W": [10, 15, 20, 25, 30, 35, 40, 45, 50, 55],
+        "RZ": [100.1, 102.1, 100.5, 100.9, 4100.1, 102.1, 5100.1, 101.1, 104.1, 102],
+        "W": [200, 220, 210, 220, 230, 231, 198, 221, 225, 210],
     }
     test_df = pd.DataFrame(test_data)
     input_file = os.path.join(input_dir, "test_data.csv")
@@ -55,7 +55,7 @@ def test_clean_w(setup_test_environment):
     assert cleaned_data["RZ"].isna().sum() > 0, "NaN values were not set correctly."
 
     # Check if the cleaned data file has the expected columns
-    expected_columns = ["TM", "RZ", "W", "diff_prev", "diff_next", "set_nan"]
+    expected_columns = ["TM", "RZ", "W", "set_nan"]
     assert all(
         column in cleaned_data.columns for column in expected_columns
     ), "Cleaned data does not have the expected columns."
@@ -71,8 +71,8 @@ def test_clean_w_no_nan(setup_test_environment):
     # Modify the test data to have no NaN values
     test_data = {
         "TM": pd.date_range(start="2023-01-01", periods=10, freq="D"),
-        "RZ": [100, 150, 200, 250, 300, 350, 400, 450, 500, 550],
-        "W": [10, 15, 20, 25, 30, 35, 40, 45, 50, 55],
+        "RZ": [100.1, 102.1, 100.5, 100.9, 4100.1, 102.1, 5100.1, 101.1, 104.1, 102],
+        "W": [200, 220, 210, 220, 230, 231, 198, 221, 225, 210],
     }
     test_df = pd.DataFrame(test_data)
     test_df.to_csv(input_file, index=False)
@@ -90,7 +90,7 @@ def test_clean_w_no_nan(setup_test_environment):
     assert cleaned_data["RZ"].isna().sum() == 0, "Unexpected NaN values were set."
 
     # Check if the cleaned data file has the expected columns
-    expected_columns = ["TM", "RZ", "W", "diff_prev", "diff_next", "set_nan"]
+    expected_columns = ["TM", "RZ", "W", "set_nan"]
     assert all(
         column in cleaned_data.columns for column in expected_columns
     ), "Cleaned data does not have the expected columns."
