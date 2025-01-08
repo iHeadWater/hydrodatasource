@@ -2,7 +2,7 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-19 14:00:16
 LastEditors: Wenyu Ouyang
-LastEditTime: 2025-01-07 21:06:53
+LastEditTime: 2025-01-08 10:00:18
 FilePath: \hydrodatasource\hydrodatasource\cleaner\rsvr_inflow_cleaner.py
 Description: calculate streamflow from reservoir timeseries data
 """
@@ -73,7 +73,9 @@ class ReservoirInflowBacktrack:
                     )
         logging.info("All files are in the right format.")
 
-    def _rsvr_rz_rolling_window_abnormal_rm(self, df, window_size=5):
+    def _rsvr_rolling_window_abnormal_rm(
+        self, df, var_col="RZ", threshold=50, window_size=5
+    ):
         """
         Detect and remove abnormal reservoir water level data using a rolling window.
 
@@ -81,6 +83,10 @@ class ReservoirInflowBacktrack:
         ----------
         df : pd.DataFrame
             The DataFrame containing the reservoir data.
+        var_col : str
+            the column to check, by default "RZ"
+        threshold: float
+            the threshold to remove the abnormal data
         window_size : int
             The size of the rolling window.
 
@@ -90,35 +96,35 @@ class ReservoirInflowBacktrack:
             The DataFrame with an additional column indicating abnormal data.
         """
 
-        # 计算滑动窗口的中位数
-        df["median"] = df["RZ"].rolling(window=window_size, center=True).median()
-
-        # 计算当前值与中位数的差异
-        df["diff_median"] = abs(df["RZ"] - df["median"])
-
-        # 如果差异超过阈值，则标记为异常
-        threshold = 50
+        # Calculate the median of the rolling window
+        df["median"] = df[var_col].rolling(window=window_size, center=True).median()
+        # Calculate the difference between the current value and the median
+        df["diff_median"] = abs(df[var_col] - df["median"])
+        # Mark as abnormal if the difference exceeds the threshold
         df["set_nan"] = df["diff_median"] > threshold
-
-        # 将异常值设置为 NaN
-        df.loc[df["set_nan"], "RZ"] = np.nan
+        # Set abnormal values to NaN
+        df.loc[df["set_nan"], var_col] = np.nan
         return df
 
-    def _rsvr_rz_conservative_abnormal_rm(self, df):
+    def _rsvr_conservative_abnormal_rm(self, df, var_col="RZ", threshold=50):
         """TODO: this method is not right, need to be fixed
 
         Parameters
         ----------
-        data : _type_
-            _description_
+        df : pd.DataFrame
+            the data
+        var_col : str
+            the column to check, by default "RZ"
+        threshold: float
+            the threshold to remove the abnormal data
         """
-        df["diff_prev"] = abs(df["RZ"] - df["RZ"].shift(1))
+        df["diff_prev"] = abs(df[var_col] - df[var_col].shift(1))
         # 计算与后一行的差异
-        df["diff_next"] = abs(df["RZ"] - df["RZ"].shift(-1))
+        df["diff_next"] = abs(df[var_col] - df[var_col].shift(-1))
         # 标记需要设置为 NaN 的行
-        df["set_nan"] = (df["diff_prev"] > 50) | (df["diff_next"] > 50)
+        df["set_nan"] = (df["diff_prev"] > threshold) | (df["diff_next"] > threshold)
         # 如果与前一行或后一行的差异超过50，则设置为 NaN
-        df.loc[df["set_nan"], "RZ"] = np.nan
+        df.loc[df["set_nan"], var_col] = np.nan
         return df
 
     def _save_fitted_zw_curve(self, df, quadratic_fit_curve_coeff, output_folder):
@@ -220,7 +226,10 @@ class ReservoirInflowBacktrack:
         data = pd.read_csv(file_path)
 
         # remove abnormal reservoir water level data
-        data = self._rsvr_rz_conservative_abnormal_rm(data)
+        # 50 means 50m difference between the current value and the median
+        data = self._rsvr_conservative_abnormal_rm(data, "RZ", threshold=50)
+        # 100 means 0.1 billion m^3 difference between the current value and the median
+        data = self._rsvr_conservative_abnormal_rm(data, "W", threshold=100)
 
         # 输出被设置为 NaN 的行
         logging.debug(data[data["set_nan"]])
