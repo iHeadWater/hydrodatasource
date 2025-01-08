@@ -106,28 +106,31 @@ class ReservoirInflowBacktrack:
         df.loc[df["set_nan"], var_col] = np.nan
         return df
 
-    def _rsvr_conservative_abnormal_rm(self, df, var_col="RZ", threshold=50):
-        """TODO: this method is not right, need to be fixed
+    def _rsvr_conservative_abnormal_rm(self, df, var_col="RZ", threshold=10):
+        """
+        Remove abnormal data from the specified column using robust Z-Score method
 
         Parameters
         ----------
         df : pd.DataFrame
-            the data
-        var_col : str
-            the column to check, by default "RZ"
-        threshold: float
-            the threshold to remove the abnormal data
+            The data.
+        var_col : str, optional
+            The column to check, by default "RZ".
+        threshold : float, optional
+            The threshold to remove the abnormal data, by default 10.
         """
-        df["diff_prev"] = abs(df[var_col] - df[var_col].shift(1))
-        # 计算与后一行的差异
-        df["diff_next"] = abs(df[var_col] - df[var_col].shift(-1))
-        # 标记需要设置为 NaN 的行
-        df["set_nan"] = (df["diff_prev"] > threshold) | (df["diff_next"] > threshold)
-        # 如果与前一行或后一行的差异超过50，则设置为 NaN
+        median = np.median(df[var_col])
+        mad = np.median(np.abs(df[var_col] - median))
+        if mad == 0:
+            z_scores = np.zeros_like(df[var_col])
+        else:
+            z_scores = (df[var_col] - median) / mad
+        df["set_nan"] = np.abs(z_scores) > threshold
         df.loc[df["set_nan"], var_col] = np.nan
         return df
 
-    def _save_fitted_zw_curve(self, df, quadratic_fit_curve_coeff, output_folder):
+
+   def _save_fitted_zw_curve(self, df, quadratic_fit_curve_coeff, output_folder):
         """Save a plot of the RZ and W points along with the fitted curve so that
         the relationship between RZ and W can be visualized and verified
 
@@ -227,7 +230,7 @@ class ReservoirInflowBacktrack:
 
         # remove abnormal reservoir water level data
         # 50 means 50m difference between the current value and the median
-        data = self._rsvr_conservative_abnormal_rm(data, "RZ", threshold=50)
+        data = self._rsvr_conservative_abnormal_rm(data, "RZ", threshold=10)
         # 100 means 0.1 billion m^3 difference between the current value and the median
         data = self._rsvr_conservative_abnormal_rm(data, "W", threshold=100)
 
