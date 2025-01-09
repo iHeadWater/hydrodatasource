@@ -664,6 +664,8 @@ class ReservoirInflowBacktrack:
 
     def process_backtrack(self):
         rsvr_info = self.rsvr_info
+        # save info file into output folder so that later we can simply read cleaned data
+        rsvr_info.to_csv(os.path.join(self.output_folder, "rsvr_info.csv"), index=False)
         for i, rsvr_id in tqdm(enumerate(rsvr_info["STCD"].values)):
             file_path = rsvr_info["RSVR_INFLOW_FILES"].iloc[i]
             output_folder = os.path.join(self.output_folder, rsvr_id)
