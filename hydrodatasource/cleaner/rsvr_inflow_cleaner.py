@@ -2,7 +2,7 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-19 14:00:16
 LastEditors: Wenyu Ouyang
-LastEditTime: 2025-01-10 16:58:15
+LastEditTime: 2025-01-10 21:12:13
 FilePath: \hydrodatasource\hydrodatasource\cleaner\rsvr_inflow_cleaner.py
 Description: calculate streamflow from reservoir timeseries data
 """
@@ -15,6 +15,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+from scipy.optimize import curve_fit
 
 from hydrodatasource.configs.table_name import RSVR_TS_TABLE_COLS
 
@@ -205,10 +206,11 @@ class ReservoirInflowBacktrack:
         df["diff_prev"] = abs(df[var_col] - df[var_col].shift(1))
         # 计算与后一行的差异
         df["diff_next"] = abs(df[var_col] - df[var_col].shift(-1))
-        # 标记需要设置为 NaN 的行
+        # 标记需要设置为 NaN 的行, | is too strict and may delete some normal data; & is too loose and may keep some abnormal data
+        # df["set_nan"] = (df["diff_prev"] > threshold) | (df["diff_next"] > threshold)
         df["set_nan"] = (df["diff_prev"] > threshold) & (df["diff_next"] > threshold)
         # 如果与前一行或后一行的差异超过50，则设置为 NaN
-        df.loc[df["set_nan"], var_col] = np.nan  
+        df.loc[df["set_nan"], var_col] = np.nan
         return df
 
     def _save_fitted_zw_curve(self, df, quadratic_fit_curve_coeff, output_folder):
@@ -327,7 +329,7 @@ class ReservoirInflowBacktrack:
         df = df.drop(columns=["set_nan_lower", "set_nan_upper"])
         return df
 
-    def clean_w(self, rsvr_id, file_path, output_folder):
+    def clean_w(self, rsvr_id, file_path, output_folder, fit_method="quadratic"):
         """
         Remove abnormal reservoir capacity data
 
@@ -339,6 +341,9 @@ class ReservoirInflowBacktrack:
             Path to the input file
         output_folder : str
             Path to the output folder
+        fit_method : str, optional
+            z-w curve fitting method, by default "quadratic"
+            TODO: MORE METHODS need to be supported; power is also need to be debugged
 
         Returns
         -------
@@ -405,32 +410,22 @@ class ReservoirInflowBacktrack:
         data[data["set_nan"]].to_csv(
             os.path.join(output_folder, "库容异常的数据行.csv"), index=False
         )
-        try:
-            # 拟合库容曲线
-            # 只提取 RZ 和 W 列中同时非 NaN 的行
-            valid_data = data.dropna(subset=["RZ", "W"])
-
-            # 执行二次拟合，计算 RZ 和 W 之间的关系
-            # 计算拟合的二次多项式
-            coefficients = np.polyfit(valid_data["RZ"], valid_data["W"], 2)
-            # 计算拟合值和残差
-            residuals = valid_data["W"] - np.polyval(coefficients, valid_data["RZ"])
-            # 设定离群点的阈值（1倍标准差）
-            threshold = 1.0 * np.std(residuals)
-            # 过滤离群点并更新数据
-            valid_data = valid_data[np.abs(residuals) < threshold]
-            # 再次执行拟合
-            coefficients = np.polyfit(valid_data["RZ"], valid_data["W"], 2)
-            # Plot RZ and W points along with the fitted curve
-            self._save_fitted_zw_curve(valid_data, coefficients, output_folder)
-            # 根据拟合的多项式关系更新 W 列
-            data["W"] = (
-                coefficients[0] * data["RZ"] ** 2
-                + coefficients[1] * data["RZ"]
-                + coefficients[2]
-            )
-        except np.linalg.LinAlgError:
-            print("SVD did not converge during polynomial fitting, skipping this step.")
+        valid_data = data.dropna(subset=["RZ", "W"])
+        valid_data, coefficients = fit_zw_curve(
+            valid_data, x_col="RZ", y_col="W", method=fit_method
+        )
+        logging.info(
+            f"For {rsvr_id}, removed {len(data.dropna(subset=['RZ', 'W'])) - len(valid_data)} outliers for z-w curve fitting."
+        )
+        # Plot RZ and W points along with the fitted curve
+        self._save_fitted_zw_curve(data, coefficients, output_folder)
+        # 根据拟合的多项式关系更新 W 列
+        if fit_method == "quadratic":
+            data["W"] = np.polyval(coefficients, data["RZ"])
+        elif fit_method == "power":
+            data["W"] = _func_abcd_power(data["RZ"], *coefficients)
+        else:
+            raise ValueError(f"Unsupported fit method: {fit_method}")
 
         cleaned_path = os.path.join(output_folder, "去除库容异常的数据.csv")
         data.to_csv(cleaned_path)
@@ -742,3 +737,60 @@ def linear_interpolate_wthresh(df, column="INQ", threshold=168):
     )
 
     return df
+
+
+def _func_abcd_power(x, a, b, c, d):
+    return a * x**b + c * x + d
+
+
+def fit_zw_curve(df, x_col, y_col, method="quadratic"):
+    """Fit a curve to the data using the specified method.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The data
+    x_col : str
+        The x column to fit, such as "RZ"
+    y_col : str
+        The y column to fit, such as "W"
+    method : str, optional
+        The fitting method, either "quadratic" or "power", by default "quadratic"
+
+    Returns
+    -------
+    list
+        The filtered df and coefficients of the fit curve
+    """
+
+    def calculate_residuals(df, x_col, y_col, coefficients, func=None):
+        if func:
+            fitted_values = func(df[x_col], *coefficients)
+        else:
+            fitted_values = np.polyval(coefficients, df[x_col])
+        residuals = df[y_col] - fitted_values
+        return residuals
+
+    def filter_outliers(df, residuals, threshold=3.0):
+        std_threshold = threshold * np.std(residuals)
+        return df[np.abs(residuals) < std_threshold]
+
+    if method == "quadratic":
+        coefficients = np.polyfit(df[x_col], df[y_col], 2)
+        residuals = calculate_residuals(df, x_col, y_col, coefficients)
+        df_ = filter_outliers(df, residuals)
+        coefficients = np.polyfit(df_[x_col], df_[y_col], 2)
+        return df_, coefficients
+
+    elif method == "power":
+        param_bounds = ([-np.inf, 0, -np.inf, -np.inf], [np.inf, 2, np.inf, np.inf])
+        popt, _ = curve_fit(_func_abcd_power, df[x_col], df[y_col], bounds=param_bounds)
+        residuals = calculate_residuals(df, x_col, y_col, popt, _func_abcd_power)
+        df_ = filter_outliers(df, residuals)
+        popt, _ = curve_fit(
+            _func_abcd_power, df_[x_col], df_[y_col], bounds=param_bounds
+        )
+        return df_, popt
+
+    else:
+        raise ValueError("Invalid method. Choose either 'quadratic' or 'power'.")
