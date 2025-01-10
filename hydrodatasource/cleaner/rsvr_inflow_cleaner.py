@@ -188,7 +188,7 @@ class ReservoirInflowBacktrack:
         df.loc[df["set_nan"], var_col] = np.nan
         return df
 
-    def _rsvr_conservative_abrupt_abnormal_rm(self, df, var_col="RZ", threshold=50):
+    def _rsvr_conservative_abrupt_abnormal_rm(self, df, var_col="RZ", threshold=10):
         """TODO: this method is not right, need to be fixed
 
         Parameters
@@ -204,9 +204,9 @@ class ReservoirInflowBacktrack:
         # 计算与后一行的差异
         df["diff_next"] = abs(df[var_col] - df[var_col].shift(-1))
         # 标记需要设置为 NaN 的行
-        df["set_nan"] = (df["diff_prev"] > threshold) | (df["diff_next"] > threshold)
+        df["set_nan"] = (df["diff_prev"] > threshold) & (df["diff_next"] > threshold)
         # 如果与前一行或后一行的差异超过50，则设置为 NaN
-        df.loc[df["set_nan"], var_col] = np.nan
+        df.loc[df["set_nan"], var_col] = np.nan  
         return df
 
     def _save_fitted_zw_curve(self, df, quadratic_fit_curve_coeff, output_folder):
