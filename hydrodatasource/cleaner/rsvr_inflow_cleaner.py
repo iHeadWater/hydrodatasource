@@ -2,7 +2,7 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-19 14:00:16
 LastEditors: Wenyu Ouyang
-LastEditTime: 2025-01-08 21:47:07
+LastEditTime: 2025-01-10 16:58:15
 FilePath: \hydrodatasource\hydrodatasource\cleaner\rsvr_inflow_cleaner.py
 Description: calculate streamflow from reservoir timeseries data
 """
@@ -126,14 +126,16 @@ class ReservoirInflowBacktrack:
         rsvr_charact_waterlevel_file = self.data_source_description[
             "RSVR_CHARACT_WATERLEVEL_FILE"
         ]
-        rsvr_charact_waterlevel = pd.read_csv(rsvr_charact_waterlevel_file)
+        rsvr_charact_waterlevel = pd.read_csv(
+            rsvr_charact_waterlevel_file, dtype={"STCD": str}
+        )
         # find the NORMZ, DDZ, ... in rsvr_charact_waterlevel of STCD in rsvr_info
         rsvr_info = rsvr_info.merge(rsvr_charact_waterlevel, on="STCD", how="left")
         # if a rsvr has no inflow file, we will remove it and not process it
         rsvr_info = rsvr_info[
             rsvr_info["STCD"].isin(
                 [
-                    os.path.basename(f)[:8]
+                    os.path.basename(f).split("_")[0]
                     for f in self.data_source_description["RSVR_INFLOW_FILES"]
                 ]
             )
@@ -388,9 +390,13 @@ class ReservoirInflowBacktrack:
         )
         data = self._rsvr_valuerange_abnormal_rm(data, "W", range=w_range)
 
-        # for row of ["RZ", "W"], if any value is NaN meaning set_nan is True, we set both "RZ", "W" in the row to NaN
+        # set valuerange abnormal rm for outflow, outflow cannot be negative
+        data = self._rsvr_valuerange_abnormal_rm(data, "OTQ", range=[0, None])
+
+        # for row of ["RZ", "W", "OTQ"], if any value is NaN meaning set_nan is True, we set both "RZ", "W", "OTQ" in the row to NaN
         data.loc[data["set_nan"], "RZ"] = np.nan
         data.loc[data["set_nan"], "W"] = np.nan
+        data.loc[data["set_nan"], "OTQ"] = np.nan
 
         # 输出被设置为 NaN 的行
         logging.debug(data[data["set_nan"]])

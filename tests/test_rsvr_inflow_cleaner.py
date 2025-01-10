@@ -2,7 +2,7 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-22 13:38:07
 LastEditors: Wenyu Ouyang
-LastEditTime: 2025-01-07 17:39:39
+LastEditTime: 2025-01-10 17:02:10
 FilePath: \hydrodatasource\tests\test_rsvr_inflow_cleaner.py
 Description: Test funcs for streamflow data cleaning
 """
@@ -25,25 +25,57 @@ def setup_test_environment(tmpdir):
 
     # Create a sample CSV file with test data
     test_data = {
-        "TM": pd.date_range(start="2023-01-01", periods=10, freq="D"),
-        "RZ": [100, 150, 300, 350, 400, 450, 500, 550, 600, 650],
-        "W": [10, 15, 20, 25, 30, 35, 40, 45, 50, 55],
+        "TM": pd.date_range(
+            start="2023-01-01", periods=100, freq="H"
+        ),  # Ensure enough rows
+        "RZ": [100, 150, 300, 350, 400, 450, 500, 550, 600, 650]
+        * 10,  # Ensure enough non-NaN values
+        "W": [10, 15, 20, 25, 30, 35, 40, 45, 50, 55] * 10,
+        "MSQMT": [0] * 100,
+        "STCD": ["001"] * 100,
+        "OTQ": [5, 10, 15, 20, 25, 30, 35, 40, 45, -50] * 10,
+        "BLRZ": [0] * 100,
+        "RWCHRCD": [0] * 100,
+        "INQ": [10, 12.5, np.nan, np.nan, 20, 25, 30, np.nan, 35, 40] * 10,
+        "RWPTN": [0] * 100,
+        "INQDR": [0] * 100,
     }
     test_df = pd.DataFrame(test_data)
-    input_file = os.path.join(input_dir, "test_data.csv")
+    input_file = os.path.join(input_dir, "001_rsvr_data.csv")
     test_df.to_csv(input_file, index=False)
 
-    return input_file, output_dir
+    # Create dummy reservoir info files
+    rsvr_idname_file = os.path.join(input_dir, "rsvr_stcd_stnm.xlsx")
+    rsvr_charact_waterlevel_file = os.path.join(
+        input_dir, "rsvr_charact_waterlevel.csv"
+    )
+    pd.DataFrame({"STCD": ["001"], "STNM": ["Reservoir1"]}).to_excel(
+        rsvr_idname_file, index=False
+    )
+    pd.DataFrame(
+        {
+            "STCD": ["001"],
+            "NORMZ": [100],
+            "DDZ": [50],
+            "DSFLZ": [120],
+            "DDCP": [10],
+            "TTCP": [100],
+        }
+    ).to_csv(rsvr_charact_waterlevel_file, index=False)
+
+    return input_file, output_dir, input_dir
 
 
 def test_clean_w(setup_test_environment):
-    input_file, output_dir = setup_test_environment
+    input_file, output_dir, input_dir = setup_test_environment
 
-    # Initialize the StreamflowBacktrack object
-    backtrack = ReservoirInflowBacktrack(data_folder="", output_folder="")
+    # Initialize the ReservoirInflowBacktrack object
+    backtrack = ReservoirInflowBacktrack(
+        data_folder=input_dir, output_folder=output_dir
+    )
 
     # Call the clean_w method
-    cleaned_file = backtrack.clean_w(input_file, output_dir)
+    cleaned_file = backtrack.clean_w("001", input_file, output_dir)
 
     # Check if the cleaned file exists
     assert os.path.exists(cleaned_file), "Cleaned file was not created."
@@ -65,6 +97,7 @@ def test_clean_w(setup_test_environment):
     assert os.path.exists(plot_file), "Plot file was not created."
 
 
+# todo: the following are not fully tested after a refactor
 def test_clean_w_no_nan(setup_test_environment):
     input_file, output_dir = setup_test_environment
 
