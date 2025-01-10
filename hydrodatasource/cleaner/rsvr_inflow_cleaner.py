@@ -405,6 +405,15 @@ class ReservoirInflowBacktrack:
             valid_data = data.dropna(subset=["RZ", "W"])
 
             # 执行二次拟合，计算 RZ 和 W 之间的关系
+            # 计算拟合的二次多项式
+            coefficients = np.polyfit(valid_data["RZ"], valid_data["W"], 2)
+            # 计算拟合值和残差
+            residuals = valid_data["W"] - np.polyval(coefficients, valid_data["RZ"])
+            # 设定离群点的阈值（1倍标准差）
+            threshold = 1.0 * np.std(residuals)
+            # 过滤离群点并更新数据
+            valid_data = valid_data[np.abs(residuals) < threshold]
+            # 再次执行拟合
             coefficients = np.polyfit(valid_data["RZ"], valid_data["W"], 2)
             # Plot RZ and W points along with the fitted curve
             self._save_fitted_zw_curve(valid_data, coefficients, output_folder)
