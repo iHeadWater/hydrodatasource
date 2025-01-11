@@ -19,11 +19,13 @@ from hydrodatasource.configs.data_consts import (
     MODIS_ET_PET_8D_VARS,
 )
 from hydrodatasource.utils.utils import (
+    cal_area_from_shp,
     calculate_basin_offsets,
     is_minio_folder,
     minio_file_list,
 )
 from hydrodatasource.reader import access_fs
+import geopandas as gpd
 
 
 class HydroData(ABC):
@@ -349,8 +351,20 @@ class SelfMadeHydroDataset(HydroData):
         # NOTICE: although it seems that we don't use pint_xarray, we have to import this package
         import pint_xarray  # noqa: F401
 
+        shape_dir = os.path.join(
+            self.data_source_description["SHAPE_DIR"], "basins.shp"
+        )
+        if "s3://" in shape_dir:
+            with conf.FS.open(shape_dir, mode="rb") as f:
+                shape = gpd.read_file(f)
+        else:
+            shape = gpd.read_file(shape_dir)
+        df_area = cal_area_from_shp(shape)  # calculate the area from shape file
+        df_area.set_index("basin_id", inplace=True)
+
         df_attr = self.read_attributes()
         df_attr.set_index("basin_id", inplace=True)
+        df_attr = df_attr.join(df_area)
         # Mapping provided units to the variables in the datasets
         # For attributes, all the variables' units are same in all unit_info files
         # hence, we just chose the first one
@@ -363,7 +377,7 @@ class SelfMadeHydroDataset(HydroData):
             units_dict = hydro_file.unserialize_json(
                 self.data_source_description["UNIT_FILES"][0]
             )
-
+        units_dict["shp_area"] = "km^2"  # add the unit of shp_area
         # Convert string columns to categorical variables and record categorical mappings
         categorical_mappings = {}
         for column in df_attr.columns:
