@@ -2,7 +2,7 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-22 13:38:07
 LastEditors: Wenyu Ouyang
-LastEditTime: 2025-01-10 17:02:10
+LastEditTime: 2025-01-11 08:43:49
 FilePath: \hydrodatasource\tests\test_rsvr_inflow_cleaner.py
 Description: Test funcs for streamflow data cleaning
 """
@@ -97,9 +97,8 @@ def test_clean_w(setup_test_environment):
     assert os.path.exists(plot_file), "Plot file was not created."
 
 
-# todo: the following are not fully tested after a refactor
 def test_clean_w_no_nan(setup_test_environment):
-    input_file, output_dir = setup_test_environment
+    input_file, output_dir, input_dir = setup_test_environment
 
     # Modify the test data to have no NaN values
     test_data = {
@@ -134,7 +133,7 @@ def test_clean_w_no_nan(setup_test_environment):
 
 
 def test_back_calculation(setup_test_environment):
-    input_file, output_dir = setup_test_environment
+    input_file, output_dir, input_dir = setup_test_environment
 
     # Modify the test data to include necessary columns for back_calculation
     test_data = {
@@ -188,7 +187,7 @@ def test_back_calculation(setup_test_environment):
 
 
 def test_delete_negative_inq(setup_test_environment):
-    input_file, output_dir = setup_test_environment
+    input_file, output_dir, input_dir = setup_test_environment
 
     # Modify the test data to include necessary columns for delete_nan_inq
     test_data = {
@@ -256,7 +255,7 @@ def test_delete_negative_inq(setup_test_environment):
 
 
 def test_linear_interpolate(setup_test_environment):
-    input_file, output_dir = setup_test_environment
+    input_file, output_dir, input_dir = setup_test_environment
 
     # Modify the test data to include NaN values for interpolation
     test_data = {
@@ -315,30 +314,32 @@ def test_linear_interpolate(setup_test_environment):
 
 
 def test_insert_inq(setup_test_environment):
-    input_file, output_dir = setup_test_environment
+    input_file, output_dir, input_dir = setup_test_environment
 
     # Modify the test data to include necessary columns for insert_inq
     test_data = {
-        "TM": pd.date_range(start="2023-01-01", periods=10, freq="h"),
-        "INQ": [10, np.nan, 15, np.nan, 20, np.nan, 25, np.nan, 30, np.nan],
-        "RZ": [100, 150, 200, 250, 300, 350, 400, 450, 500, 550],
-        "W": [10, 15, 20, 25, 30, 35, 40, 45, 50, 55],
-        "OTQ": [5, 10, 15, 20, 25, 30, 35, 40, 45, 50],
-        "STCD": [1] * 10,
-        "BLRZ": [0] * 10,
-        "RWCHRCD": [0] * 10,
-        "RWPTN": [0] * 10,
-        "INQDR": [0] * 10,
-        "MSQMT": [0] * 10,
+        "TM": pd.date_range(start="2023-01-01", periods=100, freq="0.5h"),
+        "INQ": [10, np.nan, 15, np.nan, 20, np.nan, 25, np.nan, 30, np.nan] * 10,
+        "RZ": [100, 150, 200, 250, 300, 350, 400, 450, 500, 550] * 10,
+        "W": [10, 15, 20, 25, 30, 35, 40, 45, 50, 55] * 10,
+        "OTQ": [5, 10, 15, 20, 25, 30, 35, 40, 45, 50] * 10,
+        "STCD": ["001"] * 100,
+        "BLRZ": [0] * 100,
+        "RWCHRCD": [0] * 100,
+        "RWPTN": [0] * 100,
+        "INQDR": [0] * 100,
+        "MSQMT": [0] * 100,
     }
     test_df = pd.DataFrame(test_data)
     test_df.to_csv(input_file, index=False)
 
     # Initialize the ReservoirInflowBacktrack object
-    backtrack = ReservoirInflowBacktrack(data_folder="", output_folder="")
+    backtrack = ReservoirInflowBacktrack(
+        data_folder=input_dir, output_folder=output_dir
+    )
 
     # Call the insert_inq method
-    result_file = backtrack.insert_inq(input_file, "test_data.csv", output_dir)
+    result_file = backtrack.insert_inq("001", input_file, input_file, output_dir)
 
     # Check if the result file exists
     assert os.path.exists(result_file), "Result file was not created."

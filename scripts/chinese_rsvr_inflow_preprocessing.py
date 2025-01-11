@@ -1,7 +1,7 @@
 """
 Author: Wenyu Ouyang
 Date: 2025-01-06 20:34:34
-LastEditTime: 2025-01-08 11:13:52
+LastEditTime: 2025-01-11 11:25:21
 LastEditors: Wenyu Ouyang
 Description: script for chinese streamflow preprocessing
 FilePath: \hydrodatasource\scripts\chinese_rsvr_inflow_preprocessing.py
@@ -33,7 +33,9 @@ rsvr_inflow_backtrack = ReservoirInflowBacktrack(
     output_folder=tmp_dir,
 )
 rsvr_inflow_backtrack.process_backtrack()
-
+# rsvr_inflow_backtrack.process_backtract_1rsvr(
+#     "10407820", os.path.join(original_reservoir_data_dir, "10407820_rsvr_data.csv")
+# )
 
 # 测试径流数据处理功能，单独处理csv文件，修改该过程可实现文件夹批处理多个文件
 cleaner = StreamflowCleaner(

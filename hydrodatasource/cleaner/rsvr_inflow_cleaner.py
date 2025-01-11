@@ -2,7 +2,7 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-19 14:00:16
 LastEditors: Wenyu Ouyang
-LastEditTime: 2025-01-10 21:12:13
+LastEditTime: 2025-01-11 11:21:17
 FilePath: \hydrodatasource\hydrodatasource\cleaner\rsvr_inflow_cleaner.py
 Description: calculate streamflow from reservoir timeseries data
 """
@@ -40,7 +40,7 @@ class ReservoirInflowBacktrack:
         self.data_folder = data_folder
         self.output_folder = output_folder
         self.data_source_description = self.set_data_source_describe()
-        self._check_file_format(data_folder)
+        self._check_file_format()
         self.rsvr_info = self.read_rsvr_info()
 
     def set_data_source_describe(self):
@@ -64,14 +64,9 @@ class ReservoirInflowBacktrack:
             RSVR_INFLOW_FILES=rsvr_inflow_files,
         )
 
-    def _check_file_format(self, folder_path):
+    def _check_file_format(self):
         """
         Check if the files in the given folder match the specified format.
-
-        Parameters
-        ----------
-        folder_path : str
-            The path of the folder to check.
 
         Raises
         ----------
@@ -96,7 +91,7 @@ class ReservoirInflowBacktrack:
             if not pattern.match(file_path):
                 raise ValueError(f"File name does not match the format: {file_path}")
             try:
-                df = pd.read_csv(file_path)
+                df = pd.read_csv(file_path, dtype={"STCD": str})
                 # if all rows length is less than 2, we will not process this file and raise an error to inform the user delete it
                 # if most RZ values are NaN, we will not process this file and raise an error to inform the user delete it
                 # we think at least 72 values (maybe 3 days) should exist
@@ -156,6 +151,11 @@ class ReservoirInflowBacktrack:
             rsvr_info.loc[i, "STCD"] in rsvr_info.loc[i, "RSVR_INFLOW_FILES"]
             for i in rsvr_info.index
         )
+        # Assert that used waterlevel and storage columns are numeric
+        for col in ["DDZ", "NORMZ", "DSFLZ", "DDCP", "TTCP"]:
+            assert np.issubdtype(
+                rsvr_info[col].dtype, np.number
+            ), f"Column {col} is not of numeric type"
         return rsvr_info
 
     def _rsvr_rolling_window_abrupt_abnormal_rm(
@@ -209,7 +209,7 @@ class ReservoirInflowBacktrack:
         # 标记需要设置为 NaN 的行, | is too strict and may delete some normal data; & is too loose and may keep some abnormal data
         # df["set_nan"] = (df["diff_prev"] > threshold) | (df["diff_next"] > threshold)
         df["set_nan"] = (df["diff_prev"] > threshold) & (df["diff_next"] > threshold)
-        # 如果与前一行或后一行的差异超过50，则设置为 NaN
+        # 如果与前一行和后一行的差异超过threshold，则设置为 NaN
         df.loc[df["set_nan"], var_col] = np.nan
         return df
 
@@ -270,7 +270,7 @@ class ReservoirInflowBacktrack:
 
         # 绘制原始数据
         plt.plot(
-            pd.to_datetime(df_origin["TM"]),
+            df_origin.index,
             df_origin[plot_column],
             label=label_orginal,
             color="blue",
@@ -278,8 +278,8 @@ class ReservoirInflowBacktrack:
         )
 
         # 绘制清洗后的数据
-        plt.plot(
-            pd.to_datetime(df["TM"]),
+        plt.scatter(
+            df.index,
             df[plot_column],
             label=label_cleaned,
             color="red",
@@ -350,7 +350,8 @@ class ReservoirInflowBacktrack:
         str
             Path to the cleaned data file
         """
-        data = pd.read_csv(file_path)
+        data = self._read_rsvrinflow_csv_file(file_path)
+
         rsvr_info = self.rsvr_info[self.rsvr_info["STCD"] == rsvr_id]
 
         def _not_reasonable_value(the_value):
@@ -428,8 +429,9 @@ class ReservoirInflowBacktrack:
             raise ValueError(f"Unsupported fit method: {fit_method}")
 
         cleaned_path = os.path.join(output_folder, "去除库容异常的数据.csv")
-        data.to_csv(cleaned_path)
-        original_data = pd.read_csv(file_path)
+        data["TM"] = data.index.strftime("%Y-%m-%d %H:%M:%S")
+        data.to_csv(cleaned_path, index=False)
+        original_data = self._read_rsvrinflow_csv_file(file_path)
         plot_path = os.path.join(output_folder, "rsvr_w_clean.png")
         self._plot_var_before_after_clean(original_data, data, "W", plot_path)
         return cleaned_path
@@ -460,19 +462,19 @@ class ReservoirInflowBacktrack:
         str
             the path to the result file
         """
-        data = pd.read_csv(clean_w_path)
-        # 将时间列转换为日期时间格式
-        data["TM"] = pd.to_datetime(data["TM"])
+        data = self._read_rsvrinflow_csv_file(clean_w_path)
         # diff means the difference between this time and the previous time -- the first will be 0 as fillna(0)
-        data["Time_Diff"] = data["TM"].diff().dt.total_seconds().fillna(0)
+        data["Time_Diff"] = data.index.diff().total_seconds().fillna(0)
         data["INQ_ACC"] = data["OTQ"] + (10**6 * (data["W"].diff() / data["Time_Diff"]))
         data["INQ"] = data["INQ_ACC"]
         # data["Month"] = data["TM"].dt.month
         logging.debug(data)
         back_calc_path = os.path.join(output_folder, f"{rsvr_id}_径流直接反推数据.csv")
-        data[RSVR_TS_TABLE_COLS].to_csv(back_calc_path)
+        # index trans to column
+        data["TM"] = data.index.strftime("%Y-%m-%d %H:%M:%S")
+        data[RSVR_TS_TABLE_COLS].to_csv(back_calc_path, index=False)
         # plot the inflow data and compare with the original data
-        original_data = pd.read_csv(original_file)
+        original_data = self._read_rsvrinflow_csv_file(original_file)
         self._plot_var_before_after_clean(
             original_data,
             data,
@@ -520,16 +522,9 @@ class ReservoirInflowBacktrack:
             the path to the result file
         """
         # 读取CSV文件到DataFrame
-        df = pd.read_csv(inflow_data_path)
-        # 将'TM'列转换为日期时间格式并设置为索引
-        df["TM"] = pd.to_datetime(df["TM"])
-
-        # 设置调整后的时间为索引
-        df = df.set_index("TM")
+        df = self._read_rsvrinflow_csv_file(inflow_data_path)
 
         logging.debug(df["INQ"].sum())
-        # Ensure the 'INQ' column is numeric. If a value cannot be parsed as a number, the errors="coerce" parameter will set it to NaN (i.e., missing value)
-        df["INQ"] = pd.to_numeric(df["INQ"], errors="coerce")
 
         def adjust_window(window):
             """adjust window for delete negative inflow values
@@ -590,7 +585,7 @@ class ReservoirInflowBacktrack:
         df["TM"] = df.index.strftime("%Y-%m-%d %H:%M:%S")
         df[RSVR_TS_TABLE_COLS].to_csv(path, index=False)
         # plot the inflow data and compare with the original data
-        original_data = pd.read_csv(original_file)
+        original_data = self._read_rsvrinflow_csv_file(original_file)
         self._plot_var_before_after_clean(
             original_data,
             df,
@@ -602,6 +597,32 @@ class ReservoirInflowBacktrack:
             title="Inflow Analysis with Negative Removal",
         )
         return path
+
+    def _read_rsvrinflow_csv_file(self, the_csv_data_path):
+        """read reservoir inflow data from csv file
+        set TM datetime and make it index and check if the columns are numeric
+
+        Parameters
+        ----------
+        the_csv_data_path : str
+            path to the csv file
+
+        Returns
+        -------
+        pd.DataFrame
+            the data
+        """
+        df = pd.read_csv(the_csv_data_path, dtype={"STCD": str})
+        for col in ["RZ", "INQ", "W", "OTQ"]:
+            assert np.issubdtype(
+                df[col].dtype, np.number
+            ), f"Column {col} is not of numeric type"
+        # 将'TM'列转换为日期时间格式并设置为索引
+        df["TM"] = pd.to_datetime(df["TM"])
+
+        # 设置调整后的时间为索引
+        df = df.set_index("TM")
+        return df
 
     def insert_inq(self, rsvr_id, inflow_data_path, original_file, output_folder):
         """make inflow data as hourly data as original data is not strictly hourly data
@@ -624,45 +645,44 @@ class ReservoirInflowBacktrack:
             the path to the result file
         """
         # 读取CSV文件到DataFrame
-        df = pd.read_csv(inflow_data_path)
-        # 将'TM'列转换为日期时间格式并设置为索引
-        df["TM"] = pd.to_datetime(df["TM"])
-        # 设置调整后的时间为索引
-        df = df.set_index("TM")
-        # 确保'INQ'列是数值类型
-        df["INQ"] = pd.to_numeric(df["INQ"], errors="coerce")
+        _df = self._read_rsvrinflow_csv_file(inflow_data_path)
 
         # 生成从开始日期到结束日期的完整时间序列，按小时
-        date_range = pd.date_range(start=df.index.min(), end=df.index.max(), freq="h")
+        date_range = pd.date_range(start=_df.index.min(), end=_df.index.max(), freq="h")
         complete_df = pd.DataFrame(index=date_range)
 
         # Perform a full outer join of the original data with the complete time series table, so that some sub-hourly data could still be saved here
-        df = complete_df.join(df, how="outer")
-        # before we interpolate, we need to guarantee all data has same time interval
-        df = df.resample("H").asfreq()
+        df_join = complete_df.join(_df, how="outer")
+
+        # deal with numeric columns
+        numeric_cols = df_join.select_dtypes(include=[np.number]).columns
+        numeric_df = df_join[numeric_cols].resample("h").mean()
+
+        # deal with non-numeric columns
+        non_numeric_cols = df_join.select_dtypes(exclude=[np.number]).columns
+        non_numeric_df = df_join[non_numeric_cols].resample("H").first()
+
+        # 合并数值列和非数值列
+        df = pd.concat([numeric_df, non_numeric_df], axis=1)
 
         # Ensure INQ values are not less than 0 -- mainly for final few values as previous steps may not adjust them
         df["INQ"] = df["INQ"].where(df["INQ"] >= 0, np.nan)
 
         # 使用线性插值
         # 插值前检查连续缺失是否超过7天（7*24小时）
-        df = linear_interpolate_wthresh(df)
+        df_ = linear_interpolate_wthresh(df)
 
         result_path = os.path.join(output_folder, f"{rsvr_id}_rsvr_data.csv")
 
         logging.debug("水量平衡的小时尺度滑动平均反推数据：输出行名称")
-        logging.debug(df.columns)
-        df["TM"] = df.index.strftime("%Y-%m-%d %H:%M:%S")
-        df["STCD"] = df["STCD"].dropna().iloc[0]
-        # 最后一步转换为整数再转换为字符串
-        df["STCD"] = df["STCD"].astype(int).astype(str)
-        logging.debug(df["STCD"])
-        df[RSVR_TS_TABLE_COLS].to_csv(result_path, index=False)
+        logging.debug(df_.columns)
+        df_["TM"] = df_.index.strftime("%Y-%m-%d %H:%M:%S")
+        df_[RSVR_TS_TABLE_COLS].to_csv(result_path, index=False)
         # plot the inflow data and compare with the original data
-        original_data = pd.read_csv(original_file)
+        original_data = self._read_rsvrinflow_csv_file(original_file)
         self._plot_var_before_after_clean(
             original_data,
-            df,
+            df_,
             "INQ",
             os.path.join(output_folder, "inflow_comparison_after_interpolation.png"),
             label_orginal="Original Inflow",
@@ -678,22 +698,26 @@ class ReservoirInflowBacktrack:
         rsvr_info.to_csv(os.path.join(self.output_folder, "rsvr_info.csv"), index=False)
         for i, rsvr_id in tqdm(enumerate(rsvr_info["STCD"].values)):
             file_path = rsvr_info["RSVR_INFLOW_FILES"].iloc[i]
-            output_folder = os.path.join(self.output_folder, rsvr_id)
-            if not os.path.exists(output_folder):
-                os.makedirs(output_folder)
             # Process each file step by step
-            # 去除库容异常
-            cleaned_data_file = self.clean_w(rsvr_id, file_path, output_folder)
-            # 公式计算反推
-            back_data_file = self.back_calculation(
-                rsvr_id, cleaned_data_file, file_path, output_folder
-            )
-            # 去除反推异常值
-            nonegative_data_file = self.delete_negative_inq(
-                rsvr_id, back_data_file, file_path, output_folder
-            )
-            # 插值平衡
-            self.insert_inq(rsvr_id, nonegative_data_file, file_path, output_folder)
+            self.process_backtract_1rsvr(rsvr_id, file_path)
+
+    def process_backtract_1rsvr(self, rsvr_id, file_path):
+        output_folder = os.path.join(self.output_folder, rsvr_id)
+        if not os.path.exists(output_folder):
+            os.makedirs(output_folder)
+        cleaned_data_file = self.clean_w(rsvr_id, file_path, output_folder)
+        # 公式计算反推
+        back_data_file = self.back_calculation(
+            rsvr_id, cleaned_data_file, file_path, output_folder
+        )
+        # 去除反推异常值
+        nonegative_data_file = self.delete_negative_inq(
+            rsvr_id, back_data_file, file_path, output_folder
+        )
+        # 插值平衡
+        self.insert_inq(rsvr_id, nonegative_data_file, file_path, output_folder)
+        # release memory for plot after each basin
+        plt.close("all")
 
 
 def linear_interpolate_wthresh(df, column="INQ", threshold=168):
