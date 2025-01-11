@@ -5,7 +5,7 @@ import shutil
 import geopandas as gpd
 import pandas as pd
 import psycopg2
-from hydrodatasource.cleaner.rsvr_inflow_cleaner import StreamflowCleaner
+from hydrodatasource.cleaner.streamflow_cleaner import StreamflowCleaner
 
 import hydrodatasource.configs.config as conf
 

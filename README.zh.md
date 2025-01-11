@@ -1,7 +1,7 @@
 <!--
  * @Author: Wenyu Ouyang
  * @Date: 2023-10-25 14:43:12
- * @LastEditTime: 2024-06-25 11:41:07
+ * @LastEditTime: 2025-01-09 16:58:58
  * @LastEditors: Wenyu Ouyang
  * @Description: Chinese version README
  * @FilePath: \hydrodatasource\README.zh.md
@@ -15,104 +15,165 @@
 -   Free software: MIT license
 -   Documentation: <https://hydrodatasource.readthedocs.io/en/latest/>
  
-尽管水文领域存在很多流域水文数据集，但是一个很显然的问题是还有很多数据没被整理到公开的数据集中，包括
+## 概述
 
-- 时效性的问题没来得及整理的
-- 没被现有数据集考虑到的
-- 以及不会被公开的数据。
+在水文领域，尽管已有大量公开的流域水文数据集，但仍存在以下问题：
 
-这些数据占据着相当的比例。比如，最常用的CAMELS数据集数据到2014年12月，马上也快10年之久了；GRDC径流数据虽然有用，但是也很少被专门做到某个数据集中，GFS、GPM、SMAP等一系列实时近实时的网格数据也很少被做成数据集，更多的是ERA5Land等质量更高的数据被做到数据集中以进行研究；对于中国的水文数据来说，现在有大量部分是不公开的，自然也无法被拿去构建数据集。
+- 数据集一次整理之后，后续数据往往没有及时整理进去；
+- 现有数据集未覆盖的数据还不少；
+- 一些非公开的数据无法直接共享。
 
-但是这些数据又非常重要，为此，我们构思了这个hydrodatasource仓库，旨在提供一个能统一整理这些数据的方式，使得这些数据能够在以流域为基本单元的科研和生产背景下被更好地利用。关于目前已制作的公开数据集，请关注：[hydrodataset](https://github.com/OuyangWenyu/hydrodataset)
+为了解决这些问题，**hydrodatasource** 提供了一个框架，用于组织和管理这些数据集，从而在以流域为基本单元的科研和生产环境中更高效地利用数据。
 
-更具体一点来说，这个仓库的目标是提供一个统一的流域水文数据管理和使用路径及方法，使得水文模型计算尤其是基于人工智能的计算更加方便。
+该仓库与 [hydrodataset](https://github.com/OuyangWenyu/hydrodataset) 配合使用，后者专注于公开数据集，而 **hydrodatasource** 则专注于整合更广泛的数据资源，包括非公开和自定义数据源。
 
-关于数据获取的部分，因为涉及较多人工介入半自动处理的过程，所以我们把这些内容放到一个单独的仓库：[HydroDataCompiler](https://github.com/iHeadWater/HydroDataCompiler)中，等后续相对完善后，我们会开源该仓库。
+## 数据分类及来源
 
-## How many data sources are there
+**hydrodatasource** 处理的数据主要分为三类：
 
-以流域为最终数据描述主体的角度来考虑，目前我们的数据源主要包括以下几类：
+### A 类数据（公开数据）
 
-| **一级分类** | **二级分类** | **更新频率** | **数据结构** | **具体数据源** |
-| --- | --- | --- | --- | --- |
-| 基础 | 地理图 | 历史存档 | 矢量 | 流域边界、站点等shapefile |
-|  | 高程数据 | 历史存档 | 栅格 | [DEM](https://github.com/DahnJ/Awesome-DEM)|
-|  | 属性数据 | 历史存档 | 表格 | HydroATLAS数据集 |
-| 气象 | 再分析数据集 | 历史存档、延迟动态 | 栅格 | ERA5Land |
-|  | 遥感降水 | 历史存档、近实时动态 | 栅格 | GPM |
-|  | 气象模式预报 | 历史存档、实时滚动 | 栅格 | GFS |
-|  | AI气象预报 | 实时滚动 | 栅格 | AIFS |
-|  | 地面气象站 | 历史存档 | 表格 | NOAA 气象站 |
-|  | 地面雨量站 | 历史存档、实时/延迟动态 | 表格 | 非公开雨量站 |
-| 水文 | 遥感土壤含水量 | 历史存档、近实时动态 | 栅格 | SMAP |
-|  | 墒情站 | 历史存档、实时动态 | 表格 | 非公开的墒情站 |
-|  | 地面水文站 | 历史存档 | 表格 | USGS |
-|  | 地面水文站 | 历史存档、实时动态 | 表格 | 非公开的水位、流量站 |
-|  | 径流数据集 | 历史存档 | 表格 | GRDC |
+这些数据按照预定义的格式进行组织和管理，包括：
 
-注：更新频率不完全指实际数据源的更新频率，主要以本仓库的数据更新频率为准。
+1. **GIS 数据集**：地理矢量数据，如流域边界、站点等 shapefile 文件。
+2. **网格数据集**：如 ERA5Land、GPM、AIFS 等栅格数据，这些数据存储在 MinIO 数据库中。
 
-## What are the main features
+### B 类数据（非公开或行业数据）
 
-在具体使用之前，有必要了解下本仓库的主要特点，这样才能知道怎么使用。
+这些数据通常具有专有性或保密性，需借助特定工具进行格式化和整合，包括：
 
-我们的想法是能让有不同硬件资源的人都能比较方便地使用这个工具。关于硬件资源，这里稍作介绍。由于整个仓库涉及地数据类型很多，数据量也很大，所以作为开发者的我们是构建了一个 MinIO 服务。MinIO 是一个开源的对象存储服务，可以很方便地部署在本地或者云端，我们这里是部署在本地的。这样，我们就可以把数据存储在 MinIO 上，然后通过 MinIO 提供的 API 来读取数据。这样做的好处是，我们能有效地管理大量的数据，和开发统一访问的接口，使得数据的读取更加方便。但是，这样做的缺点是，需要一定的硬件资源，比如硬盘空间、内存等。所以，我们也考虑针对一部分数据提供完全本地文件的交互方式来读取，但是这种方式我们就不会做完全功能的测试覆盖了。
+1. **自定义站点数据**：用户准备的站点数据，按照标准格式处理后转化为 NetCDF 格式。
+2. **行业数据集**：经过整合与格式化的专业数据。
 
-基于上面的基本思路，针对不同的数据，我们的处理方式也有所区别。
+### 自建数据集
 
-- 对于非公开的数据，公开的代码部分主要是考虑提供工具函数，以支持用户自己处理自己的数据，以便后续运行我们提供的开源模型。当然，开发者自己内部会提供对自己数据的读取服务。
-- 对于公开的数据，我们会提供一些数据下载、格式转换和读取的代码，以支持用户在自己本地上操作数据。
+基于这两类数据，还整理出一类**自建水文数据集**，即基于约定的标准格式，为特定科研需求构建的数据集。
 
-接下来，我们就按这两部分来展开。
+## 功能与特点
 
-### For non-public data
+### 统一的数据管理
 
-非公开的数据主要就是地面站点的数据，所以我们就针对这部分数据，提供一些数据转换格式的工具，我们会定义一个用户需要准备的数据格式，然后后续的部分就直接调用工具即可。总的来说，我们会希望用户按照一定的表格格式准备自己的数据，然后我们会处理成 netcdf 格式的数据，以便后续的模型读取。至于具体要准备的数据格式，我们提供了一个data_checker函数来检查数据格式，用户可以通过这个函数来了解数据的具体格式。后续我们也会补充一个文档来详细说明数据的具体格式，这部分暂时未完成。
+**hydrodatasource** 提供了一个标准化的方法，用于：
 
-### For public data
+- 按照预定义的约定结构化数据集。
+- 将多种数据源整合到统一的框架中。
+- 支持水文建模的数据访问和处理。
 
-公开的数据主要是一些已经被整理成数据集的数据，我们会提供一些数据下载、格式转换和读取的代码，以支持用户在自己本地上操作数据。这部分数据主要是一些已经被整理成数据集的数据，比如 CAMELS、GRDC、ERA5Land 等。
+### 兼容本地和云端资源
 
-但是，如前所述，我们不会提供针对本地文件的完整测试覆盖，我们主要在MinIO上测试相关代码。
+- **公开数据**：支持数据格式转换和本地文件操作。
+- **非公开数据**：提供工具以格式化和整合用户自备数据。
+- **MinIO 集成**：通过 API 支持大规模网格数据的高效管理。
 
-## How to use
+### 模块化设计
 
-### Installation
+仓库结构设计支持多样化的工作流程，包括：
 
-We recommend installing the package via pip:
+1. **A 类 GIS 数据**：提供工具以组织和访问 GIS 数据集。
+2. **A 类网格数据**：通过 MinIO 支持大规模网格数据管理。
+3. **B 类数据**：提供自定义工具以清洗处理站点、水库、流域各类时序数据。
+4. **自建数据集**：支持定义的标准数据集格式数据的读取。
+
+### 其他交互关系
+
+**hydrodatasource** 与以下组件交互：
+
+- [**hydrodataset**](https://github.com/OuyangWenyu/hydrodataset)：为hydrodatasource提供访问公开数据集的必要支持。
+- [**HydroDataCompiler**](https://github.com/iHeadWater/HydroDataCompiler)：支持非公开和自定义数据的半自动处理，暂时未公开
+- [**MinIO 数据库**](http://10.48.0.86:9001/)：用于 A 类网格数据的高效存储和管理，目前仅限内部局域网访问。
+
+## 安装
+
+可以通过 pip 安装该包：
 
 ```bash
 pip install hydrodatasource
 ```
 
-### Usage
+注：项目仍在研发前期，推荐以开发者模式开发使用。
 
-我们约定的数据文件组织结构第一集目录是这样的：
-    
+## 使用方法
+
+### 数据组织
+
+该仓库采用以下目录结构组织数据：
+
 ```
-├── datasets-origin
-├── datasets-interim
-├── basins-origin
-├── basins-interim
-├── reservoirs-origin
-├── reservoirs-interim
-├── grids-origin
-├── grids-interim
-├── stations-origin
-├── stations-interim
+├── datasets-origin          # 公开水文数据集
+├── datasets-interim         # 自建水文数据集
+├── gis-origin               # 公开 GIS 数据集
+├── grids-origin             # 网格数据集
+├── stations-origin          # B 类站点数据（原始）
+├── stations-interim         # B 类站点数据（处理后）
+├── reservoirs-origin        # B 类水库数据（原始）
+├── reservoirs-interim       # B 类水库数据（处理后）
+├── basins-origin            # B 类流域数据（原始）
+├── basins-interim           # B 类流域数据（处理后）
 ```
 
-其中，datasets-origin文件夹存放的是数据集，basins-origin文件夹存放的是流域数据，reservoirs-origin文件夹存放的是水库数据，rivers-origin文件夹存放的是河流数据，grids-origin文件夹存放的是格点数据，stations-origin文件夹存放的是站点数据。
+- **`origin`**：原始数据，通常来自专有来源，统一格式。
+- **`interim`**：经过初步处理后可用于分析或建模的数据。
 
-origin文件夹中的数据是原始数据，interim文件夹中的数据是经过初步处理的数据，基本上来说，origin中的数据就是前期在gitlab的一事一议项目中处理之后的数据结果，interim就是这里要把origin的数据根据一项什么具体需求处理成什么格式后得到的数据。
+### 针对 A 类数据
 
-这样的分类能完全覆盖表格中的数据类型。
+1. **公开 GIS 数据**：
+   - 将矢量文件存储在 `gis-origin` 文件夹中，主要包括流域边界、站点等 shapefile 数据。
+   - 数据处理方法：
+     ```python
+     from hydrodatasource import gis
+     gis.process_gis_data(input_path="gis-origin", output_path="gis-interim")
+     ```
 
-对于非公开站点数据：
+2. **网格数据集**：
+   - 将原始网格数据存储在 `grids-origin`，例如 ERA5Land、GPM 等。
+   - 使用 MinIO API 下载或管理存储在数据库中的网格数据：
+     ```python
+     from hydrodatasource import grid
+     grid.download_from_minio(dataset_name="ERA5Land", save_path="grids-interim")
+     ```
 
-1. 首先，用户需要准备好自己的数据，数据格式要求是表格格式，执行下面的命令了解数据的具体格式：
-    ```python
-    from hydrodatasource import station
-    station.get_station_format()
-    ```
-2. 把文件放到文件夹 stations-origin 中，具体的上级绝对路径请在自己电脑用户文件夹下面的 hydro_settings.yml文件中配置。
+### 针对 B 类数据
+
+1. **站点数据**：
+   - 原始数据存储在 `stations-origin` 文件夹，处理后的数据存储在 `stations-interim`。
+   - 检查站点数据的标准格式：
+     ```python
+     from hydrodatasource import station
+     station.get_station_format()
+     ```
+   - 进行格式化处理：
+     ```python
+     station.process_station_data(input_path="stations-origin", output_path="stations-interim")
+     ```
+
+2. **水库数据**：
+   - 原始水库数据存储在 `reservoirs-origin` 文件夹，清洗处理后的数据存储在 `reservoirs-interim`。
+   - 针对水库数据提供特定工具函数用于整合和格式化。
+
+3. **流域数据**：
+   - 原始流域数据存储在 `basins-origin` 文件夹，处理后的数据存储在 `basins-interim`。
+   - 这些数据通常包括针对流域单元的属性和空间信息，支持进一步的水文建模需求。
+
+
+### **自建水文数据集**：
+
+自建数据集保存在 `datasets-interim` 文件夹中。
+
+按照标准格式组织，以便整合和后续模型使用。
+
+### MinIO 数据库与数据存储
+
+MinIO 数据库主要用于存储和管理大规模网格数据（A 类数据），例如 ERA5Land 等实时或近实时动态数据：
+
+- 配置 MinIO 访问：
+  在 `hydro_settings.yml` 文件中配置数据库相关信息。
+
+- 上传或下载数据：
+  ```python
+  from hydrodatasource import minio
+  minio.upload_to_minio(local_path="grids-interim/ERA5Land", dataset_name="ERA5Land")
+  ```
+
+## 结语
+
+**hydrodatasource** 桥接了多样化的水文数据集与高级建模需求，通过提供标准化的工作流程和模块化工具，确保高效的数据管理与整合，支持科研与实际应用。

@@ -4,7 +4,6 @@ import numpy as np
 import xarray as xr
 import hydrodatasource.configs.config as conf
 from hydrodatasource.reader import access_fs
-from hydrodatasource.cleaner import rain_anomaly
 
 
 def test_read_spec():
@@ -176,24 +175,6 @@ def read_csv_to_df(file_path):
     """Read CSV file from file_path and return as pandas DataFrame."""
     with conf.FS.open(file_path, mode="rb") as csv_file:
         df = pd.read_csv(csv_file, index_col=None)
-    return df
-
-
-def process_dataframe(df):
-    df = rain_anomaly.normalize_rainfall_format(df)
-    df = rain_anomaly.filter_rainfall_extremes(df)
-    df = rain_anomaly.filter_rainfall_gradients(df)
-    df = df[
-        [
-            "station_code",
-            "time",
-            "daily_rainfall",
-            "interval",
-            "precipitation",
-            "daily_change",
-            "wetness",
-        ]
-    ]
     return df
 
 

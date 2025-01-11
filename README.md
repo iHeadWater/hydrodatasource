@@ -1,7 +1,7 @@
 <!--
  * @Author: Wenyu Ouyang
  * @Date: 2023-10-24 21:30:40
- * @LastEditTime: 2024-06-25 11:42:16
+ * @LastEditTime: 2025-01-09 17:16:58
  * @LastEditors: Wenyu Ouyang
  * @Description: Readme for hydrodatasource
  * @FilePath: \hydrodatasource\README.md
@@ -21,99 +21,160 @@
 📜 [中文文档](README.zh.md)
 
 
-Although there are many hydrological datasets for various watersheds, a noticeable issue is that many data sources remain unorganized and are not part of public datasets. This includes data that hasn't been organized due to its recency, data not considered by existing datasets, and data that will not be made public. These data sources represent a significant portion of available data. For example, the commonly used CAMELS dataset only includes data up to December 2014, almost ten years ago; GRDC runoff data, while useful, is rarely included in specific datasets. Real-time and near-real-time gridded data such as GFS, GPM, SMAP, etc., are infrequently compiled into datasets, with more emphasis on higher quality data like ERA5Land being used for research. A large portion of hydrological data in China is not public, and thus cannot be used to construct datasets.
+## Overview
 
-To address this, we conceived the hydrodatasource repository, aiming to provide a unified way of organizing these data sources for better utilization in scientific research and production, especially within the context of watersheds. For information on currently available public datasets, please visit: [hydrodataset](https://github.com/OuyangWenyu/hydrodataset).
+Although numerous public watershed hydrological datasets are available, there are still challenges in this field:
 
-To be more specific, the goal of this repository is to provide a unified pathway and method for watershed hydrological data management and usage, making hydrological model calculations, especially those based on artificial intelligence, more convenient.
+- Many datasets are not updated or included in subsequent versions.
+- Some datasets remain uncovered by existing collections.
+- Non-public datasets cannot be openly shared.
 
-Regarding the part about data acquisition, since it involves a process with significant manual and semi-automatic intervention, we have placed these contents in a separate repository: [HydroDataCompiler](https://github.com/iHeadWater/HydroDataCompiler). Once it is relatively perfected, we will open source this repository.
+To address these issues, **hydrodatasource** provides a framework to organize and manage these datasets, making them more efficient for use in watershed-based research and production scenarios.
 
-## How many data sources are there
+This repository complements [hydrodataset](https://github.com/OuyangWenyu/hydrodataset), which focuses on public datasets. In contrast, **hydrodatasource** integrates a broader range of data resources, including non-public and custom datasets.
 
-Considering watersheds as the primary focus of data description, our data sources mainly include:
+## Data Classification and Sources
 
-| **Primary Category** | **Secondary Category** | **Update Frequency** | **Data Structure** | **Specific Data Source** |
-| --- | --- | --- | --- | --- |
-| Baseline | Geographic Maps | Historical Archive | Vector | Watershed boundaries, site locations, and other shapefiles |
-|  | Elevation Data | Historical Archive | Raster | [DEM](https://github.com/DahnJ/Awesome-DEM) |
-|  | Attribute Data | Historical Archive | Tabular | HydroATLAS dataset |
-| Meteorological | Reanalysis Data Sets | Historical Archive, Delayed Dynamic | Raster | ERA5Land |
-|  | Remote Sensing Precipitation | Historical Archive, Near Real-Time Dynamic | Raster | GPM |
-|  | Weather Model Forecasts | Historical Archive, Real-Time Rolling | Raster | GFS |
-|  | AI Weather Forecasts | Real-Time Rolling | Raster | AIFS |
-|  | Ground Weather Stations | Historical Archive | Tabular | NOAA weather stations |
-|  | Ground Rainfall Stations | Historical Archive, Real-Time/Delayed Dynamic | Tabular | Non-public rainfall stations |
-| Hydrology | Remote Sensing Soil Moisture | Historical Archive, Near Real-Time Dynamic | Raster | SMAP |
-|  | Soil Moisture Stations | Historical Archive, Real-Time Dynamic | Tabular | Non-public soil moisture stations |
-|  | Ground Hydrological Stations | Historical Archive | Tabular | USGS |
-|  | Ground Hydrological Stations | Historical Archive, Real-Time Dynamic | Tabular | Non-public water level and flow stations |
-|  | Runoff Data Sets | Historical Archive | Tabular | GRDC |
+**hydrodatasource** processes data that primarily falls into three categories:
 
-Note: The update frequency primarily refers to the frequency of updates in this repository, not necessarily the actual data source's update frequency.
+### Category A Data (Public Data)
 
-## What are the main features
+These datasets are organized and managed according to predefined formats, including:
 
-Before using it, it is essential to understand the main features of this repository, as this will guide its use.
+1. **GIS Datasets**: Geographic vector data, such as watershed boundaries and station shapefiles.
+2. **Gridded Datasets**: Includes datasets like ERA5Land, GPM, and AIFS, which are stored in a MinIO database.
 
-Our goal is to make this tool accessible to users with varying hardware resources. To elaborate on hardware resources: due to the extensive variety and volume of data involved, we have set up a MinIO service. MinIO is an open-source object storage service, which can be conveniently deployed locally or in the cloud; in our case, it's deployed locally. Thus, data is stored on MinIO and accessed via its API. This approach allows effective data management and the development of a unified access interface, simplifying data retrieval. However, it does require specific hardware resources, like disk space and memory. Therefore, we also offer a fully local file interaction mode for a portion of the data, although this mode won't be covered by complete functional testing.
+### Category B Data (Non-Public or Industry Data)
 
-Based on this approach, we handle different types of data differently:
+These datasets are often proprietary or confidential and require specific tools for formatting and integration, including:
 
-For non-public data, we mainly provide utility functions in the public code to assist users in processing their data, facilitating the use of our open-source models. Of course, developers internally provide data retrieval services for their own data.
-For public data, we offer code for data download, format conversion, and reading, supporting users in handling data on their local systems.
-Now, let's expand on these two parts.
+1. **Custom Station Data**: User-prepared station data formatted into NetCDF for seamless model usage.
+2. **Industry Data**: Professionally integrated and formatted datasets.
 
-### For non-public data
+### Custom Hydrological Datasets
 
-The non-public data primarily involves ground station data. We provide tools for data format conversion for these data types. We define a data format that users need to prepare, and the subsequent process involves using these tools directly. In general, we expect users to prepare their data in a specific tabular format, which we will then convert into netCDF format for model reading. As for the exact format to prepare, we provide a data_checker function to verify the data format. Users can use this function to understand the specifics. We will also add a document detailing the specific format, which is yet to be completed.
+Based on Category A and B data, custom hydrological datasets are created, adhering to predefined standard formats for specific research needs.
 
-### For public data
+## Features and Highlights
 
-The public data mainly consists of those already organized into datasets. We provide code for data download, format conversion, and reading to support users in operating data on their local systems. These datasets include, but are not limited to, CAMELS, GRDC, ERA5Land, etc.
+### Unified Data Management
 
-However, as previously mentioned, we do not provide complete test coverage for local files. Our primary testing is conducted on MinIO.
+**hydrodatasource** provides standardized methods for:
 
-## How to use
+- Structuring datasets according to predefined conventions.
+- Integrating various data sources into a unified framework.
+- Supporting data access and processing for hydrological modeling.
 
-### Installation
+### Compatibility with Local and Cloud Resources
 
-We recommend installing the package via pip:
+- **Public Data**: Supports data format conversion and local file operations.
+- **Non-Public Data**: Provides tools to format and integrate user-prepared data.
+- **MinIO Integration**: Efficient management of large-scale gridded data via API.
+
+### Modular Design
+
+The repository structure supports diverse workflows, including:
+
+1. **Category A GIS Data**: Tools to organize and access GIS datasets.
+2. **Category A Gridded Data**: Large-scale grid data management via MinIO.
+3. **Category B Data**: Custom tools to clean and process station, reservoir, and basin time-series data.
+4. **Custom Hydrological Datasets**: Support for predefined dataset formats.
+
+### Other Interactions
+
+**hydrodatasource** interacts with the following components:
+
+- [**hydrodataset**](https://github.com/OuyangWenyu/hydrodataset): Provides necessary support for accessing public datasets.
+- [**HydroDataCompiler**](https://github.com/iHeadWater/HydroDataCompiler): Supports semi-automated processing of non-public and custom data (currently not public).
+- [**MinIO Database**](http://10.48.0.86:9001/): Efficient storage and management of Category A gridded data (currently accessible only within the internal network).
+
+## Installation
+
+Install the package via pip:
 
 ```bash
 pip install hydrodatasource
 ```
 
-### Usage
+Note: The project is still in the early stages of development, so development mode is recommended.
 
-Our agreed data file organization structure at the primary level looks like this:
+## Usage
 
-```dir
-├── datasets-origin
-├── datasets-interim
-├── basins-origin
-├── basins-interim
-├── reservoirs-origin
-├── reservoirs-interim
-├── grids-origin
-├── grids-interim
-├── stations-origin
-├── stations-interim
+### Data Organization
+
+The repository adopts the following directory structure for organizing data:
+
+```
+├── datasets-origin          # Public hydrological datasets
+├── datasets-interim         # Custom hydrological datasets
+├── gis-origin               # Public GIS datasets
+├── grids-origin             # Gridded datasets
+├── stations-origin          # Category B station data (raw)
+├── stations-interim         # Category B station data (processed)
+├── reservoirs-origin        # Category B reservoir data (raw)
+├── reservoirs-interim       # Category B reservoir data (processed)
+├── basins-origin            # Category B basin data (raw)
+├── basins-interim           # Category B basin data (processed)
 ```
 
-Here, datasets-origin contains the datasets, basins-origin contains watershed data, reservoirs-origin stores reservoir data, rivers-origin holds river data, grids-origin includes gridded data, and stations-origin has station data.
+- **`origin`**: Raw data, often from proprietary sources, in unified formats.
+- **`interim`**: Preprocessed data ready for analysis or modeling.
 
-Data in the origin folders is raw data, while the interim folders contain data that has undergone preliminary processing. Essentially, the data in origin is the result of initial processing in GitLab's One Thing One Vote project, and interim is where origin data is processed into a specific format based on a particular requirement.
+### For Category A Data
 
-This categorization fully covers the types of data listed in the table.
+1. **Public GIS Data**:
+   - Store vector files in the `gis-origin` folder, such as watershed boundaries and station shapefiles.
+   - Process the data using:
+     ```python
+     from hydrodatasource import gis
+     gis.process_gis_data(input_path="gis-origin", output_path="gis-interim")
+     ```
 
-For non-public station data:
+2. **Gridded Datasets**:
+   - Store raw grid data in `grids-origin`, such as ERA5Land and GPM.
+   - Use MinIO API to download or manage data stored in the database:
+     ```python
+     from hydrodatasource import grid
+     grid.download_from_minio(dataset_name="ERA5Land", save_path="grids-interim")
+     ```
 
-First, users need to prepare their data in a tabular format. To understand the specific format required, execute the following command:
+### For Category B Data
 
-```python
-from hydrodatasource import station
-station.get_station_format()
-```
+1. **Station Data**:
+   - Store raw data in the `stations-origin` folder and processed data in `stations-interim`.
+   - Check the standard format for station data:
+     ```python
+     from hydrodatasource import station
+     station.get_station_format()
+     ```
+   - Format and process the data:
+     ```python
+     station.process_station_data(input_path="stations-origin", output_path="stations-interim")
+     ```
 
-Place the files in the stations-origin folder. For the specific parent absolute path, please configure it in the hydro_settings.yml file in your computer's user folder.
+2. **Reservoir Data**:
+   - Store raw reservoir data in the `reservoirs-origin` folder and cleaned data in `reservoirs-interim`.
+   - Specific tools are provided for integration and formatting.
+
+3. **Basin Data**:
+   - Store raw basin data in the `basins-origin` folder and processed data in `basins-interim`.
+   - These datasets typically include attributes and spatial information supporting hydrological modeling.
+
+### Custom Hydrological Datasets
+
+Custom datasets are stored in the `datasets-interim` folder. They are organized according to predefined standard formats to facilitate integration and subsequent model use.
+
+### MinIO Database and Data Storage
+
+The MinIO database is primarily used for storing and managing large-scale gridded data (Category A data), such as ERA5Land and other dynamic datasets:
+
+- Configure MinIO access in the `hydro_settings.yml` file.
+- Upload or download data:
+  ```python
+  from hydrodatasource import minio
+  minio.upload_to_minio(local_path="grids-interim/ERA5Land", dataset_name="ERA5Land")
+  ```
+
+## Conclusion
+
+**hydrodatasource** bridges diverse hydrological datasets and advanced modeling needs by providing standardized workflows and modular tools. This ensures efficient data management and integration, supporting both research and operational applications.

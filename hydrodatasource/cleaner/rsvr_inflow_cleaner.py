@@ -2,11 +2,12 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-19 14:00:16
 LastEditors: Wenyu Ouyang
-LastEditTime: 2025-01-07 14:48:57
+LastEditTime: 2025-01-11 11:21:17
 FilePath: \hydrodatasource\hydrodatasource\cleaner\rsvr_inflow_cleaner.py
-Description: calculate streamflow from reservoir timeseries data and clean it using moving average methods
+Description: calculate streamflow from reservoir timeseries data
 """
 
+import collections
 import logging
 import os
 import re
@@ -15,439 +16,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from scipy.optimize import curve_fit
-from scipy.fft import fft, ifft, fftfreq
-from scipy.signal import cwt, morlet, butter, filtfilt
 
-from .cleaner import Cleaner
 from hydrodatasource.configs.table_name import RSVR_TS_TABLE_COLS
-
-
-class StreamflowCleaner(Cleaner):
-    def __init__(
-        self,
-        data_path,
-        window_size=14,
-        stride=1,
-        cutoff_frequency=0.035,
-        time_step=1.0,
-        iterations=3,
-        sampling_rate=1.0,
-        order=5,
-        cwt_row=2,
-        *args,
-        **kwargs,
-    ):
-        self.window_size = window_size
-        self.stride = stride
-        self.cutoff_frequency = cutoff_frequency
-        self.time_step = time_step
-        self.iterations = iterations
-        self.sampling_rate = sampling_rate
-        self.order = order
-        self.cwt_row = cwt_row
-        super().__init__(data_path, *args, **kwargs)
-
-    def data_balanced(self, origin_data, transform_data):
-        """
-        对一维流量数据进行总量平衡变换。
-        :origin_data: 原始一维流量数据。
-        :transform_data: 平滑转换后的一维流量数据。
-        """
-        # Calculate the flow balance factor and keep the total volume consistent
-        streamflow_data_before = np.sum(origin_data)
-        streamflow_data_after = np.sum(transform_data)
-        scaling_factor = streamflow_data_before / streamflow_data_after
-        balanced_data = transform_data * scaling_factor
-
-        print(f"Total flow (before smoothing): {streamflow_data_before}")
-        print(f"Total flow (after smoothing): {np.sum(balanced_data)}")
-        return balanced_data
-
-    def moving_average(self, streamflow_data):
-        """
-        对流量数据应用滑动平均进行平滑处理，并保持流量总量平衡。
-        :param streamflow_data: 输入的流量数据数组
-        :return: 平滑处理后的流量数据
-        """
-        # 将流量数据转换为 pandas Series
-        streamflow_series = streamflow_data
-
-        # 应用中心滑动平均
-        smoothed_series = streamflow_series.rolling(
-            window=self.window_size, center=True
-        ).mean()
-
-        # 填充由于滚动窗口导致的起始和结束的 NaN 值
-        smoothed_series.bfill(inplace=True)  # 用后面的值填充前面的 NaN
-        smoothed_series.ffill(inplace=True)  # 用前面的值填充后面的 NaN
-
-        # 将平滑数据中的负值置为0
-        smoothed_series[smoothed_series < 0] = 0
-
-        # 将结果转换回 numpy 数组
-        smoothed_data = smoothed_series
-
-        return self.data_balanced(streamflow_data, smoothed_data)
-
-    def kalman_filter(self, streamflow_data):
-        """
-        对流量数据应用卡尔曼滤波进行平滑处理，并保持流量总量平衡。
-        :param streamflow_data: 原始流量数据
-        """
-        A = np.array([[1]])
-        H = np.array([[1]])
-        Q = np.array([[0.01]])
-        R = np.array([[0.01]])
-        X_estimated = np.array([streamflow_data[0]])
-        P_estimated = np.eye(1) * 0.01
-        estimated_states = []
-
-        for measurement in streamflow_data:
-            # predict
-            X_predicted = A.dot(X_estimated)
-            P_predicted = A.dot(P_estimated).dot(A.T) + Q
-
-            # update
-            measurement_residual = measurement - H.dot(X_predicted)
-            S = H.dot(P_predicted).dot(H.T) + R
-            K = P_predicted.dot(H.T).dot(np.linalg.inv(S))  # kalman gain
-            X_estimated = X_predicted + K.dot(measurement_residual)
-            P_estimated = P_predicted - K.dot(H).dot(P_predicted)
-            estimated_states.append(X_estimated.item())
-
-        estimated_states = np.array(estimated_states)
-
-        # Apply non-negative constraints
-        estimated_states[estimated_states < 0] = 0
-        return self.data_balanced(streamflow_data, estimated_states)
-
-    def adjust_window(self, window):
-        if window.count() == 0:
-            return np.nan  # 如果窗口内全是NaN，则返回NaN
-        adjusted_window = window.copy()
-        return adjusted_window.mean()  # 返回窗口的平均值或其他适当的聚合值
-
-    def rolling_with_stride(self, df, func):
-        # 初始化与原始 DataFrame 长度相同的 NaN 序列
-        results = pd.Series(np.nan, index=df.index)
-        # 遍历数据，步长为stride
-        for i in range(0, len(df) - self.window_size + 1, self.stride):
-            window = df[i : i + self.window_size]
-            result = func(window)
-            # 计算窗口中心的索引
-            center_index = i + self.window_size // 2
-            # 仅在中心索引处填充结果
-            results.iloc[center_index] = result
-
-        return results
-
-    def moving_average_difference(self, streamflow_data):
-        """
-        对流量数据应用滑动平均差算法进行平滑处理，并保持流量总量平衡。
-        :window_size: 滑动窗口的大小
-        """
-        streamflow_data_series = pd.Series(streamflow_data)
-        # Calculate the forward moving average（MU）
-        forward_ma = streamflow_data_series.rolling(
-            window=self.window_size, min_periods=1
-        ).mean()
-
-        # Calculate the backward moving average（MD）
-        backward_ma = (
-            streamflow_data_series.iloc[::-1]
-            .rolling(window=self.window_size, min_periods=1)
-            .mean()
-            .iloc[::-1]
-        )
-
-        # Calculate the difference between the forward and backward sliding averages
-        ma_difference = abs(forward_ma - backward_ma)
-
-        # Apply non-negative constraints
-        ma_difference[ma_difference < 0] = 0
-        return self.data_balanced(streamflow_data, ma_difference.to_numpy())
-
-    def quadratic_function(self, x, a, b, c):
-        return a * x**2 + b * x + c
-
-    def robust_fitting(self, streamflow_data, k=1.5):
-        """
-        对流量数据应用抗差修正算法进行平滑处理，并保持流量总量平衡。
-        默认采用二次曲线进行拟合优化，该算法处理性能较差
-        """
-        time_steps = np.arange(len(streamflow_data))
-        params, _ = curve_fit(self.quadratic_function, time_steps, streamflow_data)
-        smoothed_streamflow = self.quadratic_function(time_steps, *params)
-        residuals = streamflow_data - smoothed_streamflow
-        m = len(streamflow_data)
-        sigma = np.sqrt(np.sum(residuals**2) / (m - 1))
-
-        for _ in range(10):
-            weights = np.where(
-                np.abs(residuals) <= k * sigma, 1, k * sigma / np.abs(residuals)
-            )
-            sigma = np.sqrt(np.sum(weights * residuals**2) / (m - 1))
-
-        corrected_streamflow = (
-            weights * streamflow_data + (1 - weights) * smoothed_streamflow
-        )
-        corrected_streamflow[corrected_streamflow < 0] = 0
-        return self.data_balanced(streamflow_data, corrected_streamflow)
-
-    def lowpass_filter(self, streamflow_data):
-        """
-        对一维流量数据应用调整后的低通滤波器。
-        :cutoff_frequency: 低通滤波器的截止频率。
-        :sampling_rate: 数据的采样率。
-        :order: 滤波器的阶数，默认为5。
-        """
-
-        def apply_low_pass_filter(signal, cutoff_frequency, sampling_rate, order=5):
-            nyquist_frequency = 0.5 * sampling_rate
-            normalized_cutoff = cutoff_frequency / nyquist_frequency
-            b, a = butter(order, normalized_cutoff, btype="low", analog=False)
-            filtered_signal = filtfilt(b, a, signal)
-            return filtered_signal
-
-        # Apply a low-pass filter
-        low_pass_filtered_signal = apply_low_pass_filter(
-            streamflow_data, self.cutoff_frequency, self.sampling_rate, self.order
-        )
-
-        # Apply non-negative constraints
-        low_pass_filtered_signal[low_pass_filtered_signal < 0] = 0
-
-        return self.data_balanced(streamflow_data, low_pass_filtered_signal)
-
-    def FFT(self, streamflow_data):
-        """
-        对流量数据进行迭代的傅里叶滤波处理，包括非负值调整和流量总量调整。
-        :cutoff_frequency: 傅里叶滤波的截止频率。
-        :time_step: 数据采样间隔。
-        :iterations: 迭代次数。
-        """
-        current_signal = streamflow_data.to_numpy().copy()
-
-        for _ in range(self.iterations):
-            n = len(current_signal)
-            yf = fft(current_signal)
-            xf = fftfreq(n, d=self.time_step)
-
-            # Applied frequency filtering
-            yf[np.abs(xf) > self.cutoff_frequency] = 0
-
-            # FFT and take the real part
-            filtered_signal = ifft(yf).real
-
-            # Apply non-negative constraints
-            filtered_signal[filtered_signal < 0] = 0
-
-            # Adjust the total flow to match the original flow
-            current_signal = self.data_balanced(streamflow_data, filtered_signal)
-
-        return current_signal
-
-    def wavelet(self, streamflow_data):
-        """
-        对一维流量数据进行小波变换分析前后拓展数据以减少边缘失真，然后调整总流量。
-        :cwt_row: 小波变换中使用的特定宽度。
-        """
-        streamflow_data_array = streamflow_data.to_numpy().copy()
-        # Expand the data edge by 24 lines on each side
-        extended_data = np.concatenate(
-            [
-                np.full(
-                    24, streamflow_data_array[0]
-                ),  # Expand the first 24 lines with the first element
-                streamflow_data,
-                np.full(
-                    24, streamflow_data_array[-1]
-                ),  # Expand the last 24 lines with the last element
-            ]
-        )
-        widths = np.arange(1, 31)
-        # Wavelet transform by Morlet wavelet directly
-        extended_cwt = cwt(extended_data, morlet, widths)
-        scaled_cwtmatr = np.abs(extended_cwt)
-
-        # Select a specific width for analysis (can be briefly understood as selecting a cutoff frequency)
-        cwt_row_extended = scaled_cwtmatr[self.cwt_row, :]
-
-        # Remove the extended part
-        adjusted_cwt_row = cwt_row_extended[24:-24]
-        adjusted_cwt_row[adjusted_cwt_row < 0] = 0
-        return self.data_balanced(streamflow_data, adjusted_cwt_row)
-
-    def adaptive_moving_average(
-        self,
-        streamflow_data,
-        threshold=100,
-        initial_window=168,
-        min_window=24,
-        max_window=360,
-        decay_factor=2,
-    ):
-        # 确保输入是 pandas Series
-        if not isinstance(streamflow_data, pd.Series):
-            raise ValueError("输入的数据必须是 pandas Series")
-
-        # 创建一个与原始数据长度相同的Series
-        smoothed_data = pd.Series(index=streamflow_data.index, dtype=float)
-        current_window = initial_window
-
-        for i, date in enumerate(streamflow_data.index):
-            # 获取当前处理节点的值
-            current_value = streamflow_data[date]
-
-            # 调整窗口大小
-            if current_value >= threshold:
-                current_window = max(min_window, current_window // decay_factor)
-            else:
-                current_window = min(max_window, current_window * decay_factor)
-
-            half_window = current_window // 2
-
-            # 计算窗口的起始和结束时间，处理边界情况
-            if i < half_window:
-                start_date = streamflow_data.index[0]
-            else:
-                start_date = date - pd.DateOffset(hours=half_window)
-
-            if i + half_window >= len(streamflow_data):
-                end_date = streamflow_data.index[-1]
-            else:
-                end_date = date + pd.DateOffset(hours=half_window)
-
-            # 计算窗口内的平均值
-            try:
-                window_data = streamflow_data[start_date:end_date]
-            except KeyError:
-                print("WTF")
-            smoothed_value = window_data.mean()
-            smoothed_data.loc[date] = smoothed_value
-
-        return smoothed_data
-
-    # 使用中心滑动平均处理洪水期间数据
-    def update_flood_periods_with_moving_average(
-        self, combined_df, flow_division, window_size=1, columns=None
-    ):
-        for _, row in flow_division.iterrows():
-            start_time = row["BEGINNING_FLOW"]
-            end_time = row["END_FLOW"]
-            mask = (combined_df.index >= start_time) & (combined_df.index <= end_time)
-            combined_df.loc[mask, columns] = self.moving_average(
-                combined_df.loc[mask, "INQ"], window_size
-            )
-        return combined_df
-
-    def EMA(self, streamflow_data):
-        # 访问时间序列
-        df = self.origin_df.copy()
-
-        # streamflow_data数据是插补过的
-        df["INQQ"] = np.nan
-        df["INQQ"] = streamflow_data
-
-        # 将 'TM' 列转换为日期时间格式
-        df["TM"] = pd.to_datetime(df["TM"], errors="coerce")
-
-        # 设置 'TM' 列为索引
-        df.set_index("TM", inplace=True)
-
-        # 去重索引，保留最后一个
-        df = df[~df.index.duplicated(keep="last")]
-
-        # 分段处理
-        # 计算不同窗口的滑动平均
-        df["INQA"] = self.adaptive_moving_average(
-            df["INQQ"], threshold=200, initial_window=24, min_window=6, max_window=48
-        )
-        df["INQB"] = self.adaptive_moving_average(
-            df["INQQ"], threshold=200, initial_window=168, min_window=48, max_window=336
-        )
-
-        # 创建新的INQQ列，根据月份替换数据
-        df["INQC"] = np.where(
-            df.index.month.isin([5, 6, 7, 8, 9, 10]), df["INQA"], df["INQB"]
-        )
-
-        # 处理场次洪水部分
-        # flow_division_path = 'biliu_flow_division.csv'  # 洪水场次数据文件路径
-        # flow_division = pd.read_csv(flow_division_path)
-        # flow_division['BEGINNING_FLOW'] = pd.to_datetime(flow_division['BEGINNING_FLOW'])
-        # flow_division['END_FLOW'] = pd.to_datetime(flow_division['END_FLOW'])
-
-        # 更新洪水期间的 INQ 数据
-        # df['INQD'] =df['INQC']
-        # df = self.update_flood_periods_with_moving_average(df, flow_division,columns = 'INQC', window_size=1)
-        # 合并滑动平均结果到 EMA 列
-        df["EMA"] = df["INQC"]
-
-        # 进行总量平衡
-        df["EMA"] = self.data_balanced(streamflow_data, df["EMA"])
-
-        return df["EMA"]
-
-    def ewma(self, streamflow):
-        # 计算 EWMA，指定平滑系数 alpha
-        ewma_data = streamflow.ewm(alpha=0.7).mean()
-        return self.data_balanced(streamflow, ewma_data)
-
-    def anomaly_process(self, methods=None):
-        super().anomaly_process(methods)
-        if "INQ" not in self.origin_df.columns:
-            if "q" in self.origin_df.columns:
-                self.origin_df = self.origin_df.rename(columns={"q": "INQ"})
-            elif "inq" in self.origin_df.columns:
-                self.origin_df = self.origin_df.rename(columns={"inq": "INQ"})
-        self.origin_df["INQ"] = pd.to_numeric(self.origin_df["INQ"], errors="coerce")
-        if "TM" not in self.origin_df.columns and "tm" in self.origin_df.columns:
-            self.origin_df = self.origin_df.rename(columns={"tm": "TM"})
-        self.origin_df["TM"] = pd.to_datetime(self.origin_df["TM"], errors="coerce")
-        self.origin_df = self.origin_df.sort_values(by="TM")
-        streamflow_data = self.origin_df["INQ"].copy()
-        # 使用插值填充缺失值
-        streamflow_data = streamflow_data.interpolate().fillna(0)
-
-        for method in methods:
-            if method == "moving_average":
-                streamflow_data = self.moving_average(streamflow_data=streamflow_data)
-            elif method == "kalman":
-                streamflow_data = self.kalman_filter(streamflow_data=streamflow_data)
-            elif method == "moving_average_diff":
-                streamflow_data = self.moving_average_difference(
-                    streamflow_data=streamflow_data
-                )
-            elif method == "robfit":
-                streamflow_data = self.robust_fitting(streamflow_data=streamflow_data)
-            elif method == "lowpass":
-                streamflow_data = self.lowpass_filter(streamflow_data=streamflow_data)
-            elif method == "FFT":
-                streamflow_data = self.FFT(streamflow_data=streamflow_data)
-            elif method == "wavelet":
-                streamflow_data = self.wavelet(streamflow_data=streamflow_data)
-            elif method == "rolling_mean":
-                streamflow_data = self.rolling_with_stride(
-                    df=streamflow_data, func=self.adjust_window
-                )
-                # 确保索引一致
-                streamflow_data.index = self.origin_df["INQ"].index
-                streamflow_data.fillna(self.origin_df["INQ"], inplace=True)
-            elif method == "EMA":
-                streamflow_data = self.EMA(streamflow_data=streamflow_data)
-                streamflow_data.index = self.origin_df["INQ"].index
-            elif method == "ewma":
-                streamflow_data = self.ewma(streamflow_data=streamflow_data)
-
-            else:
-                print("please check your method name")
-
-        # 新增一列进行存储
-        self.processed_df[methods[0]] = streamflow_data
-
-        # 去除提前插补的缺失值
-        self.processed_df[methods[0]][self.origin_df["INQ"].isna()] = np.nan
 
 
 logging.basicConfig(
@@ -469,43 +39,128 @@ class ReservoirInflowBacktrack:
         """
         self.data_folder = data_folder
         self.output_folder = output_folder
-        logging.info(
-            "Please make sure the data is in the right format. We are checking now ..."
-        )
-        self._check_file_format(data_folder)
+        self.data_source_description = self.set_data_source_describe()
+        self._check_file_format()
+        self.rsvr_info = self.read_rsvr_info()
 
-    def _check_file_format(self, folder_path):
+    def set_data_source_describe(self):
+        data_source_dir = self.data_folder
+        # we must have a file to provide the reservoir basic information
+        rsvr_idname_file = os.path.join(data_source_dir, "rsvr_stcd_stnm.xlsx")
+        rsvr_charact_waterlevel_file = os.path.join(
+            data_source_dir, "rsvr_charact_waterlevel.csv"
+        )
+        # all files in data_source_dir other than rsvr_idname_file and rsvr_charact_waterlevel_file
+        rsvr_inflow_files = [
+            os.path.join(data_source_dir, f)
+            for f in os.listdir(data_source_dir)
+            if f not in {"rsvr_stcd_stnm.xlsx", "rsvr_charact_waterlevel.csv"}
+        ]
+        # sort these files -- list
+        rsvr_inflow_files.sort()
+        return collections.OrderedDict(
+            RSVR_IDNAME_FILE=rsvr_idname_file,
+            RSVR_CHARACT_WATERLEVEL_FILE=rsvr_charact_waterlevel_file,
+            RSVR_INFLOW_FILES=rsvr_inflow_files,
+        )
+
+    def _check_file_format(self):
         """
         Check if the files in the given folder match the specified format.
-
-        Parameters
-        ----------
-        folder_path : str
-            The path of the folder to check.
 
         Raises
         ----------
         ValueError
             If a file name does not match the specified format, an error is raised with the specific file name.
         """
+        logging.info(
+            "Please make sure the data is in the right format. We are checking now ..."
+        )
+        rsvr_idname_file = self.data_source_description["RSVR_IDNAME_FILE"]
+        rsvr_charact_waterlevel_file = self.data_source_description[
+            "RSVR_CHARACT_WATERLEVEL_FILE"
+        ]
+        if not os.path.exists(rsvr_idname_file) or not os.path.exists(
+            rsvr_charact_waterlevel_file
+        ):
+            raise FileNotFoundError(
+                f"{rsvr_idname_file} or {rsvr_charact_waterlevel_file} not found. please provide them both. If you don't have them, please contact the data provider or the author of this code."
+            )
         pattern = re.compile(r".+_rsvr_data\.csv$")
-        for root, dirs, files in os.walk(folder_path):
-            for file in files:
-                if not pattern.match(file):
-                    raise ValueError(f"File name does not match the format: {file}")
-                file_path = os.path.join(root, file)
-                try:
-                    df = pd.read_csv(file_path)
-                except Exception as e:
-                    raise ValueError(f"Unable to read file: {file}, error: {e}") from e
-
-                if any(column not in df.columns for column in RSVR_TS_TABLE_COLS):
+        for file_path in self.data_source_description["RSVR_INFLOW_FILES"]:
+            if not pattern.match(file_path):
+                raise ValueError(f"File name does not match the format: {file_path}")
+            try:
+                df = pd.read_csv(file_path, dtype={"STCD": str})
+                # if all rows length is less than 2, we will not process this file and raise an error to inform the user delete it
+                # if most RZ values are NaN, we will not process this file and raise an error to inform the user delete it
+                # we think at least 72 values (maybe 3 days) should exist
+                if len(df) < 72 or df["RZ"].isna().sum() > len(df) - 72:
                     raise ValueError(
-                        f"File content does not match the format: {file}, missing columns: {set(RSVR_TS_TABLE_COLS) - set(df.columns)}"
+                        f"There are too few values in the file: {file_path}, hence it is useless. Please manually delete it."
                     )
+            except Exception as e:
+                raise ValueError(f"Unable to read file: {file_path}, error: {e}") from e
+
+            if any(column not in df.columns for column in RSVR_TS_TABLE_COLS):
+                raise ValueError(
+                    f"File content does not match the format: {file_path}, missing columns: {set(RSVR_TS_TABLE_COLS) - set(df.columns)}"
+                )
         logging.info("All files are in the right format.")
 
-    def _rsvr_rz_rolling_window_abnormal_rm(self, df, window_size=5):
+    def read_rsvr_info(self):
+        rsvr_idname_file = self.data_source_description["RSVR_IDNAME_FILE"]
+        rsvr_info = pd.read_excel(rsvr_idname_file, dtype={"STCD": str})
+        # check if it has two columns: STCD and STNM
+        if "STCD" not in rsvr_info.columns or "STNM" not in rsvr_info.columns:
+            raise ValueError(
+                "rsvr_stcd_stnm.xlsx should have two columns: STCD and STNM"
+            )
+        # sort by STCD, and reindex
+        rsvr_info = rsvr_info.sort_values(by="STCD").reset_index(drop=True)
+        # read the reservoir characteristic water level data
+        rsvr_charact_waterlevel_file = self.data_source_description[
+            "RSVR_CHARACT_WATERLEVEL_FILE"
+        ]
+        rsvr_charact_waterlevel = pd.read_csv(
+            rsvr_charact_waterlevel_file, dtype={"STCD": str}
+        )
+        # find the NORMZ, DDZ, ... in rsvr_charact_waterlevel of STCD in rsvr_info
+        rsvr_info = rsvr_info.merge(rsvr_charact_waterlevel, on="STCD", how="left")
+        # if a rsvr has no inflow file, we will remove it and not process it
+        rsvr_info = rsvr_info[
+            rsvr_info["STCD"].isin(
+                [
+                    os.path.basename(f).split("_")[0]
+                    for f in self.data_source_description["RSVR_INFLOW_FILES"]
+                ]
+            )
+        ]
+        # assert if STCD is sorted
+        assert rsvr_info["STCD"].tolist() == sorted(rsvr_info["STCD"].tolist())
+        logging.info(
+            "Reservoir information read successfully. Note we only process the reservoirs with inflow data."
+        )
+        # update the rsvr inflow files, later we only process these reservoirs
+        rsvr_info["RSVR_INFLOW_FILES"] = [
+            os.path.join(self.data_folder, f"{stcd}_rsvr_data.csv")
+            for stcd in rsvr_info["STCD"]
+        ]
+        # check if each STCD row has same name in RSVR_INFLOW_FILES
+        assert all(
+            rsvr_info.loc[i, "STCD"] in rsvr_info.loc[i, "RSVR_INFLOW_FILES"]
+            for i in rsvr_info.index
+        )
+        # Assert that used waterlevel and storage columns are numeric
+        for col in ["DDZ", "NORMZ", "DSFLZ", "DDCP", "TTCP"]:
+            assert np.issubdtype(
+                rsvr_info[col].dtype, np.number
+            ), f"Column {col} is not of numeric type"
+        return rsvr_info
+
+    def _rsvr_rolling_window_abrupt_abnormal_rm(
+        self, df, var_col="RZ", threshold=50, window_size=5
+    ):
         """
         Detect and remove abnormal reservoir water level data using a rolling window.
 
@@ -513,6 +168,10 @@ class ReservoirInflowBacktrack:
         ----------
         df : pd.DataFrame
             The DataFrame containing the reservoir data.
+        var_col : str
+            the column to check, by default "RZ"
+        threshold: float
+            the threshold to remove the abnormal data
         window_size : int
             The size of the rolling window.
 
@@ -522,35 +181,36 @@ class ReservoirInflowBacktrack:
             The DataFrame with an additional column indicating abnormal data.
         """
 
-        # 计算滑动窗口的中位数
-        df["median"] = df["RZ"].rolling(window=window_size, center=True).median()
-
-        # 计算当前值与中位数的差异
-        df["diff_median"] = abs(df["RZ"] - df["median"])
-
-        # 如果差异超过阈值，则标记为异常
-        threshold = 50
+        # Calculate the median of the rolling window
+        df["median"] = df[var_col].rolling(window=window_size, center=True).median()
+        # Calculate the difference between the current value and the median
+        df["diff_median"] = abs(df[var_col] - df["median"])
+        # Mark as abnormal if the difference exceeds the threshold
         df["set_nan"] = df["diff_median"] > threshold
-
-        # 将异常值设置为 NaN
-        df.loc[df["set_nan"], "RZ"] = np.nan
+        # Set abnormal values to NaN
+        df.loc[df["set_nan"], var_col] = np.nan
         return df
 
-    def _rsvr_rz_conservative_abnormal_rm(self, df):
+    def _rsvr_conservative_abrupt_abnormal_rm(self, df, var_col="RZ", threshold=10):
         """TODO: this method is not right, need to be fixed
 
         Parameters
         ----------
-        data : _type_
-            _description_
+        df : pd.DataFrame
+            the data
+        var_col : str
+            the column to check, by default "RZ"
+        threshold: float
+            the threshold to remove the abnormal data
         """
-        df["diff_prev"] = abs(df["RZ"] - df["RZ"].shift(1))
+        df["diff_prev"] = abs(df[var_col] - df[var_col].shift(1))
         # 计算与后一行的差异
-        df["diff_next"] = abs(df["RZ"] - df["RZ"].shift(-1))
-        # 标记需要设置为 NaN 的行
-        df["set_nan"] = (df["diff_prev"] > 50) | (df["diff_next"] > 50)
-        # 如果与前一行或后一行的差异超过50，则设置为 NaN
-        df.loc[df["set_nan"], "RZ"] = np.nan
+        df["diff_next"] = abs(df[var_col] - df[var_col].shift(-1))
+        # 标记需要设置为 NaN 的行, | is too strict and may delete some normal data; & is too loose and may keep some abnormal data
+        # df["set_nan"] = (df["diff_prev"] > threshold) | (df["diff_next"] > threshold)
+        df["set_nan"] = (df["diff_prev"] > threshold) & (df["diff_next"] > threshold)
+        # 如果与前一行和后一行的差异超过threshold，则设置为 NaN
+        df.loc[df["set_nan"], var_col] = np.nan
         return df
 
     def _save_fitted_zw_curve(self, df, quadratic_fit_curve_coeff, output_folder):
@@ -566,6 +226,7 @@ class ReservoirInflowBacktrack:
         output_folder : _type_
             _description_
         """
+        plt.figure(figsize=(14, 7))
         plt.scatter(df["RZ"], df["W"], label="Data Points")
         rz_range = np.linspace(df["RZ"].min(), df["RZ"].max(), 100)
         w_fit = (
@@ -581,67 +242,167 @@ class ReservoirInflowBacktrack:
         plot_path = os.path.join(output_folder, "fit_zw_curve.png")
         plt.savefig(plot_path)
 
-    def _plot_w_clean(self, df, original_file, output_folder):
+    def _plot_var_before_after_clean(
+        self,
+        df_origin,
+        df,
+        plot_column,
+        plot_path,
+        label_orginal="Original Reservoir Storage",
+        label_cleaned="Cleaned Reservoir Storage",
+        ylab="Reservoir Storage (10^6 m^3)",
+        title="Reservoir Storage Analysis with Outliers Removed",
+    ):
         """Plot the original and cleaned Reservoir Storage data for comparison
 
         Parameters
         ----------
+        df_origin : str
+            the original data
         df : pd.DataFrame
             the cleaned data
-        original_file : str
-            the path to the original file
-        output_folder : str
+        plot_path : str
             where to save the plot
+        plot_column: str
+            the column to show; note same name for df and df_origin
         """
         plt.figure(figsize=(14, 7))
 
         # 绘制原始数据
-        original_data = pd.read_csv(original_file)
         plt.plot(
-            pd.to_datetime(original_data["TM"]),
-            original_data["W"],
-            label="Original Reservoir Storage",
+            df_origin.index,
+            df_origin[plot_column],
+            label=label_orginal,
             color="blue",
             linestyle="--",
         )
 
         # 绘制清洗后的数据
-        plt.plot(
-            pd.to_datetime(df["TM"]),
-            df["W"],
-            label="Cleaned Reservoir Storage",
+        plt.scatter(
+            df.index,
+            df[plot_column],
+            label=label_cleaned,
             color="red",
         )
 
         plt.xlabel("Time")
-        plt.ylabel("Reservoir Storage (10^6 m^3)")
-        plt.title("Reservoir Storage Analysis with Outliers Removed")
+        plt.ylabel(ylab)
+        plt.title(title)
         plt.legend()
 
         # 保存图像到与CSV文件相同的目录
-        plot_path = os.path.join(output_folder, "rsvr_w_clean.png")
         plt.savefig(plot_path)
 
-    def clean_w(self, file_path, output_folder):
+    def _rsvr_valuerange_abnormal_rm(self, df, var_col, range):
+        """Remove abnormal reservoir data based on a range of values
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            _description_
+        var_col : str
+            the column to check
+        range : list
+            [lower_bound, upper_bound]
+
+        Returns
+        -------
+        pd.DataFrame
+            the cleaned data
+        """
+        lower_bound, upper_bound = range
+
+        if lower_bound is not None and not np.isnan(lower_bound):
+            df["set_nan_lower"] = df[var_col] < lower_bound
+        else:
+            df["set_nan_lower"] = False
+
+        if upper_bound is not None and not np.isnan(upper_bound):
+            df["set_nan_upper"] = df[var_col] > upper_bound
+        else:
+            df["set_nan_upper"] = False
+
+        df["set_nan"] = df["set_nan_lower"] | df["set_nan_upper"]
+        df.loc[df["set_nan"], var_col] = np.nan
+
+        # 删除临时列
+        df = df.drop(columns=["set_nan_lower", "set_nan_upper"])
+        return df
+
+    def clean_w(self, rsvr_id, file_path, output_folder, fit_method="quadratic"):
         """
         Remove abnormal reservoir capacity data
 
         Parameters
         ----------
+        rsvr_id : str
+            The ID of the reservoir
         file_path : str
             Path to the input file
         output_folder : str
             Path to the output folder
+        fit_method : str, optional
+            z-w curve fitting method, by default "quadratic"
+            TODO: MORE METHODS need to be supported; power is also need to be debugged
 
         Returns
         -------
         str
             Path to the cleaned data file
         """
-        data = pd.read_csv(file_path)
+        data = self._read_rsvrinflow_csv_file(file_path)
+
+        rsvr_info = self.rsvr_info[self.rsvr_info["STCD"] == rsvr_id]
+
+        def _not_reasonable_value(the_value):
+            return the_value is None or the_value < 0 or np.isnan(the_value)
 
         # remove abnormal reservoir water level data
-        data = self._rsvr_rz_conservative_abnormal_rm(data)
+        rsvr_dead_waterlevel = rsvr_info["DDZ"].values[0]
+        rsvr_normal_waterlevel = rsvr_info["NORMZ"].values[0]
+        rsvr_desighflood_waterlevel = rsvr_info["DSFLZ"].values[0]
+        rz_threshold = rsvr_normal_waterlevel - rsvr_dead_waterlevel
+        if _not_reasonable_value(rsvr_normal_waterlevel) and not _not_reasonable_value(
+            rsvr_desighflood_waterlevel
+        ):
+            rz_threshold = rsvr_desighflood_waterlevel - rsvr_dead_waterlevel
+        if _not_reasonable_value(rz_threshold):
+            rz_threshold = 50
+        if _not_reasonable_value(rsvr_dead_waterlevel):
+            # to avoid negative and very small values
+            rsvr_dead_waterlevel = 1
+        if _not_reasonable_value(rsvr_desighflood_waterlevel):
+            # no such level data, so we have to set it with normal level
+            rsvr_desighflood_waterlevel = rsvr_normal_waterlevel
+        rz_range = [rsvr_dead_waterlevel, rsvr_desighflood_waterlevel]
+        data = self._rsvr_conservative_abrupt_abnormal_rm(
+            data, "RZ", threshold=rz_threshold
+        )
+        data = self._rsvr_valuerange_abnormal_rm(data, "RZ", range=rz_range)
+
+        # remove abnormal reservoir storage data
+        rsvr_dead_storage = rsvr_info["DDCP"].values[0]
+        rsvr_total_storage = rsvr_info["TTCP"].values[0]
+        w_threshold = rsvr_total_storage - rsvr_dead_storage
+        if _not_reasonable_value(w_threshold):
+            # 100 means 0.1 billion m^3 difference between the current value and the median
+            w_threshold = 100
+        if _not_reasonable_value(rsvr_dead_storage):
+            # to avoid negative and very small values
+            rsvr_dead_storage = 0.001
+        w_range = [rsvr_dead_storage, rsvr_total_storage]
+        data = self._rsvr_conservative_abrupt_abnormal_rm(
+            data, "W", threshold=w_threshold
+        )
+        data = self._rsvr_valuerange_abnormal_rm(data, "W", range=w_range)
+
+        # set valuerange abnormal rm for outflow, outflow cannot be negative
+        data = self._rsvr_valuerange_abnormal_rm(data, "OTQ", range=[0, None])
+
+        # for row of ["RZ", "W", "OTQ"], if any value is NaN meaning set_nan is True, we set both "RZ", "W", "OTQ" in the row to NaN
+        data.loc[data["set_nan"], "RZ"] = np.nan
+        data.loc[data["set_nan"], "W"] = np.nan
+        data.loc[data["set_nan"], "OTQ"] = np.nan
 
         # 输出被设置为 NaN 的行
         logging.debug(data[data["set_nan"]])
@@ -650,31 +411,32 @@ class ReservoirInflowBacktrack:
         data[data["set_nan"]].to_csv(
             os.path.join(output_folder, "库容异常的数据行.csv"), index=False
         )
-        try:
-            # 拟合库容曲线
-            # 只提取 RZ 和 W 列中同时非 NaN 的行
-            valid_data = data.dropna(subset=["RZ", "W"])
-
-            # 执行二次拟合，计算 RZ 和 W 之间的关系
-            coefficients = np.polyfit(valid_data["RZ"], valid_data["W"], 2)
-            # Plot RZ and W points along with the fitted curve
-            self._save_fitted_zw_curve(valid_data, coefficients, output_folder)
-            # 根据拟合的多项式关系更新 W 列
-            data["W"] = (
-                coefficients[0] * data["RZ"] ** 2
-                + coefficients[1] * data["RZ"]
-                + coefficients[2]
-            )
-        except np.linalg.LinAlgError:
-            print("SVD did not converge during polynomial fitting, skipping this step.")
+        valid_data = data.dropna(subset=["RZ", "W"])
+        valid_data, coefficients = fit_zw_curve(
+            valid_data, x_col="RZ", y_col="W", method=fit_method
+        )
+        logging.info(
+            f"For {rsvr_id}, removed {len(data.dropna(subset=['RZ', 'W'])) - len(valid_data)} outliers for z-w curve fitting."
+        )
+        # Plot RZ and W points along with the fitted curve
+        self._save_fitted_zw_curve(data, coefficients, output_folder)
+        # 根据拟合的多项式关系更新 W 列
+        if fit_method == "quadratic":
+            data["W"] = np.polyval(coefficients, data["RZ"])
+        elif fit_method == "power":
+            data["W"] = _func_abcd_power(data["RZ"], *coefficients)
+        else:
+            raise ValueError(f"Unsupported fit method: {fit_method}")
 
         cleaned_path = os.path.join(output_folder, "去除库容异常的数据.csv")
-        data.to_csv(cleaned_path)
-
-        self._plot_w_clean(data, file_path, output_folder)
+        data["TM"] = data.index.strftime("%Y-%m-%d %H:%M:%S")
+        data.to_csv(cleaned_path, index=False)
+        original_data = self._read_rsvrinflow_csv_file(file_path)
+        plot_path = os.path.join(output_folder, "rsvr_w_clean.png")
+        self._plot_var_before_after_clean(original_data, data, "W", plot_path)
         return cleaned_path
 
-    def back_calculation(self, clean_w_path, original_file, output_folder):
+    def back_calculation(self, rsvr_id, clean_w_path, original_file, output_folder):
         """Back-calculate inflow from reservoir storage data
         NOTE: each time has three columns: I Q W -- I is the inflow, Q is the outflow, W is the reservoir storage
         Generally, in sql database, a time means the end of previous time period
@@ -686,6 +448,8 @@ class ReservoirInflowBacktrack:
 
         Parameters
         ----------
+        rsvr_id : str
+            The ID of the reservoir
         data_path : str
             the path to the cleaned_w_data file
         original_file: str
@@ -695,43 +459,72 @@ class ReservoirInflowBacktrack:
 
         Returns
         -------
-        _type_
-            _description_
+        str
+            the path to the result file
         """
-        data = pd.read_csv(clean_w_path)
-        # 将时间列转换为日期时间格式
-        data["TM"] = pd.to_datetime(data["TM"])
+        data = self._read_rsvrinflow_csv_file(clean_w_path)
         # diff means the difference between this time and the previous time -- the first will be 0 as fillna(0)
-        data["Time_Diff"] = data["TM"].diff().dt.total_seconds().fillna(0)
+        data["Time_Diff"] = data.index.diff().total_seconds().fillna(0)
         data["INQ_ACC"] = data["OTQ"] + (10**6 * (data["W"].diff() / data["Time_Diff"]))
         data["INQ"] = data["INQ_ACC"]
         # data["Month"] = data["TM"].dt.month
         logging.debug(data)
-        back_calc_path = os.path.join(
-            output_folder, original_file[:-4] + "_径流直接反推数据.csv"
+        back_calc_path = os.path.join(output_folder, f"{rsvr_id}_径流直接反推数据.csv")
+        # index trans to column
+        data["TM"] = data.index.strftime("%Y-%m-%d %H:%M:%S")
+        data[RSVR_TS_TABLE_COLS].to_csv(back_calc_path, index=False)
+        # plot the inflow data and compare with the original data
+        original_data = self._read_rsvrinflow_csv_file(original_file)
+        self._plot_var_before_after_clean(
+            original_data,
+            data,
+            "INQ",
+            os.path.join(output_folder, "inflow_comparison.png"),
+            label_orginal="Original Inflow",
+            label_cleaned="Back-calculated Inflow",
+            ylab="Inflow (m^3/s)",
+            title="Inflow Analysis with Back-calculation",
         )
-        data[RSVR_TS_TABLE_COLS].to_csv(back_calc_path)
         return back_calc_path
 
-    def delete_nan_inq(
+    def delete_negative_inq(
         self,
-        data_path,
-        file,
+        rsvr_id,
+        inflow_data_path,
+        original_file,
         output_folder,
         negative_deal_window=7,
         negative_deal_stride=4,
     ):
-        # 读取CSV文件到DataFrame
-        df = pd.read_csv(data_path)
-        # 将'TM'列转换为日期时间格式并设置为索引
-        df["TM"] = pd.to_datetime(df["TM"])
+        """remove negative inflow values with a rolling window
+        the negative value will be adjusted to positvie ones to make the total inflow consistent
+        for example,  1, -1, 1, -1 will be adjusted to 0, 0, 0, 0 so that wate balance is kept
+        but note that as the window has stride, maybe the final few values will not be adjusted
 
-        # 设置调整后的时间为索引
-        df = df.set_index("TM")
+        Parameters
+        ----------
+        rsvr_id : str
+            the id of the reservoir
+        inflow_data_path : str
+            the data file after back_calculation
+        original_file : str
+            the original file
+        output_folder : str
+            where to save the data
+        negative_deal_window : int, optional
+            the window to deal with negative values, by default 7
+        negative_deal_stride : int, optional
+            the stride of window, by default 4
+
+        Returns
+        -------
+        str
+            the path to the result file
+        """
+        # 读取CSV文件到DataFrame
+        df = self._read_rsvrinflow_csv_file(inflow_data_path)
 
         logging.debug(df["INQ"].sum())
-        # Ensure the 'INQ' column is numeric. If a value cannot be parsed as a number, the errors="coerce" parameter will set it to NaN (i.e., missing value)
-        df["INQ"] = pd.to_numeric(df["INQ"], errors="coerce")
 
         def adjust_window(window):
             """adjust window for delete negative inflow values
@@ -787,91 +580,241 @@ class ReservoirInflowBacktrack:
             stride=negative_deal_stride,
             func=adjust_window,
         )
-        path = os.path.join(
-            output_folder, file[:-4] + "_水量平衡后的日尺度反推数据.csv"
-        )
+        path = os.path.join(output_folder, f"{rsvr_id}_水量平衡后的日尺度反推数据.csv")
 
         df["TM"] = df.index.strftime("%Y-%m-%d %H:%M:%S")
         df[RSVR_TS_TABLE_COLS].to_csv(path, index=False)
+        # plot the inflow data and compare with the original data
+        original_data = self._read_rsvrinflow_csv_file(original_file)
+        self._plot_var_before_after_clean(
+            original_data,
+            df,
+            "INQ",
+            os.path.join(output_folder, "inflow_comparison_after_negative.png"),
+            label_orginal="Original Inflow",
+            label_cleaned="Inflow After Negative Removal",
+            ylab="Inflow (m^3/s)",
+            title="Inflow Analysis with Negative Removal",
+        )
         return path
 
-    def insert_inq(self, data_path, file, output_folder):
-        # 读取CSV文件到DataFrame
-        df = pd.read_csv(data_path)
+    def _read_rsvrinflow_csv_file(self, the_csv_data_path):
+        """read reservoir inflow data from csv file
+        set TM datetime and make it index and check if the columns are numeric
+
+        Parameters
+        ----------
+        the_csv_data_path : str
+            path to the csv file
+
+        Returns
+        -------
+        pd.DataFrame
+            the data
+        """
+        df = pd.read_csv(the_csv_data_path, dtype={"STCD": str})
+        for col in ["RZ", "INQ", "W", "OTQ"]:
+            assert np.issubdtype(
+                df[col].dtype, np.number
+            ), f"Column {col} is not of numeric type"
         # 将'TM'列转换为日期时间格式并设置为索引
         df["TM"] = pd.to_datetime(df["TM"])
+
         # 设置调整后的时间为索引
         df = df.set_index("TM")
-        # 确保'INQ'列是数值类型
-        df["INQ"] = pd.to_numeric(df["INQ"], errors="coerce")
+        return df
+
+    def insert_inq(self, rsvr_id, inflow_data_path, original_file, output_folder):
+        """make inflow data as hourly data as original data is not strictly hourly data
+        and insert inq with linear interpolation
+
+        Parameters
+        ----------
+        rsvr_id : str
+            the id of the reservoir
+        inflow_data_path : str
+            the data file after delete negative inflow values
+        original_file : str
+            the original file
+        output_folder : str
+            where to save the data
+
+        Returns
+        -------
+        str
+            the path to the result file
+        """
+        # 读取CSV文件到DataFrame
+        _df = self._read_rsvrinflow_csv_file(inflow_data_path)
 
         # 生成从开始日期到结束日期的完整时间序列，按小时
-        date_range = pd.date_range(start=df.index.min(), end=df.index.max(), freq="h")
+        date_range = pd.date_range(start=_df.index.min(), end=_df.index.max(), freq="h")
         complete_df = pd.DataFrame(index=date_range)
 
-        # 将原始数据与完整时间序列表格全连接
-        df = complete_df.join(df, how="outer")
+        # Perform a full outer join of the original data with the complete time series table, so that some sub-hourly data could still be saved here
+        df_join = complete_df.join(_df, how="outer")
+
+        # deal with numeric columns
+        numeric_cols = df_join.select_dtypes(include=[np.number]).columns
+        numeric_df = df_join[numeric_cols].resample("h").mean()
+
+        # deal with non-numeric columns
+        non_numeric_cols = df_join.select_dtypes(exclude=[np.number]).columns
+        non_numeric_df = df_join[non_numeric_cols].resample("H").first()
+
+        # 合并数值列和非数值列
+        df = pd.concat([numeric_df, non_numeric_df], axis=1)
+
+        # Ensure INQ values are not less than 0 -- mainly for final few values as previous steps may not adjust them
+        df["INQ"] = df["INQ"].where(df["INQ"] >= 0, np.nan)
 
         # 使用线性插值
         # 插值前检查连续缺失是否超过7天（7*24小时）
-        def linear_interpolate(df, column="INQ", threshold=168):
-            data = df[column]
-            start_index = None
+        df_ = linear_interpolate_wthresh(df)
 
-            for i in range(len(data)):
-                if not pd.isna(data.iloc[i]):
-                    if start_index is None:
-                        start_index = i
-                    else:
-                        # 检查当前点和上一个有数据点之间的间隔
-                        if i - start_index - 1 < threshold:
-                            # 如果间隔小于阈值，进行插值
-                            data.iloc[start_index : i + 1] = data.iloc[
-                                start_index : i + 1
-                            ].interpolate()
-                        # 更新起始点为当前点
-                        start_index = i
+        result_path = os.path.join(output_folder, f"{rsvr_id}_rsvr_data.csv")
 
-            df[column] = data
-            return df
-
-        df = linear_interpolate(df)
-
-        # 确保INQ值不小于0
-        df["INQ"] = df["INQ"].clip(lower=0)
-
-        result_path = os.path.join(output_folder, file)
-
-        print("水量平衡的小时尺度滑动平均反推数据：输出行名称")
-        print(df.columns)
-        df["TM"] = df.index.strftime("%Y-%m-%d %H:%M:%S")
-        df["STCD"] = df["STCD"].dropna().iloc[0]
-        # 最后一步转换为整数再转换为字符串
-        df["STCD"] = df["STCD"].astype(int).astype(str)
-        print(df["STCD"])
-        df[RSVR_TS_TABLE_COLS].to_csv(result_path, index=False)
-        df[RSVR_TS_TABLE_COLS].to_csv(
-            os.path.join("/ftproot/basins-origin/basins-streamflow-with BSAD/", file),
-            index=False,
+        logging.debug("水量平衡的小时尺度滑动平均反推数据：输出行名称")
+        logging.debug(df_.columns)
+        df_["TM"] = df_.index.strftime("%Y-%m-%d %H:%M:%S")
+        df_[RSVR_TS_TABLE_COLS].to_csv(result_path, index=False)
+        # plot the inflow data and compare with the original data
+        original_data = self._read_rsvrinflow_csv_file(original_file)
+        self._plot_var_before_after_clean(
+            original_data,
+            df_,
+            "INQ",
+            os.path.join(output_folder, "inflow_comparison_after_interpolation.png"),
+            label_orginal="Original Inflow",
+            label_cleaned="Inflow After Interpolation",
+            ylab="Inflow (m^3/s)",
+            title="Inflow Analysis with Interpolation",
         )
-
         return result_path
 
     def process_backtrack(self):
-        for file in tqdm(os.listdir(self.data_folder)):
-            file_path = os.path.join(self.data_folder, file)
-            output_folder = os.path.join(self.output_folder, file[:-4])
-            if not os.path.exists(output_folder):
-                os.makedirs(output_folder)
+        rsvr_info = self.rsvr_info
+        # save info file into output folder so that later we can simply read cleaned data
+        rsvr_info.to_csv(os.path.join(self.output_folder, "rsvr_info.csv"), index=False)
+        for i, rsvr_id in tqdm(enumerate(rsvr_info["STCD"].values)):
+            file_path = rsvr_info["RSVR_INFLOW_FILES"].iloc[i]
             # Process each file step by step
-            # 去除库容异常
-            cleaned_data_file = self.clean_w(file_path, output_folder)
-            # 公式计算反推
-            back_data_file = self.back_calculation(
-                cleaned_data_file, file, output_folder
-            )
-            # 去除反推异常值
-            nonan_data = self.delete_nan_inq(back_data_file, file, output_folder)
-            # 插值平衡
-            insert_data = self.insert_inq(nonan_data, file, output_folder)
-            # 绘图
+            self.process_backtract_1rsvr(rsvr_id, file_path)
+
+    def process_backtract_1rsvr(self, rsvr_id, file_path):
+        output_folder = os.path.join(self.output_folder, rsvr_id)
+        if not os.path.exists(output_folder):
+            os.makedirs(output_folder)
+        cleaned_data_file = self.clean_w(rsvr_id, file_path, output_folder)
+        # 公式计算反推
+        back_data_file = self.back_calculation(
+            rsvr_id, cleaned_data_file, file_path, output_folder
+        )
+        # 去除反推异常值
+        nonegative_data_file = self.delete_negative_inq(
+            rsvr_id, back_data_file, file_path, output_folder
+        )
+        # 插值平衡
+        self.insert_inq(rsvr_id, nonegative_data_file, file_path, output_folder)
+        # release memory for plot after each basin
+        plt.close("all")
+
+
+def linear_interpolate_wthresh(df, column="INQ", threshold=168):
+    """linear interpolation for inflow data with a threshod
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        pandas DataFrame containing the inflow data
+    column : str, optional
+        the chosen column, by default "INQ"
+    threshold : int, optional
+        under this threshold we interpolate, by default 168,
+        if the missing data is larger than 7 days, we didn't interpolate it
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with interpolated values
+    """
+    # Calculate the gap lengths of missing values
+    mask = df[column].isna()
+    gap_lengths = []
+    gap_length = 0
+    for is_na in mask:
+        if is_na:
+            gap_length += 1
+        else:
+            if gap_length > 0:
+                gap_lengths.extend([gap_length] * gap_length)
+                gap_length = 0
+            gap_lengths.append(0)
+    if gap_length > 0:
+        gap_lengths.extend([gap_length] * gap_length)
+
+    # Convert gap lengths to Series
+    gap_lengths = pd.Series(gap_lengths, index=df.index)
+    # Only interpolate missing values with gaps less than the threshold, and set limit_direction to 'both' to ensure extrapolation
+    df.loc[mask & (gap_lengths <= threshold), column] = df[column].interpolate(
+        limit_direction="both"
+    )
+
+    return df
+
+
+def _func_abcd_power(x, a, b, c, d):
+    return a * x**b + c * x + d
+
+
+def fit_zw_curve(df, x_col, y_col, method="quadratic"):
+    """Fit a curve to the data using the specified method.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The data
+    x_col : str
+        The x column to fit, such as "RZ"
+    y_col : str
+        The y column to fit, such as "W"
+    method : str, optional
+        The fitting method, either "quadratic" or "power", by default "quadratic"
+
+    Returns
+    -------
+    list
+        The filtered df and coefficients of the fit curve
+    """
+
+    def calculate_residuals(df, x_col, y_col, coefficients, func=None):
+        if func:
+            fitted_values = func(df[x_col], *coefficients)
+        else:
+            fitted_values = np.polyval(coefficients, df[x_col])
+        residuals = df[y_col] - fitted_values
+        return residuals
+
+    def filter_outliers(df, residuals, threshold=3.0):
+        std_threshold = threshold * np.std(residuals)
+        return df[np.abs(residuals) < std_threshold]
+
+    if method == "quadratic":
+        coefficients = np.polyfit(df[x_col], df[y_col], 2)
+        residuals = calculate_residuals(df, x_col, y_col, coefficients)
+        df_ = filter_outliers(df, residuals)
+        coefficients = np.polyfit(df_[x_col], df_[y_col], 2)
+        return df_, coefficients
+
+    elif method == "power":
+        param_bounds = ([-np.inf, 0, -np.inf, -np.inf], [np.inf, 2, np.inf, np.inf])
+        popt, _ = curve_fit(_func_abcd_power, df[x_col], df[y_col], bounds=param_bounds)
+        residuals = calculate_residuals(df, x_col, y_col, popt, _func_abcd_power)
+        df_ = filter_outliers(df, residuals)
+        popt, _ = curve_fit(
+            _func_abcd_power, df_[x_col], df_[y_col], bounds=param_bounds
+        )
+        return df_, popt
+
+    else:
+        raise ValueError("Invalid method. Choose either 'quadratic' or 'power'.")

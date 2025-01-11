@@ -2,21 +2,18 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-22 13:38:07
 LastEditors: Wenyu Ouyang
-LastEditTime: 2025-01-07 15:30:00
+LastEditTime: 2025-01-11 08:43:49
 FilePath: \hydrodatasource\tests\test_rsvr_inflow_cleaner.py
 Description: Test funcs for streamflow data cleaning
 """
 
 import os
-import glob
 import numpy as np
-from tqdm import tqdm
 import pandas as pd
 import pytest
-from hydrodatasource.cleaner.rsvr_inflow_cleaner import ReservoirInflowBacktrack
-
 from hydrodatasource.cleaner.rsvr_inflow_cleaner import (
-    StreamflowCleaner,
+    ReservoirInflowBacktrack,
+    linear_interpolate_wthresh,
 )
 
 
@@ -28,25 +25,57 @@ def setup_test_environment(tmpdir):
 
     # Create a sample CSV file with test data
     test_data = {
-        "TM": pd.date_range(start="2023-01-01", periods=10, freq="D"),
-        "RZ": [100, 150, 300, 350, 400, 450, 500, 550, 600, 650],
-        "W": [10, 15, 20, 25, 30, 35, 40, 45, 50, 55],
+        "TM": pd.date_range(
+            start="2023-01-01", periods=100, freq="H"
+        ),  # Ensure enough rows
+        "RZ": [100, 150, 300, 350, 400, 450, 500, 550, 600, 650]
+        * 10,  # Ensure enough non-NaN values
+        "W": [10, 15, 20, 25, 30, 35, 40, 45, 50, 55] * 10,
+        "MSQMT": [0] * 100,
+        "STCD": ["001"] * 100,
+        "OTQ": [5, 10, 15, 20, 25, 30, 35, 40, 45, -50] * 10,
+        "BLRZ": [0] * 100,
+        "RWCHRCD": [0] * 100,
+        "INQ": [10, 12.5, np.nan, np.nan, 20, 25, 30, np.nan, 35, 40] * 10,
+        "RWPTN": [0] * 100,
+        "INQDR": [0] * 100,
     }
     test_df = pd.DataFrame(test_data)
-    input_file = os.path.join(input_dir, "test_data.csv")
+    input_file = os.path.join(input_dir, "001_rsvr_data.csv")
     test_df.to_csv(input_file, index=False)
 
-    return input_file, output_dir
+    # Create dummy reservoir info files
+    rsvr_idname_file = os.path.join(input_dir, "rsvr_stcd_stnm.xlsx")
+    rsvr_charact_waterlevel_file = os.path.join(
+        input_dir, "rsvr_charact_waterlevel.csv"
+    )
+    pd.DataFrame({"STCD": ["001"], "STNM": ["Reservoir1"]}).to_excel(
+        rsvr_idname_file, index=False
+    )
+    pd.DataFrame(
+        {
+            "STCD": ["001"],
+            "NORMZ": [100],
+            "DDZ": [50],
+            "DSFLZ": [120],
+            "DDCP": [10],
+            "TTCP": [100],
+        }
+    ).to_csv(rsvr_charact_waterlevel_file, index=False)
+
+    return input_file, output_dir, input_dir
 
 
 def test_clean_w(setup_test_environment):
-    input_file, output_dir = setup_test_environment
+    input_file, output_dir, input_dir = setup_test_environment
 
-    # Initialize the StreamflowBacktrack object
-    backtrack = ReservoirInflowBacktrack(data_folder="", output_folder="")
+    # Initialize the ReservoirInflowBacktrack object
+    backtrack = ReservoirInflowBacktrack(
+        data_folder=input_dir, output_folder=output_dir
+    )
 
     # Call the clean_w method
-    cleaned_file = backtrack.clean_w(input_file, output_dir)
+    cleaned_file = backtrack.clean_w("001", input_file, output_dir)
 
     # Check if the cleaned file exists
     assert os.path.exists(cleaned_file), "Cleaned file was not created."
@@ -69,7 +98,7 @@ def test_clean_w(setup_test_environment):
 
 
 def test_clean_w_no_nan(setup_test_environment):
-    input_file, output_dir = setup_test_environment
+    input_file, output_dir, input_dir = setup_test_environment
 
     # Modify the test data to have no NaN values
     test_data = {
@@ -104,7 +133,7 @@ def test_clean_w_no_nan(setup_test_environment):
 
 
 def test_back_calculation(setup_test_environment):
-    input_file, output_dir = setup_test_environment
+    input_file, output_dir, input_dir = setup_test_environment
 
     # Modify the test data to include necessary columns for back_calculation
     test_data = {
@@ -157,8 +186,8 @@ def test_back_calculation(setup_test_environment):
     ), "INQ values were not calculated correctly."
 
 
-def test_delete_nan_inq(setup_test_environment):
-    input_file, output_dir = setup_test_environment
+def test_delete_negative_inq(setup_test_environment):
+    input_file, output_dir, input_dir = setup_test_environment
 
     # Modify the test data to include necessary columns for delete_nan_inq
     test_data = {
@@ -181,7 +210,7 @@ def test_delete_nan_inq(setup_test_environment):
     backtrack = ReservoirInflowBacktrack(data_folder="", output_folder="")
 
     # Call the delete_nan_inq method
-    cleaned_file = backtrack.delete_nan_inq(
+    cleaned_file = backtrack.delete_negative_inq(
         input_file,
         "test_data.csv",
         output_dir,
@@ -225,46 +254,123 @@ def test_delete_nan_inq(setup_test_environment):
     ), "INQ values are not balanced correctly."
 
 
-def test_anomaly_process():
-    # 测试径流数据处理功能，单独处理csv文件，修改该过程可实现文件夹批处理多个文件
-    cleaner = StreamflowCleaner(
-        "/ftproot/tests_stations_anomaly_detection/streamflow_cleaner/21312150.csv",
-        window_size=7,
+def test_linear_interpolate(setup_test_environment):
+    input_file, output_dir, input_dir = setup_test_environment
+
+    # Modify the test data to include NaN values for interpolation
+    test_data = {
+        "TM": pd.date_range(start="2023-01-01", periods=10, freq="D"),
+        "INQ": [10, 12.5, np.nan, np.nan, 20, 25, 30, np.nan, 35, 40],
+        "RZ": [100, 150, 200, 250, 300, 350, 400, 450, 500, 550],
+        "W": [10, 15, 20, 25, 30, 35, 40, 45, 50, 55],
+    }
+    test_df = pd.DataFrame(test_data)
+    test_df.to_csv(input_file, index=False)
+
+    # Load the test data
+    df = pd.read_csv(input_file)
+
+    # Call the linear_interpolate function
+    interpolated_df = linear_interpolate_wthresh(df, column="INQ", threshold=3)
+
+    # Check if the NaN values were interpolated correctly
+    expected_inq = [10, 12.5, 15, 17.5, 20, 25, 30, 32.5, 35, 40]
+    assert np.allclose(
+        interpolated_df["INQ"], expected_inq, equal_nan=True
+    ), "INQ values were not interpolated correctly."
+
+    # Check if the DataFrame still has the expected columns
+    expected_columns = ["TM", "INQ", "RZ", "W"]
+    assert all(
+        column in interpolated_df.columns for column in expected_columns
+    ), "Interpolated data does not have the expected columns."
+
+    # Check if the interpolation respects the threshold
+    test_data = {
+        "TM": pd.date_range(start="2023-01-01", periods=10, freq="D"),
+        "INQ": [10, np.nan, np.nan, np.nan, np.nan, 25, 30, np.nan, 35, 40],
+        "RZ": [100, 150, 200, 250, 300, 350, 400, 450, 500, 550],
+        "W": [10, 15, 20, 25, 30, 35, 40, 45, 50, 55],
+    }
+    test_df = pd.DataFrame(test_data)
+    test_df.to_csv(input_file, index=False)
+
+    # Load the test data
+    df = pd.read_csv(input_file)
+
+    # Call the linear_interpolate function with a threshold of 3
+    interpolated_df = linear_interpolate_wthresh(df, column="INQ", threshold=3)
+
+    # Check if the NaN values were interpolated correctly
+    expected_inq = [10, np.nan, np.nan, np.nan, np.nan, 25, 30, 32.5, 35, 40]
+    assert np.allclose(
+        interpolated_df["INQ"], expected_inq, equal_nan=True
+    ), "INQ values were not interpolated correctly with threshold."
+
+    # Check if the DataFrame still has the expected columns
+    assert all(
+        column in interpolated_df.columns for column in expected_columns
+    ), "Interpolated data does not have the expected columns."
+
+
+def test_insert_inq(setup_test_environment):
+    input_file, output_dir, input_dir = setup_test_environment
+
+    # Modify the test data to include necessary columns for insert_inq
+    test_data = {
+        "TM": pd.date_range(start="2023-01-01", periods=100, freq="0.5h"),
+        "INQ": [10, np.nan, 15, np.nan, 20, np.nan, 25, np.nan, 30, np.nan] * 10,
+        "RZ": [100, 150, 200, 250, 300, 350, 400, 450, 500, 550] * 10,
+        "W": [10, 15, 20, 25, 30, 35, 40, 45, 50, 55] * 10,
+        "OTQ": [5, 10, 15, 20, 25, 30, 35, 40, 45, 50] * 10,
+        "STCD": ["001"] * 100,
+        "BLRZ": [0] * 100,
+        "RWCHRCD": [0] * 100,
+        "RWPTN": [0] * 100,
+        "INQDR": [0] * 100,
+        "MSQMT": [0] * 100,
+    }
+    test_df = pd.DataFrame(test_data)
+    test_df.to_csv(input_file, index=False)
+
+    # Initialize the ReservoirInflowBacktrack object
+    backtrack = ReservoirInflowBacktrack(
+        data_folder=input_dir, output_folder=output_dir
     )
-    # methods默认可以联合调用，也可以单独调用。大多数情况下，默认调用moving_average
-    methods = ["EMA"]
-    cleaner.anomaly_process(methods)
-    print(cleaner.origin_df)
-    print(cleaner.processed_df)
-    cleaner.processed_df.to_csv(
-        "/ftproot/tests_stations_anomaly_detection/streamflow_cleaner/21312150.csv",
-        index=False,
-    )
 
+    # Call the insert_inq method
+    result_file = backtrack.insert_inq("001", input_file, input_file, output_dir)
 
-def test_anomaly_process_folder():
-    input_folder = "/home/liutianxv1/EMA评估/日尺度松辽数据源/"
-    output_folder = "/home/liutianxv1/EMA评估/日尺度松辽数据源/"
+    # Check if the result file exists
+    assert os.path.exists(result_file), "Result file was not created."
 
-    # 获取输入文件夹中所有CSV文件的路径
-    csv_files = glob.glob(os.path.join(input_folder, "*.csv"))
-    print(csv_files)
+    # Load the result data
+    result_data = pd.read_csv(result_file)
 
-    for csv_file in tqdm(csv_files):
-        try:
-            # 读取并处理每个CSV文件
-            cleaner = StreamflowCleaner(
-                csv_file, window_size=7, cutoff_frequency=0.1, iterations=2, cwt_row=1
-            )  # 国内window_size=14,stride=1,cutoff_frequency=0.035,time_step=1.0,iterations=3,sampling_rate=1.0,order=5,cwt_row=2,
-            methods = ["ewma"]
-            cleaner.anomaly_process(methods)
+    # Check if the result data file has the expected columns
+    expected_columns = [
+        "TM",
+        "RZ",
+        "INQ",
+        "W",
+        "BLRZ",
+        "OTQ",
+        "RWCHRCD",
+        "RWPTN",
+        "INQDR",
+        "MSQMT",
+    ]
+    assert all(
+        column in result_data.columns for column in expected_columns
+    ), "Result data does not have the expected columns."
 
-            # 确定输出文件路径
-            output_file = os.path.join(output_folder, os.path.basename(csv_file))
+    # Check if the INQ values were interpolated correctly
+    assert (
+        result_data["INQ"].isna().sum() == 0
+    ), "INQ values were not interpolated correctly."
 
-            # 保存处理后的数据
-            cleaner.processed_df.to_csv(output_file, index=False)
+    # Check if the INQ values are non-negative
+    assert (result_data["INQ"] >= 0).all(), "INQ values are not non-negative."
 
-            print(f"Processed {csv_file} and saved to {output_file}")
-        except Exception as e:
-            print(f"Error processing {csv_file}: {e}")
+    # Check if the STCD values are consistent
+    assert result_data["STCD"].nunique() == 1, "STCD values are not consistent."
