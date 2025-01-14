@@ -1,4 +1,5 @@
 import collections
+import glob
 import json
 import os
 import re
@@ -112,7 +113,8 @@ class SelfMadeHydroDataset(HydroData):
                 for name in os.listdir(ts_dir)
                 if os.path.isdir(os.path.join(ts_dir, name))
             ]
-        unit_files = [folder + "_units_info.json" for folder in time_units_dir]
+        pattern = os.path.join(ts_dir, "*_units_info.json")
+        unit_files = glob.glob(pattern)
         attr_dir = os.path.join(data_root_dir, "attributes")
         attr_file = os.path.join(attr_dir, "attributes.csv")
         shape_dir = os.path.join(data_root_dir, "shapes")
@@ -185,7 +187,7 @@ class SelfMadeHydroDataset(HydroData):
             ts_dir = next(
                 dir_path
                 for dir_path in self.data_source_description["TS_DIRS"]
-                if time_unit in dir_path
+                if time_unit == dir_path.split(os.sep)[-1]
             )
             if start0101_freq:
                 t_range = generate_start0101_time_range(
@@ -298,9 +300,17 @@ class SelfMadeHydroDataset(HydroData):
         all_vars = {}
         for time_unit in self.time_unit:
             # Find the directory that corresponds to the current time unit
-            ts_dir = next(dir_path for dir_path in ts_dirs if time_unit in dir_path)
+            ts_dir = next(
+                dir_path
+                for dir_path in ts_dirs
+                if time_unit == dir_path.split(os.sep)[-1]
+            )
             # Find the corresponding unit file
-            unit_file = next(file for file in unit_files if time_unit in file)
+            unit_file = next(
+                file
+                for file in unit_files
+                if f"{time_unit}_units_info.json" == file.split(os.sep)[-1]
+            )
             # Load the first CSV file in the directory to extract column names
             if "s3://" in ts_dir:
                 ts_file = os.path.join(ts_dir, minio_file_list(ts_dir)[0])
@@ -755,7 +765,7 @@ class SelfMadeHydroDataset_PQ(SelfMadeHydroDataset):
             ts_dir = next(
                 dir_path
                 for dir_path in self.data_source_description["TS_DIRS"]
-                if time_unit in dir_path
+                if time_unit == dir_path.split(os.sep)[-1]
             )
             if start0101_freq:
                 t_range = generate_start0101_time_range(
