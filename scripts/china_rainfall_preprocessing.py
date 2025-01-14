@@ -1,51 +1,55 @@
-'''
+"""
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-05-28 10:24:16
-LastEditors: liutiaxqabs 1498093445@qq.com
-LastEditTime: 2024-09-27 16:04:32
-FilePath: /hydrodatasource/tests/test_rainfall_cleaner.py
+LastEditors: Wenyu Ouyang
+LastEditTime: 2025-01-14 09:26:36
+FilePath: \hydrodatasource\scripts\china_rainfall_preprocessing.py
 Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
-'''
+"""
 
+import os
+import sys
 import pytest
-from hydrodatasource.cleaner.rainfall_cleaner import RainfallCleaner, RainfallAnalyzer
 
 import pandas as pd
 import matplotlib.pyplot as plt
-import os
+from pathlib import Path
 from tqdm import tqdm
 
+sys.path.append(os.path.dirname(Path(os.path.abspath(__file__)).parent))
+from const4scripts import RESULT_DIR, DATASET_DIR
+from hydrodatasource.cleaner.rainfall_cleaner import RainfallCleaner, RainfallAnalyzer
 
-def test_anomaly_process():
-    # 测试降雨数据处理功能
-    cleaner = RainfallCleaner(
-        data_path="/ftproot/tests_stations_anomaly_detection/rainfall_cleaner/pp_CHN_songliao_21422982.csv",
-        era5_path="/ftproot/tests_stations_anomaly_detection/era5land/",
-        station_file="/ftproot/tests_stations_anomaly_detection/stations/pp_stations.csv",
-        start_time="2020-01-01",
-        end_time="2022-10-07",
-    )
-    # methods默认可以联合调用，也可以单独调用。大多数情况下，默认调用detect_sum
-    methods = ["detect_sum"]
-    cleaner.anomaly_process(methods)
 
-    print(cleaner.origin_df)
-    print(cleaner.processed_df)
-    cleaner.processed_df.to_csv(
-        "/ftproot/tests_stations_anomaly_detection/results/sampledatatest.csv"
-    )
-    cleaner.temporal_list.to_csv(
-        "/ftproot/tests_stations_anomaly_detection/results/temporal_list.csv"
-    )
-    cleaner.spatial_list.to_csv(
-        "/ftproot/tests_stations_anomaly_detection/results/spatial_list.csv"
-    )
+# 测试降雨数据处理功能
+cleaner = RainfallCleaner(
+    data_path="/ftproot/tests_stations_anomaly_detection/rainfall_cleaner/pp_CHN_songliao_21422982.csv",
+    era5_path="/ftproot/tests_stations_anomaly_detection/era5land/",
+    station_file="/ftproot/tests_stations_anomaly_detection/stations/pp_stations.csv",
+    start_time="2020-01-01",
+    end_time="2022-10-07",
+)
+# methods默认可以联合调用，也可以单独调用。大多数情况下，默认调用detect_sum
+methods = ["detect_sum"]
+cleaner.anomaly_process(methods)
+
+print(cleaner.origin_df)
+print(cleaner.processed_df)
+cleaner.processed_df.to_csv(
+    "/ftproot/tests_stations_anomaly_detection/results/sampledatatest.csv"
+)
+cleaner.temporal_list.to_csv(
+    "/ftproot/tests_stations_anomaly_detection/results/temporal_list.csv"
+)
+cleaner.spatial_list.to_csv(
+    "/ftproot/tests_stations_anomaly_detection/results/spatial_list.csv"
+)
 
 
 def test_basins_polygon_mean():
     # 测试泰森多边形平均值，碧流河为例。测试结果见 /ftproot/tests_stations_anomaly_detection/plot
     basins_mean = RainfallAnalyzer(
-        stations_csv_path="/ftproot/basins-origin/basins_pp_stations/21401550_stations.csv",# 站点表，其中ID列带有前缀‘pp_’
+        stations_csv_path="/ftproot/basins-origin/basins_pp_stations/21401550_stations.csv",  # 站点表，其中ID列带有前缀‘pp_’
         shp_folder="/ftproot/basins-origin/basins_shp/21401550/",
         rainfall_data_folder="/ftproot/basins-origin/basins_songliao_pp_origin_available_data/21401550/",
         output_folder="/ftproot/basins-origin/basins_rainfall_mean_available/",
@@ -59,24 +63,34 @@ def test_basins_polygon_mean():
 
 def test_basins_polygon_mean_folder():
     # 设置基础路径
-    
+
     base_shp_folder = "/ftproot/basins-origin/basins_shp/"
     base_stations_csv_folder = "/ftproot/basins-origin/basins_pp_stations/"
-    base_rainfall_data_folder = "/ftproot/basins-origin/basins_songliao_pp_origin_available_data/"
+    base_rainfall_data_folder = (
+        "/ftproot/basins-origin/basins_songliao_pp_origin_available_data/"
+    )
     output_folder = "/ftproot/basins-origin/basins_rainfall_mean_available/"
     output_log = os.path.join(output_folder, "plot", "summary_log.txt")
     output_plot = os.path.join(output_folder, "plot")
 
     # 获取shp_folder目录下的所有文件夹名称并排序
-    subfolders = sorted([f.name for f in os.scandir(base_rainfall_data_folder) if f.is_dir()])
+    subfolders = sorted(
+        [f.name for f in os.scandir(base_rainfall_data_folder) if f.is_dir()]
+    )
 
     # 遍历所有文件夹并运行 basins_polygon_mean
     for subfolder in tqdm(subfolders, desc="Processing basins"):
-        stations_csv_path = os.path.join(base_stations_csv_folder, f"{subfolder}_stations.csv")
+        stations_csv_path = os.path.join(
+            base_stations_csv_folder, f"{subfolder}_stations.csv"
+        )
         shp_folder = os.path.join(base_shp_folder, subfolder)
         rainfall_data_folder = os.path.join(base_rainfall_data_folder, subfolder)
-        
-        if os.path.exists(stations_csv_path) and os.path.exists(shp_folder) and os.path.exists(rainfall_data_folder):
+
+        if (
+            os.path.exists(stations_csv_path)
+            and os.path.exists(shp_folder)
+            and os.path.exists(rainfall_data_folder)
+        ):
             try:
                 basins_mean = RainfallAnalyzer(
                     stations_csv_path=stations_csv_path,
@@ -102,7 +116,8 @@ def test_time_consistency():
         output_folder="/ftproot/tests_stations_anomaly_detection/results/",
     )
     time_consistency_check.time_consistency()
-    
+
+
 def test_spatial_consistency():
     basins_spatial = RainfallAnalyzer(
         stations_csv_path="/ftproot/tests_stations_anomaly_detection/stations/pp_stations.csv",

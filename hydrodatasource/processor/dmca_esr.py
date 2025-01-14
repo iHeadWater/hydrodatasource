@@ -1,15 +1,23 @@
 """
-Author: Jingyi Wang, Yang Wang, and Wenyu Ouyang
+Author: Jingyi Wang and Yang Wang
 Date: 2023-10-28 09:23:22
-LastEditTime: 2024-05-20 20:52:04
+LastEditTime: 2025-01-14 14:58:17
 LastEditors: Wenyu Ouyang
 Description: DMCA-ESR method (https://doi.org/10.1029/2021WR031283)
-FilePath: \hydrodatasource\hydrodatasource\cleaner\dmca_esr.py
+FilePath: \hydrodatasource\hydrodatasource\processor\dmca_esr.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 
+import os
+import re
+from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
+from pint import UnitRegistry
+
+from hydroutils import hydro_plot
+
+from hydrodatasource.utils.utils import streamflow_unit_conv
 
 
 def movmean(X, n):
@@ -753,3 +761,114 @@ def rainfall_runoff_event_identify(
             "RUNOFF_RATIO": runoff_ratio,
         }
     )
+
+
+def get_rr_events(rain, flow, basin_area, max_window=100, max_flow_min=None):
+    """use DMCA-ESR method to identify rainfall-runoff events
+
+    Parameters
+    ----------
+    rain : xr.DataArray
+        the rainfall data
+    flow : xr.DataArray
+        the streamflow data
+    basin_area : xr.Dataset
+        a dataset with a variable named area and for each basin
+    max_window: int
+        number of time intervals for find events; default 100 (for hourly)
+    max_flow_min: list
+        the minimum of max flow for each basin
+        value below this will not be considered to look for an event;
+        default 100 m^3/s
+    Returns
+    -------
+    dict
+        the rainfall-runoff events for each basin
+
+    Raises
+    ------
+    ValueError
+        Invalid unit format
+    ValueError
+        Unsupported unit
+    """
+    ureg = UnitRegistry()
+    if max_flow_min is None:
+        max_flow_min = [100] * len(basin_area.basin)
+    # trans unit to mm/time_interval
+    flow_threshold = streamflow_unit_conv(
+        np.array(max_flow_min) * ureg.m**3 / ureg.s,
+        basin_area["area"].to_numpy() * ureg.km**2,
+        target_unit=flow.units,
+    )
+    match = re.match(r"mm/(\d+)?(h|d|day|hour)", flow.units)
+    if not match:
+        raise ValueError(
+            f"Invalid unit format: {flow.units}, should be mm/h, mm/3h or mm/d, mm/7d or mm/day or mm/hour"
+        )
+
+    num, unit = match.groups()
+    num = 1 if num is None else int(num)
+    if unit == "h":
+        multiple = num
+    elif unit == "d":
+        multiple = num * 24
+    else:
+        raise ValueError(f"Unsupported unit: {unit}")
+    print(f"flow.units = { flow.units}, multiple = {multiple}")
+    rr_events = {}
+    for i, basin in enumerate(basin_area.basin.values):
+        rr_event = rainfall_runoff_event_identify(
+            rain.sel(basin=basin).to_series(),
+            flow.sel(basin=basin).to_series(),
+            max_window=max_window,
+            multiple=multiple,
+            flow_threshold=flow_threshold[i],
+            rain_min=0.02 * multiple,
+        )
+        rr_events[basin] = rr_event
+    return rr_events
+
+
+def plot_rr_events(rr_events, rain, flow, save_dir=None):
+    """plot rainfall-runoff events
+
+    Parameters
+    ----------
+    rr_events : _type_
+        _description_
+    rain : _type_
+        _description_
+    flow : _type_
+        _description_
+    save_dir : _type_, optional
+        _description_, by default None
+    """
+    for basin, rr_event in rr_events.items():
+        for i in range(len(rr_event)):
+            beginning_time = rr_event["BEGINNING_RAIN"].iloc[i]
+            end_time = rr_event["END_FLOW"].iloc[i]  # Ensure this column exists
+
+            # Filter data for the specific time period
+            filtered_rain_data = rain.sel(
+                basin=basin, time=slice(beginning_time, end_time)
+            )
+            filter_flow_data = flow.sel(
+                basin=basin, time=slice(beginning_time, end_time)
+            )
+
+            # Plotting
+            hydro_plot.plot_rainfall_runoff(
+                filtered_rain_data.time.values,
+                filtered_rain_data.values,
+                [filter_flow_data.values],
+                title=f"Rainfall-Runoff Event {i}",
+                leg_lst=["Flow"],
+                xlabel="Time",
+                ylabel="Flow (mm/h)",
+            )
+            if save_dir:
+                if not os.path.exists(save_dir):
+                    os.makedirs(save_dir)
+                save_fig = os.path.join(save_dir, f"rr_event_{i}.png")
+                plt.savefig(save_fig, bbox_inches="tight")
