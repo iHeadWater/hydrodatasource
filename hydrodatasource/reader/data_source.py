@@ -872,8 +872,8 @@ class SelfMadeHydroDataset_PQ(SelfMadeHydroDataset):
             selected_datasets = []
             for batch_file in batch_files:
                 ds = pl.scan_parquet(batch_file)
-                all_vars = ds.columns
-                if any(var not in ds.columns for var in var_lst):
+                all_vars = ds.collect_schema().names()
+                if any(var not in all_vars for var in var_lst):
                     raise ValueError(f"var_lst must all be in {all_vars}")
                 # split ds["basin_id"] out to avoid performance problem
                 basin_ids = ds.select("basin_id").unique(maintain_order=True).collect()
