@@ -1,37 +1,74 @@
-'''
+"""
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-19 14:00:06
-LastEditors: liutiaxqabs 1498093445@qq.com
-LastEditTime: 2025-01-14 17:39:57
-FilePath: /hydrodatasource/hydrodatasource/cleaner/rainfall_cleaner.py
-Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
-'''
+LastEditors: Wenyu Ouyang
+LastEditTime: 2025-01-14 21:42:30
+FilePath: \hydrodatasource\hydrodatasource\cleaner\rainfall_cleaner.py
+Description: data preprocessing for station gauged rainfall data
+"""
 
+import collections
 import numpy as np
 import pandas as pd
-import xarray as xr
 import os
-from datetime import datetime, timedelta
 import geopandas as gpd
 import matplotlib.pyplot as plt
 from shapely.geometry import Point, Polygon
 from scipy.spatial import Voronoi
 import numpy as np
 from geopandas.tools import sjoin
-from .cleaner import Cleaner
+from tqdm import tqdm
 
 
 class RainfallCleaner:
-    def __init__(self):
+    def __init__(self, data_folder, output_folder):
+        """All files to be cleaned are in the data_dir
+
+        Parameters
+        ----------
+        data_dir : _type_
+            _description_
+        """
+        self.data_folder = data_folder
+        self.output_folder = output_folder
+        self.data_source_description = self.set_data_source_describe()
+        self._check_file_format()
+        self.station_info = self.read_site_info()
+
+    def set_data_source_describe(self):
+        data_source_dir = self.data_folder
+        # we must have a file to provide the reservoir basic information
+        era5land_file = os.path.join(data_source_dir, "songliao_2000_2024.csv")
+        station_info_file = os.path.join(data_source_dir, "stations", "stations.csv")
+
+        return collections.OrderedDict(
+            REANALYSIS_FILE=era5land_file, STATIONS_INFO_FILE=station_info_file
+        )
+
+    def _check_file_format(self):
+        # check if the file format is correct
         pass
-    @staticmethod
+
+    def read_site_info(self):
+        station_info_file = self.data_source_description["STATIONS_INFO_FILE"]
+        return pd.read_csv(station_info_file)
+
+    def read_and_concat_csv(self, basin_id):
+        """读取并合并文件夹下的所有 CSV 文件"""
+        folder_path = os.path.join(self.data_folder, basin_id)
+        all_files = [
+            os.path.join(folder_path, f)
+            for f in os.listdir(folder_path)
+            if f.endswith(".csv")
+        ]
+        return pd.concat([pd.read_csv(f) for f in all_files], ignore_index=True)
+
     # 遥感数据初级筛查
     def data_check_yearly(
-        df_era5land,
-        df_station,
-        df_attr,
-        year_range=[2010, 2024],
-        diff_range=[0.8, 1.2],
+        self,
+        basin_id,
+        year_range=None,
+        diff_range=None,
         min_true_percentage=0.75,
         min_consecutive_years=3,
     ):
@@ -40,14 +77,14 @@ class RainfallCleaner:
 
         参数:
         ----------
-        df_era5land : pd.DataFrame
-            包含遥感数据（era5land）的降水数据。
-        df_station : pd.DataFrame
-            包含站点降水数据的 DataFrame。
+        basin_id : str
+            Basin ID
         year_range : list, 可选
             要筛选的年份范围，默认是 [2010, 2024]。
         diff_range : list, 可选
-            站点数据和遥感数据之间的差异范围，默认是 [0.8, 1.2]。
+            站点数据和遥感数据之间的ratio差异范围
+            0.5 means station data is 0.5 times of reanalysis data
+            2.0 means station data is 2 times of reanalysis data
         min_true_percentage : float, 可选
             要求可信年份的最小比例，默认 0.75。
         min_consecutive_years : int, 可选
@@ -58,33 +95,29 @@ class RainfallCleaner:
         result_df : pd.DataFrame
             可信站点的 DataFrame，包含 'STCD'、'Latitude'、'Longitude' 和 'Reason' 列。
         """
-
+        if year_range is None:
+            year_range = [2010, 2024]
+        if diff_range is None:
+            diff_range = [0.4, 2.5]
+        df_attr = self.station_info
+        # 包含遥感数据（era5land）的降水数据
+        df_era5land = pd.read_csv(self.data_source_description["REANALYSIS_FILE"])
+        # 包含站点降水数据的 DataFrame
+        df_station = self.read_and_concat_csv(basin_id)
         # 提取年份并处理日期格式不一致的问题
-        df_station["TM"] = pd.to_datetime(df_station["TM"], errors="coerce")
-
-        # 检查是否有转换失败的日期
-        if df_station["TM"].isnull().any():
-            print("Warning: Some dates could not be parsed. They will be skipped.")
-            df_station = df_station.dropna(subset=["TM"])  # 移除无法解析的日期
-
-        df_station["Year"] = df_station["TM"].dt.year
-        # 新增筛选汛期数据（6月至10月）
-        df_station = df_station[df_station["TM"].dt.month.between(6, 10)]
-        df_station["STCD"] = df_station["STCD"].astype(str)  # 将 STCD 转换为字符串
-        df_station = df_station.groupby(["STCD", "Year"])["DRP"].sum().reset_index()
-
-        # 合并站点的经纬度和属性表信息
-        df_station = pd.merge(
-            df_station, df_attr[["STCD", "LGTD", "LTTD"]], on="STCD", how="left"
-        )
-        print(df_station)
+        df_station = self._station_yearly_sum(df_attr, df_station)
+        output_dir = os.path.join(self.output_folder, f"{basin_id}")
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
 
         # 筛选年份范围
         df_era5land = df_era5land[
-            (df_era5land["year"] >= year_range[0]) & (df_era5land["year"] <= year_range[1])
+            (df_era5land["year"] >= year_range[0])
+            & (df_era5land["year"] <= year_range[1])
         ]
         df_station = df_station[
-            (df_station["Year"] >= year_range[0]) & (df_station["Year"] <= year_range[1])
+            (df_station["Year"] >= year_range[0])
+            & (df_station["Year"] <= year_range[1])
         ]
 
         # 将经纬度精度保留到1位小数
@@ -113,44 +146,14 @@ class RainfallCleaner:
 
             if not matched_era5land.empty:
                 # 获取匹配的遥感数据
-                reliable_years = []
-                for year in group["Year"]:
-                    station_rainfall = group[group["Year"] == year]["DRP"].values[0]
-                    remote_precipitation = matched_era5land[
-                        matched_era5land["year"] == year
-                    ]["total_precipitation"].values
-
-                    if remote_precipitation.size > 0:
-                        remote_precipitation = remote_precipitation[
-                            0
-                        ]  # 获取该年的遥感降水量
-                        # 计算降水量差异并判断是否在允许的范围内
-                        if (
-                            diff_range[0]
-                            <= station_rainfall / remote_precipitation
-                            <= diff_range[1]
-                        ):
-                            reliable_years.append(True)
-                        else:
-                            reliable_years.append(False)
-                    else:
-                        reliable_years.append(None)
-                        remote_precipitation = None
-
-                    # 保存详细的年度数据
-                    results.append(
-                        {
-                            "STCD": stcd,
-                            "Latitude": lat,
-                            "Longitude": lon,
-                            "Year": year,
-                            "StationRainfall": station_rainfall,
-                            "RemotePrecipitation": remote_precipitation,
-                        }
-                    )
+                reliable_years, the_result = self._reliable_years(
+                    diff_range, stcd, group, lat, lon, matched_era5land
+                )
+                # append list to list
+                results = results + the_result
 
                 # 计算该站点的可靠性
-                true_years = sum(1 for r in reliable_years if r is True)
+                true_years = sum(r is True for r in reliable_years)
                 total_years = len(reliable_years)
                 true_percentage = true_years / total_years
 
@@ -166,18 +169,26 @@ class RainfallCleaner:
                         for i in range(len(reliable_years) - min_consecutive_years + 1)
                     )
                     if consecutive_true:
-                        reason = f"连续 {min_consecutive_years} 年为 True"
+                        if reason is not None:
+                            reason += f", 连续 {min_consecutive_years} 年为 True"
+                        else:
+                            reason = f"连续 {min_consecutive_years} 年为 True"
 
                 if reason:
                     # 保存该站点为可信站点
                     trusted_stations.append(
-                        {"STCD": stcd, "Latitude": lat, "Longitude": lon, "Reason": reason}
+                        {
+                            "STCD": stcd,
+                            "Latitude": lat,
+                            "Longitude": lon,
+                            "Reason": reason,
+                        }
                     )
 
         # 转换详细结果为 DataFrame 并保存
         detailed_results_df = pd.DataFrame(results)
         detailed_results_df = detailed_results_df.drop_duplicates()
-        detailed_results_df.to_csv("detaildata.csv")
+        detailed_results_df.to_csv(os.path.join(output_dir, "detaildata.csv"))
 
         # 转换可信站点结果为 DataFrame 并保存
         trusted_stations_df = pd.DataFrame(trusted_stations)
@@ -185,12 +196,69 @@ class RainfallCleaner:
         # 排序并返回结果
         trusted_stations_df["STCD"] = trusted_stations_df["STCD"].astype(str)
         trusted_stations_df = trusted_stations_df.sort_values(by="STCD")
-
+        trusted_stations_df.to_csv(os.path.join(output_dir, "kexin.csv"))
         return trusted_stations_df
 
-    @staticmethod
+    def _reliable_years(self, diff_range, stcd, group, lat, lon, matched_era5land):
+        reliable_years = []
+        results_ = []
+        for year in group["Year"]:
+            station_rainfall = group[group["Year"] == year]["DRP"].values[0]
+            remote_precipitation = matched_era5land[matched_era5land["year"] == year][
+                "total_precipitation"
+            ].values
+
+            if remote_precipitation.size > 0:
+                remote_precipitation = remote_precipitation[0]  # 获取该年的遥感降水量
+                # 计算降水量差异并判断是否在允许的范围内
+                if (
+                    diff_range[0]
+                    <= station_rainfall / remote_precipitation
+                    <= diff_range[1]
+                ):
+                    reliable_years.append(True)
+                else:
+                    reliable_years.append(False)
+            else:
+                reliable_years.append(None)
+                remote_precipitation = None
+
+                # 保存详细的年度数据
+            the_result = {
+                "STCD": stcd,
+                "Latitude": lat,
+                "Longitude": lon,
+                "Year": year,
+                "StationRainfall": station_rainfall,
+                "RemotePrecipitation": remote_precipitation,
+            }
+            results_.append(the_result)
+
+        return reliable_years, results_
+
+    def _station_yearly_sum(self, df_attr, df_station):
+        df_station["TM"] = pd.to_datetime(df_station["TM"], errors="coerce")
+
+        # 检查是否有转换失败的日期
+        if df_station["TM"].isnull().any():
+            print("Warning: Some dates could not be parsed. They will be skipped.")
+            df_station = df_station.dropna(subset=["TM"])  # 移除无法解析的日期
+
+        df_station["Year"] = df_station["TM"].dt.year
+        # 新增筛选汛期数据（6月至10月）
+        df_station = df_station[df_station["TM"].dt.month.between(6, 10)]
+        df_station["STCD"] = df_station["STCD"].astype(str)  # 将 STCD 转换为字符串
+        df_station = df_station.groupby(["STCD", "Year"])["DRP"].sum().reset_index()
+
+        # 合并站点的经纬度和属性表信息
+        df_station = pd.merge(
+            df_station, df_attr[["STCD", "LGTD", "LTTD"]], on="STCD", how="left"
+        )
+        print(df_station)
+        return df_station
+
     # 极值监测
-    def data_check_hourly_extreme(data_df, station_lst, climate_extreme_value=None):
+    def data_check_hourly_extreme(self, basin_id, climate_extreme_value=None):
         """
         Check if the daily precipitation values at chosen stations are within a reasonable range.
         Values larger than the climate extreme value are treated as anomalies.
@@ -198,11 +266,6 @@ class RainfallCleaner:
 
         Parameters
         ----------
-        data_df : pd.DataFrame
-            DataFrame containing all daily precipitation data, with columns:
-            'STCD' (station code), 'TM' (timestamp), and 'DRP' (daily precipitation).
-        station_lst : list
-            List of trustworthy station STCDs from the data_check_yearly.
         climate_extreme_value : float, optional
             Climate extreme threshold for the region, calculated as 95% of the maximum observed DRP.
             If not provided, will be calculated as 95% of the maximum DRP value in the data.
@@ -212,6 +275,14 @@ class RainfallCleaner:
         df_anomaly_stations_periods : pd.DataFrame
             DataFrame of anomalies with columns: 'STCD', 'TM', 'DRP'.
         """
+        trusted_csv_file = os.path.join(self.output_folder, basin_id, "kexin.csv")
+        # List of trustworthy station STCDs from the data_check_yearly.
+        station_lst = (
+            pd.read_csv(trusted_csv_file)["STCD"].drop_duplicates().astype(str).unique()
+        )
+        # DataFrame containing all daily precipitation data, with columns:
+        # 'STCD' (station code), 'TM' (timestamp), and 'DRP' (daily precipitation).
+        data_df = self.read_and_concat_csv(basin_id)
         # 如果没有传入气候极值，使用数据中的最大值的 95%
         if climate_extreme_value is None:
             climate_extreme_value = data_df["DRP"].max() * 0.95
@@ -223,14 +294,16 @@ class RainfallCleaner:
         df_anomaly_stations_periods = filtered_data[
             filtered_data["DRP"] > climate_extreme_value
         ][["STCD", "TM", "DRP"]]
-
+        print(df_anomaly_stations_periods)
+        df_anomaly_stations_periods.to_csv(
+            os.path.join(self.output_folder, basin_id, "extreme.csv")
+        )
         return df_anomaly_stations_periods
 
-    @staticmethod
     # 时间一致性监测（连续小雨量，梯度）
     def data_check_time_series(
-        data_df,
-        station_lst,
+        self,
+        basin_id,
         check_type=None,
         gradient_limit=None,
         window_size=None,
@@ -241,11 +314,8 @@ class RainfallCleaner:
 
         Parameters
         ----------
-        data_df : pd.DataFrame
-            DataFrame containing all daily precipitation data, with columns:
-            'STCD' (station code), 'TM' (timestamp), and 'DRP' (daily precipitation).
-        station_lst : list
-            List of trustworthy station STCDs from the data_check_yearly.
+        basin_id: str
+            Basin ID.
         check_type : str
             Type of check to perform: "gradient" for gradient check, "consistency" for time consistency check.
         gradient_limit : float, optional
@@ -260,6 +330,16 @@ class RainfallCleaner:
         pd.DataFrame
             DataFrame of detected anomalies with columns: 'STCD', 'TM', 'DRP', 'Issue' (where applicable).
         """
+        # List of trustworthy station STCDs from the data_check_yearly.
+        station_lst = (
+            pd.read_csv(os.path.join(self.output_folder, basin_id, "kexin.csv"))["STCD"]
+            .drop_duplicates()
+            .astype(str)
+            .unique()
+        )
+        # DataFrame containing all daily precipitation data, with columns:
+        # 'STCD' (station code), 'TM' (timestamp), and 'DRP' (daily precipitation).
+        data_df = self.read_and_concat_csv(basin_id)
         # 过滤出可信站点的数据
         filtered_data = data_df[data_df["STCD"].astype(str).isin(station_lst)]
         if check_type == "gradient":
@@ -290,10 +370,12 @@ class RainfallCleaner:
             # 将所有异常记录合并成一个 DataFrame
             if anomalies:
                 df_anomalies = pd.concat(anomalies).reset_index(drop=True)
-                df_anomalies["Issue"] = "Sudden change in precipitation (forward/backward)"
-                return df_anomalies
+                df_anomalies["Issue"] = (
+                    "Sudden change in precipitation (forward/backward)"
+                )
+
             else:
-                return pd.DataFrame(
+                df_anomalies = pd.DataFrame(
                     columns=[
                         "STCD",
                         "TM",
@@ -314,34 +396,42 @@ class RainfallCleaner:
                     window = station_data.iloc[i : i + window_size]
 
                     # 检查滑动窗口内降雨量是否完全一致且小于指定的阈值
-                    if window["DRP"].isna().sum() > 0:
-                        if (window["DRP"] < consistent_value).all() and len(
-                            window["DRP"].unique()
-                        ) == 1:
-                            # 将异常记录添加到列表
-                            anomalies.append(window[["STCD", "TM", "DRP"]])
+                    if window["DRP"].isna().sum() > 0 and (
+                        (window["DRP"] < consistent_value).all()
+                        and len(window["DRP"].unique()) == 1
+                    ):
+                        anomalies.append(window[["STCD", "TM", "DRP"]])
 
             # 将所有异常窗口合并成一个 DataFrame
             if anomalies:
-                df_anomalies = pd.concat(anomalies).drop_duplicates().reset_index(drop=True)
+                df_anomalies = (
+                    pd.concat(anomalies).drop_duplicates().reset_index(drop=True)
+                )
                 df_anomalies["Issue"] = (
                     f"Consistent low rain period below {consistent_value} mm"
                 )
-                return df_anomalies
+
             else:
-                return pd.DataFrame(columns=["STCD", "TM", "DRP", "Issue"])
+                df_anomalies = pd.DataFrame(columns=["STCD", "TM", "DRP", "Issue"])
 
         else:
-            return pd.DataFrame(
+            df_anomalies = pd.DataFrame(
                 {
                     "STCD": [None],
                     "TM": [None],
                     "DRP": [None],
-                    "Issue": ["Invalid check_type. Choose 'gradient' or 'consistency'."],
+                    "Issue": [
+                        "Invalid check_type. Choose 'gradient' or 'consistency'."
+                    ],
                 }
             )
+        print(df_anomalies)
+        df_anomalies.to_csv(
+            os.path.join(self.output_folder, basin_id, "consistency.csv")
+        )
+        # result_df.to_csv("gradient.csv")
+        return df_anomalies
 
-    
 
 class RainfallAnalyzer:
     def __init__(
@@ -383,15 +473,19 @@ class RainfallAnalyzer:
             if file.endswith(".csv"):
                 file_path = os.path.join(input_folder, file)
                 data = pd.read_csv(file_path)
-                data["TM"] = pd.to_datetime(data["TM"], errors='coerce')
-                data["TM"] = pd.to_datetime(data["TM"], format="%Y-%m-%d %H:%M:%S.%f", errors='coerce')
+                data["TM"] = pd.to_datetime(data["TM"], errors="coerce")
+                data["TM"] = pd.to_datetime(
+                    data["TM"], format="%Y-%m-%d %H:%M:%S.%f", errors="coerce"
+                )
                 data["DRP"] = data["DRP"].astype(float)
 
                 data["ID"] = file.replace(".csv", "")
                 for year, group in data.groupby(data["TM"].dt.year):
                     drp_sum = group["DRP"].sum()
                     if self.lower_bound <= drp_sum <= self.upper_bound:
-                        print(f"File {file} contains valid data for year {year} with DRP sum {drp_sum}")
+                        print(
+                            f"File {file} contains valid data for year {year} with DRP sum {drp_sum}"
+                        )
                         filtered_data_list.append(group)
         if filtered_data_list:
             return pd.concat(filtered_data_list, ignore_index=True)

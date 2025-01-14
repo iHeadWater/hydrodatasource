@@ -2,17 +2,15 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-05-28 10:24:16
 LastEditors: Wenyu Ouyang
-LastEditTime: 2025-01-14 09:26:36
+LastEditTime: 2025-01-14 20:47:13
 FilePath: \hydrodatasource\scripts\china_rainfall_preprocessing.py
-Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+Description: test script for rainfall data preprocessing
 """
 
 import os
 import sys
-import pytest
 
 import pandas as pd
-import matplotlib.pyplot as plt
 from pathlib import Path
 from tqdm import tqdm
 
@@ -21,80 +19,32 @@ from const4scripts import RESULT_DIR, DATASET_DIR
 from hydrodatasource.cleaner.rainfall_cleaner import RainfallCleaner, RainfallAnalyzer
 
 
-def read_and_concat_csv(folder_path):
-    """读取并合并文件夹下的所有 CSV 文件"""
-    all_files = [
-        os.path.join(folder_path, f)
-        for f in os.listdir(folder_path)
-        if f.endswith(".csv")
-    ]
-    return pd.concat([pd.read_csv(f) for f in all_files], ignore_index=True)
+rainfall_dir = os.path.join(DATASET_DIR, "basins_songliao_pp_origin_available_data")
+output_dir = os.path.join(RESULT_DIR, "basins_songliao_pp_stations")
+rainfall_cleaner = RainfallCleaner(rainfall_dir, output_dir)
+# 调用封装类中的方法并输出可信站点
+rainfall_cleaner.data_check_yearly(basin_id="21401550", min_consecutive_years=1)
+print("check yearly data")
 
+rainfall_cleaner.data_check_hourly_extreme(
+    basin_id="21401550", climate_extreme_value=122
+)
+rainfall_cleaner.data_check_time_series(
+    basin_id="21401550",
+    check_type="consistency",
+    gradient_limit=120,
+    window_size=24,
+    consistent_value=0.5,
+)
 
-def test_data_check_yearly():
-    # 假设 df_era5land 和 df_station 已经加载为 DataFrame
-    df_era5land = pd.read_csv(
-        "/ftproot/era5land/songliao_2000_2024.csv"
-    )  # 替换为真实路径
-    df_station = read_and_concat_csv(
-        "/ftproot/tests_stations_anomaly_detection/rainfall_cleaner/"
-    )
-    df_attr = pd.read_csv(
-        "/ftproot/tests_stations_anomaly_detection/stations/stations.csv"
-    )
-    # 调用封装类中的方法并输出可信站点
-    result_df = RainfallCleaner.data_check_yearly(
-        df_era5land, df_station, df_attr, min_consecutive_years=1
-    )
-    print(result_df)
-    result_df.to_csv("kexin.csv")
-    pass
+rainfall_cleaner.data_check_time_series(
+    basin_id="21401550",
+    check_type="gradient",
+    gradient_limit=120,
+    window_size=24,
+    consistent_value=0.5,
+)
 
-
-def test_data_check_hourly_extreme():
-    station_lst = (
-        pd.read_csv("kexin.csv")["STCD"].drop_duplicates().astype(str).unique()
-    )
-    data_df = read_and_concat_csv(
-        "/ftproot/tests_stations_anomaly_detection/rainfall_cleaner/"
-    )
-    result_df = RainfallCleaner.data_check_hourly_extreme(
-        data_df=data_df, station_lst=station_lst, climate_extreme_value=122
-    )
-    print(result_df)
-    result_df.to_csv("extreme.csv")
-    pass
-
-
-def test_data_check_time_series():
-    station_lst = (
-        pd.read_csv("kexin.csv")["STCD"].drop_duplicates().astype(str).unique()
-    )
-    data_df = read_and_concat_csv(
-        "/ftproot/tests_stations_anomaly_detection/rainfall_cleaner/"
-    )
-    result_df = RainfallCleaner.data_check_time_series(
-        data_df=data_df,
-        station_lst=station_lst,
-        check_type="consistency",
-        gradient_limit=120,
-        window_size=24,
-        consistent_value=0.5,
-    )
-    print(result_df)
-    result_df.to_csv("consistency.csv")
-
-    result_df = RainfallCleaner.data_check_time_series(
-        data_df=data_df,
-        station_lst=station_lst,
-        check_type="gradient",
-        gradient_limit=120,
-        window_size=24,
-        consistent_value=0.5,
-    )
-    print(result_df)
-    result_df.to_csv("gradient.csv")
-    pass
 
 
 def test_basins_polygon_mean():
