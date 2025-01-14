@@ -1,7 +1,7 @@
 """
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-03-16 15:55:22
-LastEditTime: 2025-01-14 14:39:09
+LastEditTime: 2025-01-14 15:26:00
 LastEditors: Wenyu Ouyang
 Description: see rainfall runoff events
 FilePath: \hydrodatasource\scripts\rainfall_runoff_events.py
@@ -30,8 +30,8 @@ rr_events = get_rr_events(
     rain_flow["total_precipitation_hourly"],
     rain_flow["streamflow"],
     basin_area,
-    max_window=7,
-    max_flow_min=[10],
+    max_window=100,
+    max_flow_min=[1],
 )
 save_dir = os.path.join(RESULT_DIR, "rr_events")
 plot_rr_events(

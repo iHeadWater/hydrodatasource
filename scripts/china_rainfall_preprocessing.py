@@ -21,9 +21,11 @@ from const4scripts import RESULT_DIR, DATASET_DIR
 from hydrodatasource.cleaner.rainfall_cleaner import RainfallCleaner, RainfallAnalyzer
 
 
-# 测试降雨数据处理功能
+pp_stations_data_dir = os.path.join(
+    DATASET_DIR, "basins_songliao_pp_origin_available_data"
+)
 cleaner = RainfallCleaner(
-    data_path="/ftproot/tests_stations_anomaly_detection/rainfall_cleaner/pp_CHN_songliao_21422982.csv",
+    data_path=os.path.join(pp_stations_data_dir, "pp_CHN_songliao_21422982.csv"),
     era5_path="/ftproot/tests_stations_anomaly_detection/era5land/",
     station_file="/ftproot/tests_stations_anomaly_detection/stations/pp_stations.csv",
     start_time="2020-01-01",
