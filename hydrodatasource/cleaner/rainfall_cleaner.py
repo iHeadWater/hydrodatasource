@@ -2,7 +2,7 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-19 14:00:06
 LastEditors: Wenyu Ouyang
-LastEditTime: 2025-01-15 11:27:50
+LastEditTime: 2025-01-15 11:58:32
 FilePath: \hydrodatasource\hydrodatasource\cleaner\rainfall_cleaner.py
 Description: data preprocessing for station gauged rainfall data
 """
@@ -19,9 +19,12 @@ from scipy.spatial import Voronoi
 from geopandas.tools import sjoin
 from tqdm import tqdm
 
+from hydroutils.hydro_log import hydro_logger
+
 from hydrodatasource.cleaner.cleaner import Cleaner
 
 
+@hydro_logger
 class RainfallCleaner(Cleaner):
     def __init__(self, data_folder, output_folder):
         """All files to be cleaned are in the data_dir
@@ -247,7 +250,9 @@ class RainfallCleaner(Cleaner):
 
         # 检查是否有转换失败的日期
         if df_station["TM"].isnull().any():
-            print("Warning: Some dates could not be parsed. They will be skipped.")
+            self.logger.warning(
+                "Warning: Some dates could not be parsed. They will be skipped."
+            )
             df_station = df_station.dropna(subset=["TM"])  # 移除无法解析的日期
 
         df_station["Year"] = df_station["TM"].dt.year
@@ -260,7 +265,7 @@ class RainfallCleaner(Cleaner):
         df_station = pd.merge(
             df_station, df_attr[["STCD", "LGTD", "LTTD"]], on="STCD", how="left"
         )
-        print(df_station)
+        self.logger.debug(df_station)
         return df_station
 
     def data_check_hourly_extreme(self, basin_id, climate_extreme_value=None):
@@ -368,7 +373,7 @@ class RainfallCleaner(Cleaner):
                     ],
                 }
             )
-        print(df_anomalies)
+        self.logger.debug(df_anomalies)
         return df_anomalies
 
     def _consistency_check(
@@ -479,6 +484,7 @@ class RainfallCleaner(Cleaner):
         )
 
 
+@hydro_logger
 class RainfallAnalyzer(Cleaner):
     def __init__(
         self,
@@ -496,7 +502,6 @@ class RainfallAnalyzer(Cleaner):
         self.data_source_description = self.set_data_source_describe()
         self._check_file_format()
         # self.station_info = self.read_site_info()
-        self.set_logger()
 
     def set_data_source_describe(self):
         data_source_dir = self.data_folder
@@ -521,34 +526,6 @@ class RainfallAnalyzer(Cleaner):
     def _check_file_format(self):
         # check if the file format is correct
         pass
-
-    def set_logger(self):
-        # create logger
-        self.logger = logging.getLogger(self.__class__.__name__)
-        self.logger.setLevel(self.logger_level)
-
-        # if the logger has no handlers, create a new one
-        if not self.logger.handlers:
-            # create file handler which logs even debug messages
-            file_handler = logging.FileHandler(
-                self.data_source_description["OUTPUT_LOG"]
-            )
-            file_handler.setLevel(logging.DEBUG)
-
-            # create console handler with a higher log level
-            console_handler = logging.StreamHandler()
-            console_handler.setLevel(self.logger_level)
-
-            # set log format
-            formatter = logging.Formatter(
-                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-            )
-            file_handler.setFormatter(formatter)
-            console_handler.setFormatter(formatter)
-
-            # add the handlers to the logger
-            self.logger.addHandler(file_handler)
-            self.logger.addHandler(console_handler)
 
     def filter_and_save_csv(self, basin_id):
         """
@@ -630,7 +607,7 @@ class RainfallAnalyzer(Cleaner):
         返回：
         stations_within_basin - 位于流域内部的站点GeoDataFrame。
         """
-        print("Processing stations within the basin")
+        self.logger.info("Processing stations within the basin")
         gdf_stations = gpd.GeoDataFrame(
             stations_df,
             geometry=[Point(xy) for xy in zip(stations_df.LON, stations_df.LAT)],
@@ -638,8 +615,10 @@ class RainfallAnalyzer(Cleaner):
         )
         gdf_stations = gdf_stations.to_crs(basin.crs)
         stations_within_basin = sjoin(gdf_stations, basin, predicate="within")
-        print(f"Found {len(stations_within_basin)} stations within the basin")
-        print(stations_within_basin)
+        self.logger.info(
+            f"Found {len(stations_within_basin)} stations within the basin"
+        )
+        self.logger.debug(stations_within_basin)
         return stations_within_basin
 
     def calculate_voronoi_polygons(self, stations, basin):
