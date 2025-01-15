@@ -2,7 +2,7 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-19 14:00:16
 LastEditors: Wenyu Ouyang
-LastEditTime: 2025-01-15 08:18:43
+LastEditTime: 2025-01-15 11:20:47
 FilePath: \hydrodatasource\hydrodatasource\cleaner\rsvr_inflow_cleaner.py
 Description: calculate streamflow from reservoir timeseries data
 """
@@ -18,6 +18,7 @@ from tqdm import tqdm
 from scipy.optimize import curve_fit
 
 from hydrodatasource.configs.table_name import RSVR_TS_TABLE_COLS
+from hydrodatasource.cleaner.cleaner import Cleaner
 
 
 logging.basicConfig(
@@ -25,7 +26,7 @@ logging.basicConfig(
 )
 
 
-class ReservoirInflowBacktrack:
+class ReservoirInflowBacktrack(Cleaner):
     def __init__(self, data_folder, output_folder):
         """
         Back-calculating inflow of reservior

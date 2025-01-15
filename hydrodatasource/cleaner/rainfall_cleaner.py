@@ -2,12 +2,13 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-19 14:00:06
 LastEditors: Wenyu Ouyang
-LastEditTime: 2025-01-15 08:43:41
+LastEditTime: 2025-01-15 11:27:50
 FilePath: \hydrodatasource\hydrodatasource\cleaner\rainfall_cleaner.py
 Description: data preprocessing for station gauged rainfall data
 """
 
 import collections
+import logging
 import numpy as np
 import pandas as pd
 import os
@@ -15,12 +16,13 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 from shapely.geometry import Point, Polygon
 from scipy.spatial import Voronoi
-import numpy as np
 from geopandas.tools import sjoin
 from tqdm import tqdm
 
+from hydrodatasource.cleaner.cleaner import Cleaner
 
-class RainfallCleaner:
+
+class RainfallCleaner(Cleaner):
     def __init__(self, data_folder, output_folder):
         """All files to be cleaned are in the data_dir
 
@@ -477,29 +479,80 @@ class RainfallCleaner:
         )
 
 
-class RainfallAnalyzer:
+class RainfallAnalyzer(Cleaner):
     def __init__(
         self,
-        stations_csv_path=None,
-        shp_folder=None,
-        rainfall_data_folder=None,
+        data_folder=None,
         output_folder=None,
-        output_log=None,
-        output_plot=None,
         lower_bound=None,
         upper_bound=None,
+        logger_level=logging.INFO,
     ):
-        self.stations_csv_path = stations_csv_path
-        self.shp_folder = shp_folder
-        self.rainfall_data_folder = rainfall_data_folder
+        self.data_folder = data_folder
         self.output_folder = output_folder
-        self.output_log = output_log
-        self.output_plot = output_plot
         self.lower_bound = lower_bound
         self.upper_bound = upper_bound
+        self.logger_level = logger_level
+        self.data_source_description = self.set_data_source_describe()
+        self._check_file_format()
+        # self.station_info = self.read_site_info()
+        self.set_logger()
 
-    def filter_and_save_csv(self):
+    def set_data_source_describe(self):
+        data_source_dir = self.data_folder
+        output_folder = self.output_folder
+        output_plot = os.path.join(output_folder, "plot")
+        if not os.path.exists(output_plot):
+            os.makedirs(output_plot)
+        output_log = os.path.join(
+            output_plot,
+            "summary_log.txt",
+        )
+        stations_csv_path = os.path.join(data_source_dir, "basins_pp_stations")
+        # 站点表，其中ID列带有前缀‘pp_’
+        shp_folder = os.path.join(data_source_dir, "basins_shp")
+        return collections.OrderedDict(
+            STATIONS_CSV_PATH=stations_csv_path,
+            SHP_FOLDER=shp_folder,
+            OUTPUT_LOG=output_log,
+            OUTPUT_PLOT=output_plot,
+        )
+
+    def _check_file_format(self):
+        # check if the file format is correct
+        pass
+
+    def set_logger(self):
+        # create logger
+        self.logger = logging.getLogger(self.__class__.__name__)
+        self.logger.setLevel(self.logger_level)
+
+        # if the logger has no handlers, create a new one
+        if not self.logger.handlers:
+            # create file handler which logs even debug messages
+            file_handler = logging.FileHandler(
+                self.data_source_description["OUTPUT_LOG"]
+            )
+            file_handler.setLevel(logging.DEBUG)
+
+            # create console handler with a higher log level
+            console_handler = logging.StreamHandler()
+            console_handler.setLevel(self.logger_level)
+
+            # set log format
+            formatter = logging.Formatter(
+                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            )
+            file_handler.setFormatter(formatter)
+            console_handler.setFormatter(formatter)
+
+            # add the handlers to the logger
+            self.logger.addHandler(file_handler)
+            self.logger.addHandler(console_handler)
+
+    def filter_and_save_csv(self, basin_id):
         """
+        TODO: need use RainfallCleaner to filter the data
         筛选降雨数据，根据每年的总降雨量（DRP）进行过滤，保留符合最低和最高阈值的数据。
 
         参数：
@@ -510,8 +563,8 @@ class RainfallAnalyzer:
         返回：
         过滤后的降雨数据DataFrame。
         """
-        print("Filtering data by yearly total DRP")
-        input_folder = self.rainfall_data_folder
+        self.logger.info("Filtering data by yearly total DRP")
+        input_folder = os.path.join(self.data_folder, basin_id)
         filtered_data_list = []
         for file in os.listdir(input_folder):
             if file.endswith(".csv"):
@@ -527,7 +580,7 @@ class RainfallAnalyzer:
                 for year, group in data.groupby(data["TM"].dt.year):
                     drp_sum = group["DRP"].sum()
                     if self.lower_bound <= drp_sum <= self.upper_bound:
-                        print(
+                        self.logger.info(
                             f"File {file} contains valid data for year {year} with DRP sum {drp_sum}"
                         )
                         filtered_data_list.append(group)
@@ -536,20 +589,33 @@ class RainfallAnalyzer:
         else:
             return pd.DataFrame()
 
-    def read_data(self, basin_shp_path):
+    def read_data(self, basin_id):
         """
         读取站点信息和流域shapefile数据。
 
-        参数：
-        stations_csv_path - 站点信息CSV文件路径。
-        basin_shp_path - 流域shapefile文件路径。
+        Parameters
+        ----------
+        basin_id : str
+            basin ID
 
-        返回：
-        stations_df - 站点信息DataFrame。
-        basin - 流域shapefile的GeoDataFrame。
+        Returns
+        -------
+        stations_df: pd.DataFrame
+            station information DataFrame
+        basin : geopandas.GeoDataFrame
+            basin shapefile GeoDataFrame
         """
-        stations_df = pd.read_csv(self.stations_csv_path)
-        stations_df.dropna(subset=["LON", "LAT"], inplace=True)
+        # station info CSV file
+        stations_csv_path = os.path.join(
+            self.data_source_description["STATIONS_CSV_PATH"],
+            f"{basin_id}_stations.csv",
+        )
+        stations_df = pd.read_csv(stations_csv_path)
+        stations_df = stations_df.dropna(subset=["LON", "LAT"])
+        # basin shapefile path
+        basin_shp_path = os.path.join(
+            self.data_source_description["SHP_FOLDER"], basin_id, f"{basin_id}.shp"
+        )
         basin = gpd.read_file(basin_shp_path)
         return stations_df, basin
 
@@ -632,11 +698,13 @@ class RainfallAnalyzer:
 
         # 计算流域的总面积
         basin_area = basin.geometry.area.sum()
-        print(f"Basin area: {basin_area}")
+        self.logger.debug(f"Basin area: {basin_area}")
 
         # 计算原始泰森多边形的总面积
         total_original_area = gdf_polygons["original_area"].sum()
-        print(f"Total original Voronoi polygons area: {total_original_area}")
+        self.logger.debug(
+            f"Total original Voronoi polygons area: {total_original_area}"
+        )
 
         # 将多边形裁剪到流域边界
         clipped_polygons = gpd.clip(gdf_polygons, basin)
@@ -647,19 +715,16 @@ class RainfallAnalyzer:
 
         # 计算裁剪后泰森多边形的总面积
         total_clipped_area = clipped_polygons["clipped_area"].sum()
-        print(f"Total clipped Voronoi polygons area: {total_clipped_area}")
+        self.logger.debug(f"Total clipped Voronoi polygons area: {total_clipped_area}")
 
         # 打印年度数据汇总并将其追加到日志文件中
-        log_file = self.output_log
-        with open(log_file, "a") as f:
-            log_entries = [
-                f"Basin area: {basin_area}",
-                f"Total original Voronoi polygons area: {total_original_area}",
-                f"Total clipped Voronoi polygons area: {total_clipped_area}",
-            ]
-            for entry in log_entries:
-                print(entry)
-                f.write(entry + "\n")
+        log_entries = [
+            f"Basin area: {basin_area}",
+            f"Total original Voronoi polygons area: {total_original_area}",
+            f"Total clipped Voronoi polygons area: {total_clipped_area}",
+        ]
+        for entry in log_entries:
+            self.logger.info(entry + "\n")
 
         return clipped_polygons
 
@@ -685,12 +750,7 @@ class RainfallAnalyzer:
             merged_data["DRP"] * merged_data["area_ratio"]
         )
 
-        # 按时间分组并计算加权平均降雨量
-        weighted_average_rainfall = (
-            merged_data.groupby("TM")["weighted_rainfall"].sum().reset_index()
-        )
-
-        return weighted_average_rainfall
+        return merged_data.groupby("TM")["weighted_rainfall"].sum().reset_index()
 
     def display_results(
         self,
@@ -711,7 +771,7 @@ class RainfallAnalyzer:
         average_rainfall - 加权平均降雨量DataFrame。
         basin - 流域shapefile的GeoDataFrame。
         """
-        print(f"Displaying results for year {year}")
+        self.logger.debug(f"Displaying results for year {year}")
 
         # 绘制经纬度图像
         fig, ax = plt.subplots(figsize=(10, 10))
@@ -725,7 +785,7 @@ class RainfallAnalyzer:
         plt.ylabel("Latitude")
         # 生成文件名
         file_name = f"{basin['BASIN_ID'].iloc[0]}_{year}.png"
-        file_path = f"{self.output_plot}/{file_name}"
+        file_path = f"{self.data_source_description['OUTPUT_PLOT']}/{file_name}"
         # 保存图像
         plt.savefig(file_path)
         # plt.show()
@@ -733,8 +793,8 @@ class RainfallAnalyzer:
         # 输出站点名称和数量
         station_names = valid_stations["ID"].tolist()
         station_count = len(station_names)
-        print(f"Stations for year {year}: {station_names}")
-        print(f"Total number of stations: {station_count}")
+        self.logger.debug(f"Stations for year {year}: {station_names}")
+        self.logger.debug(f"Total number of stations: {station_count}")
 
         # 输出对应年份的数据
         filtered_yearly_data = yearly_data[yearly_data["ID"].isin(station_names)]
@@ -744,87 +804,65 @@ class RainfallAnalyzer:
             .agg({"STCD": "first", "DRP": "sum"})
             .reset_index()
         )
-        print(f"Yearly data summary for year {year}:\n{yearly_summary}")
+        self.logger.debug(f"Yearly data summary for year {year}:\n{yearly_summary}")
 
         # 输出平均雨量数据
         mean_rainfall = average_rainfall["mean_rainfall"].sum()
-        print(f"Average rainfall for year {year}: {mean_rainfall}")
+        self.logger.debug(f"Average rainfall for year {year}: {mean_rainfall}")
 
         # 追加日志
         # 打印年度数据汇总并将其追加到日志文件中
-        log_file = self.output_log
-        with open(log_file, "a") as f:
-            log_entries = [
-                f"BASINS: {basin['BASIN_ID'].iloc[0]}",
-                f"Displaying results for year {year}",
-                f"Stations for year {year}: {station_names}",
-                f"Total number of stations: {station_count}",
-                f"Yearly data summary for year {year}:\n{yearly_summary}",
-                f"Average rainfall for year {year}: {mean_rainfall}\n",
-            ]
-            for entry in log_entries:
-                print(entry)
-                f.write(entry + "\n")
+        log_entries = [
+            f"BASINS: {basin['BASIN_ID'].iloc[0]}",
+            f"Displaying results for year {year}",
+            f"Stations for year {year}: {station_names}",
+            f"Total number of stations: {station_count}",
+            f"Yearly data summary for year {year}:\n{yearly_summary}",
+            f"Average rainfall for year {year}: {mean_rainfall}\n",
+        ]
+        for entry in log_entries:
+            self.logger.info(entry + "\n")
 
-    def process_basin(self, basin_shp_path, filtered_data):
+    def process_basin(self, basin_id, filtered_data):
         """
         处理每个流域的降雨数据，计算泰森多边形和面平均降雨量。
 
         参数：
-        basin_shp_path - 流域shapefile文件路径。
-        stations_csv_path - 站点信息CSV文件路径。
         filtered_data - 预先过滤的降雨数据DataFrame。
         output_folder - 输出文件夹路径。
         """
         all_years_rainfall = []
-        stations_df, basin = self.read_data(basin_shp_path)
+        stations_df, basin = self.read_data(basin_id)
 
         years = filtered_data["TM"].dt.year.unique()
 
         for year in sorted(years):
-            print(
-                f"Processing basin {os.path.basename(basin_shp_path)} for year {year}"
-            )
+            self.logger.info(f"Processing basin {basin_id} for year {year}")
             # 打印年度数据汇总并将其追加到日志文件中
-            log_file = self.output_log
+            log_file = self.data_source_description["OUTPUT_LOG"]
             with open(log_file, "a") as f:
-                f.write(
-                    f"Processing basin {os.path.basename(basin_shp_path)} for year {year}\n"
-                )
+                f.write(f"Processing basin {basin_id} for year {year}\n")
             yearly_data = filtered_data[filtered_data["TM"].dt.year == year]
 
             if yearly_data.empty:
-                print(
-                    f"No valid data for basin {os.path.basename(basin_shp_path)} in year {year}"
-                )
                 # 打印年度数据汇总并将其追加到日志文件中
-                log_file = self.output_log
-                with open(log_file, "a") as f:
-                    f.write(
-                        f"No valid stations for basin {os.path.basename(basin_shp_path)} in year {year}\n"
-                    )
+                self.logger.info(f"No valid data for basin {basin_id} in year {year}")
                 continue
 
             # 筛选符合条件的每年站点数据
             yearly_stations = yearly_data["ID"].unique()
-            print(yearly_stations)
+            self.logger.debug(yearly_stations)
             valid_stations = self.process_stations(stations_df, basin)
-            print(valid_stations["ID"])
+            self.logger.debug(valid_stations["ID"])
             valid_stations = valid_stations[valid_stations["ID"].isin(yearly_stations)]
-            print("11111111111111111111111111")
-            print(valid_stations.head())
+            self.logger.debug("11111111111111111111111111")
+            self.logger.debug(valid_stations.head())
 
             if valid_stations.empty:
-                print(
-                    f"No valid stations for basin {os.path.basename(basin_shp_path)} in year {year}"
-                )
                 # 打印年度数据汇总并将其追加到日志文件中
-                log_file = self.output_log
-                with open(log_file, "a") as f:
-                    f.write(
-                        f"No valid stations for basin {os.path.basename(basin_shp_path)} in year {year}\n"
-                    )
-
+                self.logger.info(
+                    f"No valid stations for basin {basin_id} in year {year}\n"
+                )
                 continue
 
             thiesen_polygons_year = self.calculate_voronoi_polygons(
@@ -834,7 +872,7 @@ class RainfallAnalyzer:
                 thiesen_polygons_year, yearly_data
             )
             average_rainfall.columns = ["TM", "mean_rainfall"]
-            basin_id = os.path.splitext(os.path.basename(basin_shp_path))[0]
+            basin_id = os.path.splitext(basin_id)[0]
             average_rainfall["ID"] = basin_id
             all_years_rainfall.append(average_rainfall)
 
@@ -849,23 +887,26 @@ class RainfallAnalyzer:
             )
 
         if all_years_rainfall:
-            final_result = pd.concat(all_years_rainfall, ignore_index=True)
-            basin_output_folder = os.path.join(self.output_folder, basin_id)
-            os.makedirs(basin_output_folder, exist_ok=True)
-            output_file = os.path.join(basin_output_folder, f"{basin_id}_rainfall.csv")
-            final_result.to_csv(output_file, index=False)
-            print(f"Result for basin {basin_id} saved to {output_file}")
+            self._concat_yearly_data(all_years_rainfall, basin_id)
         else:
-            print(
-                f"No valid data for basin {os.path.splitext(os.path.basename(basin_shp_path))[0]}"
-            )
+            self.logger.info(f"No valid data for basin {basin_id}")
 
-    def basins_polygon_mean(self):
+    def _concat_yearly_data(self, all_years_rainfall, basin_id):
+        final_result = pd.concat(all_years_rainfall, ignore_index=True)
+        basin_output_folder = os.path.join(self.output_folder, basin_id)
+        os.makedirs(basin_output_folder, exist_ok=True)
+        output_file = os.path.join(basin_output_folder, f"{basin_id}_rainfall.csv")
+        final_result.to_csv(output_file, index=False)
+        self.logger.info(f"Result for basin {basin_id} saved to {output_file}")
+
+    def basins_polygon_mean(self, basin_ids):
         """
-        主函数，执行整个数据处理流程。
+        basin mean rainfall calculation pipeline
 
-        参数：
-        stations_csv_path - 站点信息CSV文件路径。
+        Parameters
+        ----------
+        basin_ids : list
+            Basin ID list
         shp_folder - 流域shapefile文件夹路径。
         rainfall_data_folder - 降雨数据文件夹路径。
         lower_bound - 降雨量最低阈值。
@@ -873,8 +914,6 @@ class RainfallAnalyzer:
         output_folder - 输出文件夹路径。
         """
         # 先筛选降雨数据，保留符合最低阈值的数据
-        filtered_data = self.filter_and_save_csv()
-        for shp_file in os.listdir(self.shp_folder):
-            if shp_file.endswith(".shp"):
-                basin_shp_path = os.path.join(self.shp_folder, shp_file)
-                self.process_basin(basin_shp_path, filtered_data)
+        for basin_id in basin_ids:
+            filtered_data = self.filter_and_save_csv(basin_id)
+            self.process_basin(basin_id, filtered_data)
