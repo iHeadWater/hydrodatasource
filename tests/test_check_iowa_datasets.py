@@ -4,6 +4,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import xarray as xr
+import polars as pl
 
 file_list0 = glob.glob('/ftproot/iowa_stations0/*.csv', recursive=True)
 file_list1 = glob.glob('/ftproot/iowa_stations1/*.csv', recursive=True)
@@ -27,8 +28,8 @@ def test_gen_table_heads():
 def test_convert_iowa_stream_datasets():
     q_list = []
     for file in file_list:
-        sta_df = pd.read_csv(file, engine='c')
-        sta_columns = sta_df.columns.to_numpy().astype(str)
+        sta_df = pl.read_csv(file, ignore_errors=True)
+        sta_columns = np.array(sta_df.columns)
         if np.any(np.char.startswith(sta_columns, 'Q')):
             q_list.append(file.split('/')[-1])
     print(q_list)
@@ -114,10 +115,9 @@ def test_check_iowa_pp_data():
     return res_ds
 
 def test_read_iowa_by_camels():
-    # 检查NOAA站点的数据；
-    # 使用iowa的1833个站点（放弃时间要求）
+    # 检查NOAA站点的数据; 放弃时间要求
     node_shp_gdf = gpd.read_file('iowa_all_locs/_ALL__locs.shp', engine='pyogrio')
-    basin_shp_gdf = gpd.read_file('iowa_all_locs/basins_shp.shp', engine='pyogrio')
+    basin_shp_gdf = gpd.read_file('flowdb_locs/new_basins_shp.shp', engine='pyogrio')
     nodes_intersect = gpd.sjoin(node_shp_gdf, basin_shp_gdf)
     local_nodes = nodes_intersect[nodes_intersect['NETWORK'].str.contains('|'.join(['DCP', 'COOP', 'ASOS']))]
     true_file_paths = infer_path_from_shp(local_nodes)
