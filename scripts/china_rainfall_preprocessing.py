@@ -2,7 +2,7 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-05-28 10:24:16
 LastEditors: Wenyu Ouyang
-LastEditTime: 2025-01-14 20:47:13
+LastEditTime: 2025-01-15 08:31:24
 FilePath: \hydrodatasource\scripts\china_rainfall_preprocessing.py
 Description: test script for rainfall data preprocessing
 """
@@ -22,29 +22,7 @@ from hydrodatasource.cleaner.rainfall_cleaner import RainfallCleaner, RainfallAn
 rainfall_dir = os.path.join(DATASET_DIR, "basins_songliao_pp_origin_available_data")
 output_dir = os.path.join(RESULT_DIR, "basins_songliao_pp_stations")
 rainfall_cleaner = RainfallCleaner(rainfall_dir, output_dir)
-# 调用封装类中的方法并输出可信站点
-rainfall_cleaner.data_check_yearly(basin_id="21401550", min_consecutive_years=1)
-print("check yearly data")
-
-rainfall_cleaner.data_check_hourly_extreme(
-    basin_id="21401550", climate_extreme_value=122
-)
-rainfall_cleaner.data_check_time_series(
-    basin_id="21401550",
-    check_type="consistency",
-    gradient_limit=120,
-    window_size=24,
-    consistent_value=0.5,
-)
-
-rainfall_cleaner.data_check_time_series(
-    basin_id="21401550",
-    check_type="gradient",
-    gradient_limit=120,
-    window_size=24,
-    consistent_value=0.5,
-)
-
+rainfall_cleaner.rainfall_clean("21401550")
 
 
 def test_basins_polygon_mean():

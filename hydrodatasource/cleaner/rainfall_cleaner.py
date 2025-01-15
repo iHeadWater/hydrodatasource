@@ -2,7 +2,7 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-19 14:00:06
 LastEditors: Wenyu Ouyang
-LastEditTime: 2025-01-14 21:42:30
+LastEditTime: 2025-01-15 08:43:41
 FilePath: \hydrodatasource\hydrodatasource\cleaner\rainfall_cleaner.py
 Description: data preprocessing for station gauged rainfall data
 """
@@ -63,7 +63,6 @@ class RainfallCleaner:
         ]
         return pd.concat([pd.read_csv(f) for f in all_files], ignore_index=True)
 
-    # 遥感数据初级筛查
     def data_check_yearly(
         self,
         basin_id,
@@ -152,29 +151,9 @@ class RainfallCleaner:
                 # append list to list
                 results = results + the_result
 
-                # 计算该站点的可靠性
-                true_years = sum(r is True for r in reliable_years)
-                total_years = len(reliable_years)
-                true_percentage = true_years / total_years
-
-                reason = None
-                if true_percentage >= min_true_percentage:
-                    reason = f"{int(min_true_percentage * 100)}% 以上年份为 True"
-
-                # 判断是否有连续的可信年份
-                if total_years >= min_consecutive_years:
-                    consecutive_true = any(
-                        sum(reliable_years[i : i + min_consecutive_years])
-                        >= min_consecutive_years
-                        for i in range(len(reliable_years) - min_consecutive_years + 1)
-                    )
-                    if consecutive_true:
-                        if reason is not None:
-                            reason += f", 连续 {min_consecutive_years} 年为 True"
-                        else:
-                            reason = f"连续 {min_consecutive_years} 年为 True"
-
-                if reason:
+                if reason := self._get_trust_reason(
+                    reliable_years, min_true_percentage, min_consecutive_years
+                ):
                     # 保存该站点为可信站点
                     trusted_stations.append(
                         {
@@ -198,6 +177,31 @@ class RainfallCleaner:
         trusted_stations_df = trusted_stations_df.sort_values(by="STCD")
         trusted_stations_df.to_csv(os.path.join(output_dir, "kexin.csv"))
         return trusted_stations_df
+
+    def _get_trust_reason(
+        self, reliable_years, min_true_percentage, min_consecutive_years
+    ):
+        true_years = sum(r is True for r in reliable_years)
+        total_years = len(reliable_years)
+        true_percentage = true_years / total_years
+
+        reason = None
+        if true_percentage >= min_true_percentage:
+            reason = f"{int(min_true_percentage * 100)}% 以上年份为 True"
+
+            # 判断是否有连续的可信年份
+        if total_years >= min_consecutive_years:
+            consecutive_true = any(
+                sum(reliable_years[i : i + min_consecutive_years])
+                >= min_consecutive_years
+                for i in range(len(reliable_years) - min_consecutive_years + 1)
+            )
+            if consecutive_true:
+                if reason is not None:
+                    reason += f", 连续 {min_consecutive_years} 年为 True"
+                else:
+                    reason = f"连续 {min_consecutive_years} 年为 True"
+        return reason
 
     def _reliable_years(self, diff_range, stcd, group, lat, lon, matched_era5land):
         reliable_years = []
@@ -257,7 +261,6 @@ class RainfallCleaner:
         print(df_station)
         return df_station
 
-    # 极值监测
     def data_check_hourly_extreme(self, basin_id, climate_extreme_value=None):
         """
         Check if the daily precipitation values at chosen stations are within a reasonable range.
@@ -294,13 +297,11 @@ class RainfallCleaner:
         df_anomaly_stations_periods = filtered_data[
             filtered_data["DRP"] > climate_extreme_value
         ][["STCD", "TM", "DRP"]]
-        print(df_anomaly_stations_periods)
         df_anomaly_stations_periods.to_csv(
             os.path.join(self.output_folder, basin_id, "extreme.csv")
         )
         return df_anomaly_stations_periods
 
-    # 时间一致性监测（连续小雨量，梯度）
     def data_check_time_series(
         self,
         basin_id,
@@ -344,75 +345,15 @@ class RainfallCleaner:
         filtered_data = data_df[data_df["STCD"].astype(str).isin(station_lst)]
         if check_type == "gradient":
             # 初始化列表来存储所有异常记录
-            anomalies = []
-
-            # 按站点分组并计算双向梯度变化
-            for station, station_data in tqdm(filtered_data.groupby("STCD")):
-                station_data = station_data.copy()  # 避免修改原始数据
-                # 计算前向梯度变化
-                station_data["Forward_Change"] = station_data["DRP"].diff()
-                # 计算后向梯度变化
-                station_data["Backward_Change"] = station_data["DRP"].diff(-1)
-
-                # 筛选出任一方向超过梯度阈值的数据
-                station_anomalies = station_data[
-                    (station_data["Forward_Change"].abs() > gradient_limit)
-                    | (station_data["Backward_Change"].abs() > gradient_limit)
-                ]
-
-                if not station_anomalies.empty:
-                    anomalies.append(
-                        station_anomalies[
-                            ["STCD", "TM", "DRP", "Forward_Change", "Backward_Change"]
-                        ]
-                    )
-
-            # 将所有异常记录合并成一个 DataFrame
-            if anomalies:
-                df_anomalies = pd.concat(anomalies).reset_index(drop=True)
-                df_anomalies["Issue"] = (
-                    "Sudden change in precipitation (forward/backward)"
-                )
-
-            else:
-                df_anomalies = pd.DataFrame(
-                    columns=[
-                        "STCD",
-                        "TM",
-                        "DRP",
-                        "Forward_Change",
-                        "Backward_Change",
-                        "Issue",
-                    ]
-                )
+            df_anomalies = self._gradient_limit_check(
+                basin_id, filtered_data, gradient_limit
+            )
 
         elif check_type == "consistency":
             # 初始化列表来存储所有异常记录
-            anomalies = []
-            # 使用滑动窗口检测一致性
-            for station, station_data in tqdm(filtered_data.groupby("STCD")):
-                station_data = station_data.reset_index(drop=True)
-                for i in range(len(station_data) - window_size + 1):
-                    window = station_data.iloc[i : i + window_size]
-
-                    # 检查滑动窗口内降雨量是否完全一致且小于指定的阈值
-                    if window["DRP"].isna().sum() > 0 and (
-                        (window["DRP"] < consistent_value).all()
-                        and len(window["DRP"].unique()) == 1
-                    ):
-                        anomalies.append(window[["STCD", "TM", "DRP"]])
-
-            # 将所有异常窗口合并成一个 DataFrame
-            if anomalies:
-                df_anomalies = (
-                    pd.concat(anomalies).drop_duplicates().reset_index(drop=True)
-                )
-                df_anomalies["Issue"] = (
-                    f"Consistent low rain period below {consistent_value} mm"
-                )
-
-            else:
-                df_anomalies = pd.DataFrame(columns=["STCD", "TM", "DRP", "Issue"])
+            df_anomalies = self._consistency_check(
+                basin_id, filtered_data, window_size, consistent_value
+            )
 
         else:
             df_anomalies = pd.DataFrame(
@@ -426,11 +367,114 @@ class RainfallCleaner:
                 }
             )
         print(df_anomalies)
+        return df_anomalies
+
+    def _consistency_check(
+        self, basin_id, filtered_data, window_size, consistent_value
+    ):
+        anomalies = []
+        # 使用滑动窗口检测一致性
+        for station, station_data in tqdm(filtered_data.groupby("STCD")):
+            station_data = station_data.reset_index(drop=True)
+            for i in range(len(station_data) - window_size + 1):
+                window = station_data.iloc[i : i + window_size]
+
+                # 检查滑动窗口内降雨量是否完全一致且小于指定的阈值
+                if window["DRP"].isna().sum() > 0 and (
+                    (window["DRP"] < consistent_value).all()
+                    and len(window["DRP"].unique()) == 1
+                ):
+                    anomalies.append(window[["STCD", "TM", "DRP"]])
+
+            # 将所有异常窗口合并成一个 DataFrame
+        if anomalies:
+            df_anomalies = pd.concat(anomalies).drop_duplicates().reset_index(drop=True)
+            df_anomalies["Issue"] = (
+                f"Consistent low rain period below {consistent_value} mm"
+            )
+
+        else:
+            df_anomalies = pd.DataFrame(columns=["STCD", "TM", "DRP", "Issue"])
         df_anomalies.to_csv(
             os.path.join(self.output_folder, basin_id, "consistency.csv")
         )
-        # result_df.to_csv("gradient.csv")
         return df_anomalies
+
+    def _gradient_limit_check(self, basin_id, filtered_data, gradient_limit):
+        anomalies = []
+
+        # 按站点分组并计算双向梯度变化
+        for station, station_data in tqdm(filtered_data.groupby("STCD")):
+            station_data = station_data.copy()  # 避免修改原始数据
+            # 计算前向梯度变化
+            station_data["Forward_Change"] = station_data["DRP"].diff()
+            # 计算后向梯度变化
+            station_data["Backward_Change"] = station_data["DRP"].diff(-1)
+
+            # 筛选出任一方向超过梯度阈值的数据
+            station_anomalies = station_data[
+                (station_data["Forward_Change"].abs() > gradient_limit)
+                | (station_data["Backward_Change"].abs() > gradient_limit)
+            ]
+
+            if not station_anomalies.empty:
+                anomalies.append(
+                    station_anomalies[
+                        ["STCD", "TM", "DRP", "Forward_Change", "Backward_Change"]
+                    ]
+                )
+
+            # 将所有异常记录合并成一个 DataFrame
+        if anomalies:
+            df_anomalies = pd.concat(anomalies).reset_index(drop=True)
+            df_anomalies["Issue"] = "Sudden change in precipitation (forward/backward)"
+
+        else:
+            df_anomalies = pd.DataFrame(
+                columns=[
+                    "STCD",
+                    "TM",
+                    "DRP",
+                    "Forward_Change",
+                    "Backward_Change",
+                    "Issue",
+                ]
+            )
+        df_anomalies.to_csv(os.path.join(self.output_folder, basin_id, "gradient.csv"))
+        return df_anomalies
+
+    def rainfall_clean(self, basin_id, **kwargs):
+        """the station gauged rainfall data cleaning pipeline"""
+        min_consecutive_years = kwargs.get("min_consecutive_years", 1)
+        min_true_percentage = kwargs.get("min_true_percentage", 0.75)
+        climate_extreme_value = kwargs.get("climate_extreme_value", 122)
+        gradient_limit = kwargs.get("gradient_limit", 120)
+        window_size = kwargs.get("window_size", 24)
+        # 遥感数据初级筛查
+        self.data_check_yearly(
+            basin_id=basin_id,
+            min_true_percentage=min_true_percentage,
+            min_consecutive_years=min_consecutive_years,
+        )
+        # 极值监测
+        self.data_check_hourly_extreme(
+            basin_id=basin_id, climate_extreme_value=climate_extreme_value
+        )
+        # 时间一致性监测（连续小雨量，梯度）
+        self.data_check_time_series(
+            basin_id=basin_id,
+            check_type="consistency",
+            gradient_limit=gradient_limit,
+            window_size=window_size,
+            consistent_value=0.5,
+        )
+        self.data_check_time_series(
+            basin_id=basin_id,
+            check_type="gradient",
+            gradient_limit=gradient_limit,
+            window_size=window_size,
+            consistent_value=0.5,
+        )
 
 
 class RainfallAnalyzer:
