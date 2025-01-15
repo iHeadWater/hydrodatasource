@@ -19,7 +19,7 @@ from hydrodatasource.cleaner.cleaner import Cleaner
 class StreamflowCleaner(Cleaner):
     def __init__(
         self,
-        data_path,
+        data_folder,
         window_size=14,
         stride=1,
         cutoff_frequency=0.035,
@@ -39,7 +39,7 @@ class StreamflowCleaner(Cleaner):
         self.sampling_rate = sampling_rate
         self.order = order
         self.cwt_row = cwt_row
-        super().__init__(data_path, *args, **kwargs)
+        super().__init__(data_folder, *args, **kwargs)
 
     def data_balanced(self, origin_data, transform_data):
         """

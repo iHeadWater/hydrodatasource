@@ -2,13 +2,12 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-19 14:00:16
 LastEditors: Wenyu Ouyang
-LastEditTime: 2025-01-11 11:21:17
+LastEditTime: 2025-01-15 11:20:47
 FilePath: \hydrodatasource\hydrodatasource\cleaner\rsvr_inflow_cleaner.py
 Description: calculate streamflow from reservoir timeseries data
 """
 
 import collections
-import logging
 import os
 import re
 import pandas as pd
@@ -17,15 +16,13 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from scipy.optimize import curve_fit
 
+from hydroutils.hydro_log import hydro_logger
 from hydrodatasource.configs.table_name import RSVR_TS_TABLE_COLS
+from hydrodatasource.cleaner.cleaner import Cleaner
 
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
-
-
-class ReservoirInflowBacktrack:
+@hydro_logger
+class ReservoirInflowBacktrack(Cleaner):
     def __init__(self, data_folder, output_folder):
         """
         Back-calculating inflow of reservior
@@ -73,7 +70,7 @@ class ReservoirInflowBacktrack:
         ValueError
             If a file name does not match the specified format, an error is raised with the specific file name.
         """
-        logging.info(
+        self.logger.info(
             "Please make sure the data is in the right format. We are checking now ..."
         )
         rsvr_idname_file = self.data_source_description["RSVR_IDNAME_FILE"]
@@ -106,7 +103,7 @@ class ReservoirInflowBacktrack:
                 raise ValueError(
                     f"File content does not match the format: {file_path}, missing columns: {set(RSVR_TS_TABLE_COLS) - set(df.columns)}"
                 )
-        logging.info("All files are in the right format.")
+        self.logger.info("All files are in the right format.")
 
     def read_rsvr_info(self):
         rsvr_idname_file = self.data_source_description["RSVR_IDNAME_FILE"]
@@ -138,7 +135,7 @@ class ReservoirInflowBacktrack:
         ]
         # assert if STCD is sorted
         assert rsvr_info["STCD"].tolist() == sorted(rsvr_info["STCD"].tolist())
-        logging.info(
+        self.logger.info(
             "Reservoir information read successfully. Note we only process the reservoirs with inflow data."
         )
         # update the rsvr inflow files, later we only process these reservoirs
@@ -405,7 +402,7 @@ class ReservoirInflowBacktrack:
         data.loc[data["set_nan"], "OTQ"] = np.nan
 
         # 输出被设置为 NaN 的行
-        logging.debug(data[data["set_nan"]])
+        self.logger.debug(data[data["set_nan"]])
 
         # 保存被设置为 NaN 的行到 CSV 文件
         data[data["set_nan"]].to_csv(
@@ -415,7 +412,7 @@ class ReservoirInflowBacktrack:
         valid_data, coefficients = fit_zw_curve(
             valid_data, x_col="RZ", y_col="W", method=fit_method
         )
-        logging.info(
+        self.logger.info(
             f"For {rsvr_id}, removed {len(data.dropna(subset=['RZ', 'W'])) - len(valid_data)} outliers for z-w curve fitting."
         )
         # Plot RZ and W points along with the fitted curve
@@ -468,7 +465,7 @@ class ReservoirInflowBacktrack:
         data["INQ_ACC"] = data["OTQ"] + (10**6 * (data["W"].diff() / data["Time_Diff"]))
         data["INQ"] = data["INQ_ACC"]
         # data["Month"] = data["TM"].dt.month
-        logging.debug(data)
+        self.logger.debug(data)
         back_calc_path = os.path.join(output_folder, f"{rsvr_id}_径流直接反推数据.csv")
         # index trans to column
         data["TM"] = data.index.strftime("%Y-%m-%d %H:%M:%S")
@@ -524,7 +521,7 @@ class ReservoirInflowBacktrack:
         # 读取CSV文件到DataFrame
         df = self._read_rsvrinflow_csv_file(inflow_data_path)
 
-        logging.debug(df["INQ"].sum())
+        self.logger.debug(df["INQ"].sum())
 
         def adjust_window(window):
             """adjust window for delete negative inflow values
@@ -674,8 +671,8 @@ class ReservoirInflowBacktrack:
 
         result_path = os.path.join(output_folder, f"{rsvr_id}_rsvr_data.csv")
 
-        logging.debug("水量平衡的小时尺度滑动平均反推数据：输出行名称")
-        logging.debug(df_.columns)
+        self.logger.debug("水量平衡的小时尺度滑动平均反推数据：输出行名称")
+        self.logger.debug(df_.columns)
         df_["TM"] = df_.index.strftime("%Y-%m-%d %H:%M:%S")
         df_[RSVR_TS_TABLE_COLS].to_csv(result_path, index=False)
         # plot the inflow data and compare with the original data
@@ -692,7 +689,8 @@ class ReservoirInflowBacktrack:
         )
         return result_path
 
-    def process_backtrack(self):
+    def rsvr_inflow_clean(self):
+        """The reservoir inflow data cleaning pipeline"""
         rsvr_info = self.rsvr_info
         # save info file into output folder so that later we can simply read cleaned data
         rsvr_info.to_csv(os.path.join(self.output_folder, "rsvr_info.csv"), index=False)

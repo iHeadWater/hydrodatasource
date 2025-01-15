@@ -32,7 +32,7 @@ rsvr_inflow_backtrack = ReservoirInflowBacktrack(
     data_folder=original_reservoir_data_dir,
     output_folder=tmp_dir,
 )
-rsvr_inflow_backtrack.process_backtrack()
+rsvr_inflow_backtrack.rsvr_inflow_clean()
 # rsvr_inflow_backtrack.process_backtract_1rsvr(
 #     "10407820", os.path.join(original_reservoir_data_dir, "10407820_rsvr_data.csv")
 # )
