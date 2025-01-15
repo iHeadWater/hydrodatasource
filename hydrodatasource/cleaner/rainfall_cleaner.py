@@ -18,13 +18,8 @@ from shapely.geometry import Point, Polygon
 from scipy.spatial import Voronoi
 from geopandas.tools import sjoin
 from tqdm import tqdm
-
-from hydroutils.hydro_log import hydro_logger
-
 from hydrodatasource.cleaner.cleaner import Cleaner
 
-
-@hydro_logger
 class RainfallCleaner(Cleaner):
     def __init__(self, data_folder, output_folder):
         """All files to be cleaned are in the data_dir
@@ -45,7 +40,7 @@ class RainfallCleaner(Cleaner):
         # we must have a file to provide the reservoir basic information
         era5land_file = os.path.join(data_source_dir, "songliao_2000_2024.csv")
         station_info_file = os.path.join(data_source_dir, "stations", "stations.csv")
-
+    
         return collections.OrderedDict(
             REANALYSIS_FILE=era5land_file, STATIONS_INFO_FILE=station_info_file
         )
@@ -75,6 +70,7 @@ class RainfallCleaner(Cleaner):
         diff_range=None,
         min_true_percentage=0.75,
         min_consecutive_years=3,
+        modify = False
     ):
         """
         计算遥感数据与站点数据之间的降水差异，评估站点可靠性，并返回可信任的站点列表。
@@ -95,7 +91,7 @@ class RainfallCleaner(Cleaner):
             最小连续可信年份数，默认 3。
 
         返回:
-        -------
+        ------- 
         result_df : pd.DataFrame
             可信站点的 DataFrame，包含 'STCD'、'Latitude'、'Longitude' 和 'Reason' 列。
         """
@@ -181,6 +177,16 @@ class RainfallCleaner(Cleaner):
         trusted_stations_df["STCD"] = trusted_stations_df["STCD"].astype(str)
         trusted_stations_df = trusted_stations_df.sort_values(by="STCD")
         trusted_stations_df.to_csv(os.path.join(output_dir, "kexin.csv"))
+
+        if modify == True:
+            trusted_stcd_list = trusted_stations_df["STCD"].tolist()
+            folder_path = os.path.join(self.data_folder, basin_id)
+            [
+                os.remove(os.path.join(folder_path, file))
+                for file in os.listdir(folder_path)
+                if not set(pd.read_csv(os.path.join(folder_path, file))["STCD"].astype(str).unique()).intersection(trusted_stcd_list)
+            ]
+
         return trusted_stations_df
 
     def _get_trust_reason(
@@ -265,10 +271,10 @@ class RainfallCleaner(Cleaner):
         df_station = pd.merge(
             df_station, df_attr[["STCD", "LGTD", "LTTD"]], on="STCD", how="left"
         )
-        self.logger.debug(df_station)
+        # self.logger.debug(df_station)
         return df_station
 
-    def data_check_hourly_extreme(self, basin_id, climate_extreme_value=None):
+    def data_check_hourly_extreme(self, basin_id, climate_extreme_value=None, modify = False):
         """
         Check if the daily precipitation values at chosen stations are within a reasonable range.
         Values larger than the climate extreme value are treated as anomalies.
@@ -307,6 +313,15 @@ class RainfallCleaner(Cleaner):
         df_anomaly_stations_periods.to_csv(
             os.path.join(self.output_folder, basin_id, "extreme.csv")
         )
+        if modify == True:
+            # 遍历文件夹，清除对应行
+            folder_path = os.path.join(self.data_folder, basin_id)
+            [(
+                lambda f: pd.read_csv(f).merge(df_anomaly_stations_periods, on=["STCD", "TM","DRP"], how="left", indicator=True)
+                    .query('_merge == "left_only"').drop("_merge", axis=1)
+                    .to_csv(f, index=False)
+            )(os.path.join(folder_path, file)) for file in os.listdir(folder_path) if file.endswith(".csv")]
+ 
         return df_anomaly_stations_periods
 
     def data_check_time_series(
@@ -316,6 +331,7 @@ class RainfallCleaner(Cleaner):
         gradient_limit=None,
         window_size=None,
         consistent_value=None,
+        modify = False
     ):
         """
         Check daily precipitation values at chosen stations for gradient or time consistency anomalies.
@@ -373,7 +389,16 @@ class RainfallCleaner(Cleaner):
                     ],
                 }
             )
-        self.logger.debug(df_anomalies)
+        # self.logger.debug(df_anomalies)
+        if modify == True:
+                # 遍历文件夹，清除对应行
+            folder_path = os.path.join(self.data_folder, basin_id)
+            [(
+                lambda f: pd.read_csv(f).merge(df_anomalies, on=["STCD", "TM","DRP"], how="left", indicator=True)
+                    .query('_merge == "left_only"').drop("_merge", axis=1)
+                    .to_csv(f, index=False)
+            )(os.path.join(folder_path, file)) for file in os.listdir(folder_path) if file.endswith(".csv")]
+
         return df_anomalies
 
     def _consistency_check(
@@ -457,15 +482,18 @@ class RainfallCleaner(Cleaner):
         climate_extreme_value = kwargs.get("climate_extreme_value", 122)
         gradient_limit = kwargs.get("gradient_limit", 120)
         window_size = kwargs.get("window_size", 24)
+        modify = kwargs.get("modify", False)
         # 遥感数据初级筛查
         self.data_check_yearly(
             basin_id=basin_id,
             min_true_percentage=min_true_percentage,
             min_consecutive_years=min_consecutive_years,
+            modify = modify,
         )
         # 极值监测
         self.data_check_hourly_extreme(
-            basin_id=basin_id, climate_extreme_value=climate_extreme_value
+            basin_id=basin_id, climate_extreme_value=climate_extreme_value,
+            modify=modify,
         )
         # 时间一致性监测（连续小雨量，梯度）
         self.data_check_time_series(
@@ -474,6 +502,7 @@ class RainfallCleaner(Cleaner):
             gradient_limit=gradient_limit,
             window_size=window_size,
             consistent_value=0.5,
+            modify = modify,
         )
         self.data_check_time_series(
             basin_id=basin_id,
@@ -481,23 +510,26 @@ class RainfallCleaner(Cleaner):
             gradient_limit=gradient_limit,
             window_size=window_size,
             consistent_value=0.5,
+            modify = modify,
         )
 
-
-@hydro_logger
-class RainfallAnalyzer(Cleaner):
+class RainfallAnalyzer():
     def __init__(
         self,
         data_folder=None,
         output_folder=None,
-        lower_bound=None,
-        upper_bound=None,
         logger_level=logging.INFO,
     ):
+        # 初始化 logger
+        self.logger = logging.getLogger(self.__class__.__name__)
+        self.logger.setLevel(logger_level)
+        if not self.logger.hasHandlers():
+            handler = logging.StreamHandler()
+            handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+            self.logger.addHandler(handler)
+
         self.data_folder = data_folder
         self.output_folder = output_folder
-        self.lower_bound = lower_bound
-        self.upper_bound = upper_bound
         self.logger_level = logger_level
         self.data_source_description = self.set_data_source_describe()
         self._check_file_format()
@@ -513,7 +545,7 @@ class RainfallAnalyzer(Cleaner):
             output_plot,
             "summary_log.txt",
         )
-        stations_csv_path = os.path.join(data_source_dir, "basins_pp_stations")
+        stations_csv_path = os.path.join(data_source_dir, "stations")
         # 站点表，其中ID列带有前缀‘pp_’
         shp_folder = os.path.join(data_source_dir, "basins_shp")
         return collections.OrderedDict(
@@ -556,11 +588,7 @@ class RainfallAnalyzer(Cleaner):
                 data["ID"] = file.replace(".csv", "")
                 for year, group in data.groupby(data["TM"].dt.year):
                     drp_sum = group["DRP"].sum()
-                    if self.lower_bound <= drp_sum <= self.upper_bound:
-                        self.logger.info(
-                            f"File {file} contains valid data for year {year} with DRP sum {drp_sum}"
-                        )
-                        filtered_data_list.append(group)
+                    filtered_data_list.append(group)
         if filtered_data_list:
             return pd.concat(filtered_data_list, ignore_index=True)
         else:
@@ -585,7 +613,7 @@ class RainfallAnalyzer(Cleaner):
         # station info CSV file
         stations_csv_path = os.path.join(
             self.data_source_description["STATIONS_CSV_PATH"],
-            f"{basin_id}_stations.csv",
+            f"stations.csv",
         )
         stations_df = pd.read_csv(stations_csv_path)
         stations_df = stations_df.dropna(subset=["LON", "LAT"])
@@ -704,6 +732,7 @@ class RainfallAnalyzer(Cleaner):
         ]
         for entry in log_entries:
             self.logger.info(entry + "\n")
+            continue
 
         return clipped_polygons
 
@@ -801,6 +830,7 @@ class RainfallAnalyzer(Cleaner):
         ]
         for entry in log_entries:
             self.logger.info(entry + "\n")
+            
 
     def process_basin(self, basin_id, filtered_data):
         """
@@ -826,7 +856,7 @@ class RainfallAnalyzer(Cleaner):
             if yearly_data.empty:
                 # 打印年度数据汇总并将其追加到日志文件中
                 self.logger.info(f"No valid data for basin {basin_id} in year {year}")
-                continue
+                
 
             # 筛选符合条件的每年站点数据
             yearly_stations = yearly_data["ID"].unique()
@@ -842,7 +872,7 @@ class RainfallAnalyzer(Cleaner):
                 self.logger.info(
                     f"No valid stations for basin {basin_id} in year {year}\n"
                 )
-                continue
+                
 
             thiesen_polygons_year = self.calculate_voronoi_polygons(
                 valid_stations, basin
@@ -869,6 +899,7 @@ class RainfallAnalyzer(Cleaner):
             self._concat_yearly_data(all_years_rainfall, basin_id)
         else:
             self.logger.info(f"No valid data for basin {basin_id}")
+            
 
     def _concat_yearly_data(self, all_years_rainfall, basin_id):
         final_result = pd.concat(all_years_rainfall, ignore_index=True)
