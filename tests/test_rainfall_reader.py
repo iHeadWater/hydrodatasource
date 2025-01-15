@@ -1,11 +1,11 @@
-'''
+"""
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2025-01-15 10:42:21
-LastEditors: liutiaxqabs 1498093445@qq.com
-LastEditTime: 2025-01-15 11:57:52
-FilePath: /hydrodatasource/tests/test_rainfall_reader.py
+LastEditors: Wenyu Ouyang
+LastEditTime: 2025-01-15 14:07:11
+FilePath: \hydrodatasource\tests\test_rainfall_reader.py
 Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
-'''
+"""
 
 import pytest
 import pandas as pd
@@ -29,7 +29,7 @@ def station_rainfall_reader(tmpdir):
     return RainfallReader(data_folder)
 
 
-def test_read_1station_rainfall(station_rainfall_reader,abnormal =True):
+def test_read_1station_rainfall(station_rainfall_reader, abnormal=True):
     # Test reading rainfall data for station 0001
     station_id = "0001"
     df = station_rainfall_reader.read_1station_rainfall(station_id)
