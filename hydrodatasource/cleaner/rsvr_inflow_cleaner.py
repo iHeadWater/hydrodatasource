@@ -2,7 +2,7 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-19 14:00:16
 LastEditors: Wenyu Ouyang
-LastEditTime: 2025-01-15 11:20:47
+LastEditTime: 2025-01-16 16:28:02
 FilePath: \hydrodatasource\hydrodatasource\cleaner\rsvr_inflow_cleaner.py
 Description: calculate streamflow from reservoir timeseries data
 """
@@ -36,6 +36,8 @@ class ReservoirInflowBacktrack(Cleaner):
         """
         self.data_folder = data_folder
         self.output_folder = output_folder
+        if not os.path.exists(self.output_folder):
+            os.makedirs(self.output_folder)
         self.data_source_description = self.set_data_source_describe()
         self._check_file_format()
         self.rsvr_info = self.read_rsvr_info()
@@ -225,6 +227,7 @@ class ReservoirInflowBacktrack(Cleaner):
         """
         plt.figure(figsize=(14, 7))
         plt.scatter(df["RZ"], df["W"], label="Data Points")
+        # to plot w_fit = a * rz^2 + b * rz + c, we need to set some x values and calculate the y values
         rz_range = np.linspace(df["RZ"].min(), df["RZ"].max(), 100)
         w_fit = (
             quadratic_fit_curve_coeff[0] * rz_range**2
@@ -233,7 +236,7 @@ class ReservoirInflowBacktrack(Cleaner):
         )
         plt.plot(rz_range, w_fit, color="red", label="Fitted Curve")
         plt.xlabel("RZ (m)")
-        plt.ylabel("W (10^6 m^3)")
+        plt.ylabel("W (10$^6$ m$^3$)")
         plt.legend()
         plt.title("RZ vs W with Fitted Curve")
         plot_path = os.path.join(output_folder, "fit_zw_curve.png")
@@ -326,7 +329,15 @@ class ReservoirInflowBacktrack(Cleaner):
         df = df.drop(columns=["set_nan_lower", "set_nan_upper"])
         return df
 
-    def clean_w(self, rsvr_id, file_path, output_folder, fit_method="quadratic"):
+    def clean_w(
+        self,
+        rsvr_id,
+        file_path,
+        output_folder,
+        fit_method="quadratic",
+        zw_curve_std_times=3.0,
+        remove_zw_outliers=False,
+    ):
         """
         Remove abnormal reservoir capacity data
 
@@ -341,6 +352,10 @@ class ReservoirInflowBacktrack(Cleaner):
         fit_method : str, optional
             z-w curve fitting method, by default "quadratic"
             TODO: MORE METHODS need to be supported; power is also need to be debugged
+        zw_curve_std_times: float, optional
+            the times of standard deviation to remove outliers, by default 3
+        remove_zw_outliers: bool, optional
+            whether to remove outliers for z-w curve fitting, by default False
 
         Returns
         -------
@@ -410,11 +425,26 @@ class ReservoirInflowBacktrack(Cleaner):
         )
         valid_data = data.dropna(subset=["RZ", "W"])
         valid_data, coefficients = fit_zw_curve(
-            valid_data, x_col="RZ", y_col="W", method=fit_method
+            valid_data,
+            x_col="RZ",
+            y_col="W",
+            method=fit_method,
+            threshold=zw_curve_std_times,
         )
+        # recover rows with NaN values for valid data
+        # Get the dropped rows, NOTE some rows may be dropped in fit_zw_curve
+        dropped_rows = data[~data.index.isin(valid_data.index)]
+        # Set 'RZ' and 'W' columns to NaN in the dropped rows
+        dropped_rows["RZ"] = np.nan
+        dropped_rows["W"] = np.nan
+        # Combine valid_data and dropped_rows
+        combined_data = pd.concat([valid_data, dropped_rows]).sort_index()
         self.logger.info(
             f"For {rsvr_id}, removed {len(data.dropna(subset=['RZ', 'W'])) - len(valid_data)} outliers for z-w curve fitting."
         )
+        if remove_zw_outliers:
+            # we will remove the outliers for z-w curve fitting and only use the valid data
+            data = combined_data
         # Plot RZ and W points along with the fitted curve
         self._save_fitted_zw_curve(data, coefficients, output_folder)
         # 根据拟合的多项式关系更新 W 列
@@ -427,9 +457,9 @@ class ReservoirInflowBacktrack(Cleaner):
 
         cleaned_path = os.path.join(output_folder, "去除库容异常的数据.csv")
         data["TM"] = data.index.strftime("%Y-%m-%d %H:%M:%S")
-        data.to_csv(cleaned_path, index=False)
         original_data = self._read_rsvrinflow_csv_file(file_path)
         plot_path = os.path.join(output_folder, "rsvr_w_clean.png")
+        data.to_csv(cleaned_path, index=False)
         self._plot_var_before_after_clean(original_data, data, "W", plot_path)
         return cleaned_path
 
@@ -689,21 +719,42 @@ class ReservoirInflowBacktrack(Cleaner):
         )
         return result_path
 
-    def rsvr_inflow_clean(self):
-        """The reservoir inflow data cleaning pipeline"""
+    def rsvr_inflow_clean(self, **kwargs):
+        """
+        The reservoir inflow data cleaning pipeline
+
+        Parameters
+        ----------
+        zw_curve_std_times : float
+            the times of standard deviation to remove outliers, by default 3.0
+        remove_zw_outliers : bool
+            whether to remove outliers for z-w curve fitting, by default False
+        """
         rsvr_info = self.rsvr_info
+        zw_curve_std_times = kwargs.get("zw_curve_std_times", 3.0)
+        remove_zw_outliers = kwargs.get("remove_zw_outliers", False)
         # save info file into output folder so that later we can simply read cleaned data
         rsvr_info.to_csv(os.path.join(self.output_folder, "rsvr_info.csv"), index=False)
         for i, rsvr_id in tqdm(enumerate(rsvr_info["STCD"].values)):
             file_path = rsvr_info["RSVR_INFLOW_FILES"].iloc[i]
             # Process each file step by step
-            self.process_backtract_1rsvr(rsvr_id, file_path)
+            self.process_backtract_1rsvr(
+                rsvr_id, file_path, zw_curve_std_times, remove_zw_outliers
+            )
 
-    def process_backtract_1rsvr(self, rsvr_id, file_path):
+    def process_backtract_1rsvr(
+        self, rsvr_id, file_path, zw_curve_std_times, remove_zw_outliers
+    ):
         output_folder = os.path.join(self.output_folder, rsvr_id)
         if not os.path.exists(output_folder):
             os.makedirs(output_folder)
-        cleaned_data_file = self.clean_w(rsvr_id, file_path, output_folder)
+        cleaned_data_file = self.clean_w(
+            rsvr_id,
+            file_path,
+            output_folder,
+            zw_curve_std_times=zw_curve_std_times,
+            remove_zw_outliers=remove_zw_outliers,
+        )
         # 公式计算反推
         back_data_file = self.back_calculation(
             rsvr_id, cleaned_data_file, file_path, output_folder
@@ -765,7 +816,7 @@ def _func_abcd_power(x, a, b, c, d):
     return a * x**b + c * x + d
 
 
-def fit_zw_curve(df, x_col, y_col, method="quadratic"):
+def fit_zw_curve(df, x_col, y_col, method="quadratic", threshold=3.0):
     """Fit a curve to the data using the specified method.
 
     Parameters
@@ -778,6 +829,8 @@ def fit_zw_curve(df, x_col, y_col, method="quadratic"):
         The y column to fit, such as "W"
     method : str, optional
         The fitting method, either "quadratic" or "power", by default "quadratic"
+    threshold: float, optional
+        The threshold for filtering outliers, by default 3 means 3 times of standard deviation
 
     Returns
     -------
@@ -800,7 +853,7 @@ def fit_zw_curve(df, x_col, y_col, method="quadratic"):
     if method == "quadratic":
         coefficients = np.polyfit(df[x_col], df[y_col], 2)
         residuals = calculate_residuals(df, x_col, y_col, coefficients)
-        df_ = filter_outliers(df, residuals)
+        df_ = filter_outliers(df, residuals, threshold=threshold)
         coefficients = np.polyfit(df_[x_col], df_[y_col], 2)
         return df_, coefficients
 
@@ -808,7 +861,7 @@ def fit_zw_curve(df, x_col, y_col, method="quadratic"):
         param_bounds = ([-np.inf, 0, -np.inf, -np.inf], [np.inf, 2, np.inf, np.inf])
         popt, _ = curve_fit(_func_abcd_power, df[x_col], df[y_col], bounds=param_bounds)
         residuals = calculate_residuals(df, x_col, y_col, popt, _func_abcd_power)
-        df_ = filter_outliers(df, residuals)
+        df_ = filter_outliers(df, residuals, threshold=threshold)
         popt, _ = curve_fit(
             _func_abcd_power, df_[x_col], df_[y_col], bounds=param_bounds
         )

@@ -608,7 +608,7 @@ class RainfallAnalyzer:
         for file in os.listdir(input_folder):
             if file.endswith(".csv"):
                 file_path = os.path.join(input_folder, file)
-                data = pd.read_csv(file_path)
+                data = pd.read_csv(file_path, dtype={"STCD": str})
                 data["TM"] = pd.to_datetime(data["TM"], errors="coerce")
                 data["TM"] = pd.to_datetime(
                     data["TM"], format="%Y-%m-%d %H:%M:%S.%f", errors="coerce"
@@ -781,7 +781,7 @@ class RainfallAnalyzer:
         weighted_average_rainfall - 加权平均降雨量DataFrame。
         """
         thiesen_polygons["STCD"] = thiesen_polygons["STCD"].astype(str)
-        rainfall_df["STCD"] = rainfall_df["STCD"].astype(str)
+        # rainfall_df["STCD"] = rainfall_df["STCD"].astype(str)
 
         # 合并泰森多边形和降雨数据
         merged_data = pd.merge(thiesen_polygons, rainfall_df, on="STCD")
@@ -934,8 +934,7 @@ class RainfallAnalyzer:
 
     def _concat_yearly_data(self, all_years_rainfall, basin_id):
         final_result = pd.concat(all_years_rainfall, ignore_index=True)
-        basin_output_folder = os.path.join(self.output_folder, basin_id)
-        os.makedirs(basin_output_folder, exist_ok=True)
+        basin_output_folder = self.output_folder
         output_file = os.path.join(basin_output_folder, f"{basin_id}_rainfall.csv")
         final_result.to_csv(output_file, index=False)
         self.logger.info(f"Result for basin {basin_id} saved to {output_file}")
