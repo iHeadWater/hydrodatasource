@@ -958,3 +958,5 @@ class RainfallAnalyzer:
         for basin_id in basin_ids:
             filtered_data = self.filter_and_save_csv(basin_id)
             self.process_basin(basin_id, filtered_data)
+            # release memory for plot after each basin
+            plt.close("all")
