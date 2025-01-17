@@ -11,7 +11,7 @@ from tqdm import tqdm
 import polars as pl
 
 from hydroutils import hydro_file
-#from hydroutils.hydro_time import generate_start0101_time_range
+from hydroutils.hydro_time import generate_start0101_time_range
 
 import hydrodatasource.configs.config as conf
 from hydrodatasource.configs.config import CACHE_DIR
@@ -61,7 +61,9 @@ class SelfMadeHydroDataset(HydroData):
     Only two directories are needed: attributes and timeseries
     """
 
-    def __init__(self, data_path, download=False, time_unit=None, dataset_name=None):
+    def __init__(
+        self, data_path, download=False, time_unit=None, dataset_name=None, **kwargs
+    ):
         """Initialize a self-made Caravan-style dataset.
 
         Parameters
@@ -90,6 +92,7 @@ class SelfMadeHydroDataset(HydroData):
         self.camels_sites = self.read_site_info()
         self.time_unit = time_unit
         self.dataset_name = dataset_name
+        self.version = kwargs.get("version", None)
 
     @property
     def streamflow_unit(self):
@@ -186,10 +189,8 @@ class SelfMadeHydroDataset(HydroData):
                     raise FileNotFoundError(
                         f"basinoutlets.shp not found in {basinoutlets_path}."
                     )
-            ts_dir = next(
-                dir_path
-                for dir_path in self.data_source_description["TS_DIRS"]
-                if time_unit == dir_path.split(os.sep)[-1]
+            ts_dir = self._get_ts_dir(
+                self.data_source_description["TS_DIRS"], time_unit
             )
             if start0101_freq:
                 t_range = generate_start0101_time_range(
@@ -301,11 +302,7 @@ class SelfMadeHydroDataset(HydroData):
         all_vars = {}
         for time_unit in self.time_unit:
             # Find the directory that corresponds to the current time unit
-            ts_dir = next(
-                dir_path
-                for dir_path in ts_dirs
-                if time_unit == dir_path.split(os.sep)[-1]
-            )
+            ts_dir = self._get_ts_dir(ts_dirs, time_unit)
             # Find the corresponding unit file
             unit_file = next(
                 file
@@ -326,6 +323,31 @@ class SelfMadeHydroDataset(HydroData):
             # Map the variables to the corresponding time unit
             all_vars[time_unit] = the_vars
         return all_vars
+
+    def _get_ts_dir(self, ts_dirs, time_unit):
+        """we add version for ts directory, so we need to find the correct ts directory
+
+        Parameters
+        ----------
+        ts_dirs : list
+            the list of ts directories without version
+        time_unit : str
+            the time unit
+
+        Returns
+        -------
+        _type_
+            _description_
+        """
+        ts_dir = next(
+            dir_path for dir_path in ts_dirs if time_unit == dir_path.split(os.sep)[-1]
+        )
+        version = self.version
+        ts_dir = (
+            ts_dir + f"_{version}" if version is not None and version != "" else ts_dir
+        )
+
+        return ts_dir
 
     def _check_vars_in_unitsinfo(self, vars, unit_file=None):
         """If a var is not recorded in a units_info file, we will not use it.
@@ -513,8 +535,7 @@ class SelfMadeHydroDataset(HydroData):
                 )
 
                 # Save the dataset to a NetCDF file for the current batch and time unit
-                dataset_name = self.dataset_name
-                prefix_ = "" if dataset_name is None else dataset_name + "_"
+                prefix_ = self._get_ts_file_prefix_(self.dataset_name, self.version)
                 batch_file_path = os.path.join(
                     CACHE_DIR,
                     f"{prefix_}timeseries_{time_unit}_batch_{basin_batch[0]}_{basin_batch[-1]}.nc",
@@ -552,6 +573,7 @@ class SelfMadeHydroDataset(HydroData):
         dict: A dictionary where each key is a time unit and each value is an xarray.Dataset containing the selected gage IDs, time range, and variables.
         """
         dataset_name = self.dataset_name
+        version = self.version
         time_units = kwargs.get("time_units", self.time_unit)
         if var_lst is None:
             return None
@@ -559,7 +581,7 @@ class SelfMadeHydroDataset(HydroData):
         # Initialize a dictionary to hold datasets for each time unit
         datasets_by_time_unit = {}
 
-        prefix_ = "" if dataset_name is None else dataset_name + "_"
+        prefix_ = self._get_ts_file_prefix_(dataset_name, version)
 
         for time_unit in time_units:
             # Collect batch files specific to the current time unit
@@ -611,6 +633,12 @@ class SelfMadeHydroDataset(HydroData):
                 datasets_by_time_unit[time_unit] = xr.Dataset()
 
         return datasets_by_time_unit
+
+    def _get_ts_file_prefix_(self, dataset_name, version):
+        prefix_ = "" if dataset_name is None else dataset_name + "_"
+        # we add version for prefix_ as we will update the dataset iteratively
+        prefix_ = prefix_ + f"{version}_" if version is not None else prefix_
+        return prefix_
 
     def read_attr_xrdataset(self, gage_id_lst=None, var_lst=None, **kwargs):
         dataset_name = self.dataset_name
@@ -710,8 +738,7 @@ class SelfMadeHydroDataset_PQ(SelfMadeHydroDataset):
             )
             pl_df = pl.concat(data[time_unit])
             # Save the dataset to a Parquet file for the current batch and time unit
-            dataset_name = self.dataset_name
-            prefix_ = "" if dataset_name is None else dataset_name + "_"
+            prefix_ = self._get_ts_file_prefix_(self.dataset_name, self.version)
             batch_file_path = os.path.join(
                 CACHE_DIR,
                 f"{prefix_}timeseries_{time_unit}_batch_{basins[0]}_{basins[-1]}.parquet",
@@ -741,7 +768,6 @@ class SelfMadeHydroDataset_PQ(SelfMadeHydroDataset):
             A dictionary containing data with different time scales.
         """
         time_units = kwargs.get("time_units", ["1D"])
-        dataset_name = self.dataset_name
         start0101_freq = kwargs.get("start0101_freq", False)
 
         results = {}
@@ -760,10 +786,8 @@ class SelfMadeHydroDataset_PQ(SelfMadeHydroDataset):
                     raise FileNotFoundError(
                         f"basinoutlets.shp not found in {basinoutlets_path}."
                     )
-            ts_dir = next(
-                dir_path
-                for dir_path in self.data_source_description["TS_DIRS"]
-                if time_unit == dir_path.split(os.sep)[-1]
+            ts_dir = self._get_ts_dir(
+                self.data_source_description["TS_DIRS"], time_unit
             )
             if start0101_freq:
                 t_range = generate_start0101_time_range(
@@ -777,7 +801,7 @@ class SelfMadeHydroDataset_PQ(SelfMadeHydroDataset):
             for k in tqdm(
                 range(len(object_ids)), desc=f"Reading timeseries data with {time_unit}"
             ):
-                prefix_ = "" if dataset_name is None else dataset_name + "_"
+                prefix_ = self._get_ts_file_prefix_(self.dataset_name, self.version)
                 ts_file = os.path.join(ts_dir, prefix_ + object_ids[k] + ".csv")
                 if "s3://" in ts_file:
                     with conf.FS.open(ts_file, mode="rb") as f:
@@ -834,7 +858,6 @@ class SelfMadeHydroDataset_PQ(SelfMadeHydroDataset):
         ----------
         dict: A dictionary where each key is a time unit and each value is an xarray.Dataset containing the selected gage IDs, time range, and variables.
         """
-        dataset_name = self.dataset_name
         time_units = kwargs.get("time_units", self.time_unit)
         if var_lst is None:
             return None
@@ -843,7 +866,7 @@ class SelfMadeHydroDataset_PQ(SelfMadeHydroDataset):
         # Initialize a dictionary to hold datasets for each time unit
         datasets_by_time_unit = {}
 
-        prefix_ = "" if dataset_name is None else f"{dataset_name}_"
+        prefix_ = self._get_ts_file_prefix_(self.dataset_name, self.version)
 
         for time_unit in time_units:
             # Collect batch files specific to the current time unit
