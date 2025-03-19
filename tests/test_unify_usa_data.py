@@ -7,14 +7,12 @@ import numpy as np
 import pandas as pd
 import polars as pol
 import requests
-import tzfpy
 import urllib3 as ur
 import xarray as xr
 from geopandas import points_from_xy
 from pandas.errors import ParserError
 
 from hydrodatasource.configs.config import FS
-from hydrodatasource.reader.spliter_grid import read_streamflow_from_minio
 
 
 def test_gen_camels_hourly_shp():
@@ -30,60 +28,6 @@ def test_gen_camels_hourly_shp():
     camels_hourly_gpd_blank = camels_gpd[camels_gpd["hru_id"].isin(hourly_basin_ids)]
     camels_hourly_gpd = camels_hourly_gpd_blank[~camels_gpd["hru_id"].isin(minio_stcds)]
     camels_hourly_gpd.to_file("/home/jiaxuwu/camels_hourly_basins.shp")
-
-
-def test_read_usa_streamflow():
-    # basin_list = hdscc.FS.glob('s3://basins-origin/basin_shapefiles/**')
-    basin_list = [
-        "basin_USA_camels_01181000",
-        "basin_USA_camels_01411300",
-        "basin_USA_camels_01414500",
-        "basin_USA_camels_02016000",
-        "basin_USA_camels_02018000",
-        "basin_USA_camels_02481510",
-        "basin_USA_camels_03070500",
-        "basin_USA_camels_08324000",
-        "basin_USA_camels_11266500",
-        "basin_USA_camels_11523200",
-        "basin_USA_camels_12020000",
-        "basin_USA_camels_12167000",
-        "basin_USA_camels_14185000",
-        "basin_USA_camels_14306500",
-        "basin_CHN_songliao_21401550",
-        "basin_USA_camels_14400000",
-    ]
-    for basin_id in basin_list:
-        s3_basin_path = f"s3://basins-origin/basin_shapefiles/{basin_id}.zip"
-        basin_gpd = gpd.read_file(FS.open(s3_basin_path))
-        basin_tz = tzfpy.get_tz(
-            basin_gpd.geometry[0].centroid.x, basin_gpd.geometry[0].centroid.y
-        )
-        q_array = read_streamflow_from_minio(
-            times=[
-                ["2014-12-31 17:00:00", "2019-12-31 23:00:00"],
-                ["2020-01-01 00:00:00", "2023-12-31 23:00:00"],
-            ],
-            sta_id=basin_id.lstrip("basin_"),
-        )
-        if basin_tz == "America/Los_Angeles":
-            q_array["TM"] = q_array["TM"] + np.timedelta64(7, "h")
-        elif basin_tz == "America/Denver":
-            q_array["TM"] = q_array["TM"] + np.timedelta64(6, "h")
-        elif basin_tz == "America/Chicago":
-            q_array["TM"] = q_array["TM"] + np.timedelta64(5, "h")
-        elif basin_tz == "America/New_York":
-            q_array["TM"] = q_array["TM"] + np.timedelta64(4, "h")
-        q_array_2019 = q_array[q_array["TM"] < "2020-01-01 00:00:00"]
-        q_array_2020 = q_array[q_array["TM"] >= "2020-01-01 00:00:00"]
-        # convert degree^2 to km^2
-        basin_area = gpd.read_file(FS.open(s3_basin_path)).geometry[0].area * 12345.6789
-        # convert ft^3 to m^3
-        q_array_2020["Q"] = q_array_2020["Q"] / 35.31
-        # convert m^3 to mm/h
-        q_array_2020["Q"] = q_array_2020["Q"] / basin_area * 3.6
-        q_array_mm_h = pd.concat([q_array_2019, q_array_2020])
-        q_ds = xr.Dataset.from_dataframe(q_array_mm_h.set_index("TM"))
-        q_ds.to_netcdf(basin_id + "_streamflow.nc")
 
 
 def test_download_from_usgs():
