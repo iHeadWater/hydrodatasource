@@ -3,7 +3,7 @@ Author: Yang Wang
 Date: 2024-11-04 19:50:06
 LastEditTime: 2025-01-07 14:47:51
 LastEditors: Wenyu Ouyang
-Description: 
+Description:
 FilePath: \hydrodatasource\tests\test_463_sl_nodes.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
@@ -14,7 +14,9 @@ import sqlalchemy as sqa
 from hydrodatasource.cleaner.rsvr_inflow_cleaner import (
     ReservoirInflowBacktrack,
 )
-from hydrodatasource.cleaner.streamflow_cleaner import StreamflowCleaner  # 确保引入你的类
+from hydrodatasource.cleaner.streamflow_cleaner import (
+    StreamflowCleaner,
+)  # 确保引入你的类
 
 # network_gdf=gpd.read_file('/home/wangyang1/songliao_cut_single.shp')
 
