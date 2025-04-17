@@ -966,3 +966,344 @@ class SelfMadeHydroDataset_PQ(SelfMadeHydroDataset):
                     modis_values[idx - 1] = modis_values[idx - 1] * 8 / delta_days
         # NOTE: MODIS ET values are ACTUALLY in 0.1mm/day, so we need to convert to mm/day
         return ts_data.with_columns((modis_values * 0.1).cast(pl.Float32).get_columns())
+
+
+class SelfMadeForecastDataset(SelfMadeHydroDataset):
+    """处理预见期数据的数据源类
+
+    这个类专门用于处理预见期数据，支持多种预见期数据格式：
+    1. lead_time(lead_time) + time(time)：预报矩阵格式，两个独立维度
+    2. time(lead_time)：每个lead_time对应一个time
+    3. lead_time(time)：每个time对应一个lead_time
+    """
+
+    def __init__(self, data_path, download=False, time_unit=None):
+        """初始化预见期数据源
+
+        Parameters
+        ----------
+        data_path : str
+            数据路径
+        download : bool, optional
+            是否下载数据, by default False
+        time_unit : list, optional
+            时间单位, by default None
+        """
+        super().__init__(data_path, download, time_unit)
+
+    def read_forecast_xrdataset(
+        self,
+        basin_ids,
+        reference_date,
+        variables,
+        lead_time_selector=None,
+        num_samples=5,
+        forecast_mode="all_lead_times",
+    ):
+        """读取预见期数据
+
+        Parameters
+        ----------
+        basin_ids : list
+            流域ID列表
+        reference_date : datetime
+            参考日期
+        variables : list
+            变量列表
+        lead_time_selector : callable or list, optional
+            选择lead_time的函数或固定值列表
+        num_samples : int, optional
+            样本数量
+        forecast_mode : str, optional
+            预见期数据加载模式，可选值为：
+            - "all_lead_times": 加载所有预见期的数据（默认）
+            - "specific_day_forecasts": 加载最后一天的1-n天前的预报该天的数据
+            - "forecast_matrix": 加载预报矩阵，lead_time和time都是独立维度
+
+        Returns
+        -------
+        xr.Dataset
+            预见期数据
+        """
+        # 查找包含预见期数据的文件
+        forecast_files = self._find_forecast_files(basin_ids)
+
+        if not forecast_files:
+            raise FileNotFoundError(
+                f"未找到包含预见期数据的文件，请检查路径: {self.data_source_dir}"
+            )
+
+        # 根据forecast_mode选择不同的数据加载方式
+        if forecast_mode == "forecast_matrix":
+            return self._read_forecast_matrix(
+                forecast_files,
+                basin_ids,
+                reference_date,
+                variables,
+                lead_time_selector,
+                num_samples,
+            )
+        else:
+            return self._read_forecast_timeseries(
+                forecast_files,
+                basin_ids,
+                reference_date,
+                variables,
+                lead_time_selector,
+                num_samples,
+                forecast_mode,
+            )
+
+    def _find_forecast_files(self, basin_ids):
+        """查找包含预见期数据的文件
+
+        Parameters
+        ----------
+        basin_ids : list
+            流域ID列表
+
+        Returns
+        -------
+        list
+            文件路径列表
+        """
+        # 在数据源目录中查找包含预见期数据的文件
+        forecast_files = []
+
+        # 如果是S3路径
+        if "s3://" in self.data_source_dir:
+            # 获取所有文件
+            all_files = minio_file_list(self.data_source_dir)
+            # 筛选包含basin_id的文件
+            for basin_id in basin_ids:
+                basin_files = [
+                    os.path.join(self.data_source_dir, f)
+                    for f in all_files
+                    if basin_id in f and f.endswith(".nc")
+                ]
+                forecast_files.extend(basin_files)
+        else:
+            # 本地文件系统
+            for basin_id in basin_ids:
+                # 查找包含basin_id的nc文件
+                basin_files = [
+                    os.path.join(root, f)
+                    for root, _, files in os.walk(self.data_source_dir)
+                    for f in files
+                    if basin_id in f and f.endswith(".nc")
+                ]
+                forecast_files.extend(basin_files)
+
+        return forecast_files
+
+    def _read_forecast_matrix(
+        self,
+        forecast_files,
+        basin_ids,
+        reference_date,
+        variables,
+        lead_time_selector,
+        num_samples,
+    ):
+        """读取预报矩阵格式的预见期数据
+
+        Parameters
+        ----------
+        forecast_files : list
+            文件路径列表
+        basin_ids : list
+            流域ID列表
+        reference_date : datetime
+            参考日期
+        variables : list
+            变量列表
+        lead_time_selector : callable or list
+            选择lead_time的函数或固定值列表
+        num_samples : int
+            样本数量
+
+        Returns
+        -------
+        xr.Dataset
+            预见期数据
+        """
+        datasets = []
+
+        for file_path in forecast_files:
+            # 打开数据集
+            ds = xr.open_dataset(file_path)
+
+            # 检查数据集是否包含所需变量
+            missing_vars = [var for var in variables if var not in ds.variables]
+            if missing_vars:
+                ds.close()
+                continue
+
+            # 检查数据集是否包含lead_time和time维度
+            if "lead_time" not in ds.dims or "time" not in ds.dims:
+                ds.close()
+                continue
+
+            # 选择接近reference_date的lead_time
+            if isinstance(ds.lead_time.values[0], np.datetime64):
+                # 如果lead_time是时间格式
+                lead_times = pd.to_datetime(ds.lead_time.values)
+                # 找到最接近reference_date的lead_time
+                closest_idx = np.argmin(np.abs(lead_times - reference_date))
+                selected_lead_times = lead_times[
+                    max(0, closest_idx - num_samples // 2) : min(
+                        len(lead_times), closest_idx + num_samples // 2 + 1
+                    )
+                ]
+                ds_selected = ds.sel(lead_time=selected_lead_times)
+            else:
+                # 如果lead_time不是时间格式，选择前num_samples个
+                ds_selected = ds.isel(lead_time=slice(0, num_samples))
+
+            # 选择接近reference_date的time
+            if isinstance(ds.time.values[0], np.datetime64):
+                # 如果time是时间格式
+                times = pd.to_datetime(ds.time.values)
+                # 找到最接近reference_date的time
+                closest_idx = np.argmin(np.abs(times - reference_date))
+                selected_times = times[
+                    max(0, closest_idx) : min(len(times), closest_idx + 7)
+                ]  # 选择未来7天
+                ds_selected = ds_selected.sel(time=selected_times)
+
+            # 选择所需变量
+            ds_selected = ds_selected[variables]
+
+            # 添加到数据集列表
+            datasets.append(ds_selected)
+
+            # 关闭数据集
+            ds.close()
+
+        if not datasets:
+            raise ValueError("未找到包含所需变量和维度的预见期数据文件")
+
+        # 合并数据集
+        merged_ds = xr.merge(datasets)
+
+        return merged_ds
+
+    def _read_forecast_timeseries(
+        self,
+        forecast_files,
+        basin_ids,
+        reference_date,
+        variables,
+        lead_time_selector,
+        num_samples,
+        forecast_mode,
+    ):
+        """读取时间序列格式的预见期数据
+
+        Parameters
+        ----------
+        forecast_files : list
+            文件路径列表
+        basin_ids : list
+            流域ID列表
+        reference_date : datetime
+            参考日期
+        variables : list
+            变量列表
+        lead_time_selector : callable or list
+            选择lead_time的函数或固定值列表
+        num_samples : int
+            样本数量
+        forecast_mode : str
+            预见期数据加载模式
+
+        Returns
+        -------
+        xr.Dataset
+            预见期数据
+        """
+        # 创建lead_time（发布时间）
+        if lead_time_selector is None:
+            lead_times = [
+                reference_date - pd.Timedelta(days=i) for i in range(num_samples)
+            ]
+        elif callable(lead_time_selector):
+            hours = lead_time_selector(np.arange(1, 20), reference_date)
+            lead_times = [
+                reference_date - pd.Timedelta(hours=int(h)) for h in hours[:num_samples]
+            ]
+        else:
+            lead_times = [
+                reference_date - pd.Timedelta(hours=int(lt))
+                for lt in lead_time_selector[:num_samples]
+            ]
+
+        # 创建时间序列（目标时间）
+        if forecast_mode == "specific_day_forecasts":
+            # 模式1：加载最后一天的1-n天前的预报该天的数据
+            times = [reference_date] * len(lead_times)
+        else:
+            # 模式2：加载1-n天预见期的数据
+            times = [reference_date + pd.Timedelta(days=i) for i in range(num_samples)]
+
+        datasets = []
+
+        for file_path in forecast_files:
+            # 打开数据集
+            ds = xr.open_dataset(file_path)
+
+            # 检查数据集是否包含所需变量
+            missing_vars = [var for var in variables if var not in ds.variables]
+            if missing_vars:
+                ds.close()
+                continue
+
+            # 提取basin_id
+            basin_id = None
+            for bid in basin_ids:
+                if bid in file_path:
+                    basin_id = bid
+                    break
+
+            if basin_id is None:
+                ds.close()
+                continue
+
+            # 选择所需变量
+            ds_selected = ds[variables]
+
+            # 如果数据集中没有basin维度，添加basin维度
+            if "basin" not in ds_selected.dims:
+                ds_selected = ds_selected.expand_dims(dim={"basin": [basin_id]})
+
+            # 添加到数据集列表
+            datasets.append(ds_selected)
+
+            # 关闭数据集
+            ds.close()
+
+        if not datasets:
+            raise ValueError("未找到包含所需变量的预见期数据文件")
+
+        # 合并数据集
+        merged_ds = xr.concat(datasets, dim="basin")
+
+        # 添加lead_time和time坐标
+        if forecast_mode == "specific_day_forecasts":
+            # 模式1：time是固定的，lead_time是变化的
+            merged_ds = merged_ds.assign_coords(lead_time=lead_times)
+            merged_ds = merged_ds.assign_coords(time=("lead_time", times))
+        else:
+            # 模式2：lead_time和time都是变化的
+            merged_ds = merged_ds.assign_coords(lead_time=lead_times)
+            merged_ds = merged_ds.assign_coords(time=("lead_time", times))
+
+        return merged_ds
+
+
+# 将SelfMadeForecastDataset添加到data_sources_dict中
+data_sources_dict = {
+    "selfmadehydrodataset": SelfMadeHydroDataset,
+    "selfmadeforecastdataset": SelfMadeForecastDataset,
+    # ... 其他数据源 ...
+}
