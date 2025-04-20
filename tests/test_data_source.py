@@ -1,10 +1,10 @@
 """
 Author: Wenyu Ouyang
 Date: 2024-07-06 19:20:59
-LastEditTime: 2024-11-05 08:56:42
+LastEditTime: 2025-04-19 19:44:12
 LastEditors: Wenyu Ouyang
 Description: Test funcs for data source
-FilePath: \hydrodatasource\tests\test_data_source.py
+FilePath: /hydrodatasource/tests/test_data_source.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 
@@ -15,8 +15,8 @@ import pytest
 import xarray as xr
 from hydrodatasource.configs.config import CACHE_DIR, SETTING
 from hydrodatasource.reader.data_source import (
+    SelfMadeForecastDataset,
     SelfMadeHydroDataset,
-    SelfMadeHydroDataset_PQ,
 )
 
 
@@ -36,17 +36,6 @@ def three_hour_dataset():
     # minio
     # selfmadehydrodataset_path = "s3://basins-interim"
     return SelfMadeHydroDataset(data_path=selfmadehydrodataset_path, time_unit=["3h"])
-
-
-@pytest.fixture
-def three_hour_pqdataset():
-    # local
-    selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
-    # minio
-    # selfmadehydrodataset_path = "s3://basins-interim"
-    return SelfMadeHydroDataset_PQ(
-        data_path=selfmadehydrodataset_path, time_unit=["3h"]
-    )
 
 
 @pytest.fixture
@@ -307,3 +296,59 @@ def test_read_mean_prcp_invalid_unit(one_day_dataset):
         one_day_dataset.read_mean_prcp(
             gage_id_lst=["camels_01013500", "camels_01022500"], unit="invalid_unit"
         )
+
+
+@pytest.mark.parametrize(
+    "object_ids, t_range_list, relevant_cols, expected_exception",
+    [
+        (None, ["2020-01-01", "2020-01-05"], ["streamflow"], ValueError),
+        (["basin_1"], None, ["streamflow"], ValueError),
+        (["basin_1"], ["2020-01-01", "2020-01-05"], None, ValueError),
+        ([], ["2020-01-01", "2020-01-05"], ["streamflow"], ValueError),
+        (["basin_1"], [], ["streamflow"], ValueError),
+        (["basin_1"], ["2020-01-01", "2020-01-05"], [], ValueError),
+    ],
+)
+def test_read_forecast_invalid_args(
+    one_day_dataset, object_ids, t_range_list, relevant_cols, expected_exception
+):
+    with pytest.raises(expected_exception):
+        one_day_dataset.read_forecast(
+            object_ids=object_ids,
+            t_range_list=t_range_list,
+            relevant_cols=relevant_cols,
+        )
+
+
+@pytest.fixture
+def one_day_forecast_dataset():
+    # local
+    selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
+    # minio
+    # selfmadehydrodataset_path = "s3://basins-interim"
+    return SelfMadeForecastDataset(data_path=selfmadehydrodataset_path)
+
+
+def test_read_forecast_multiple_basins_all_exist(mocker, one_day_forecast_dataset):
+    mocker.patch.object(
+        one_day_forecast_dataset,
+        "data_source_description",
+        {"FORECAST_DIR": "/mock/forecast_dir"},
+    )
+    mocker.patch("os.path.exists", return_value=True)
+    mock_data = pd.DataFrame(
+        {
+            "date": pd.date_range("2020-01-01", periods=3),
+            "forecast_date": pd.date_range("2020-01-01", periods=3),
+            "streamflow": [1.0, 2.0, 3.0],
+        }
+    )
+    mocker.patch("pandas.read_csv", return_value=mock_data)
+    result = one_day_forecast_dataset.read_forecast(
+        object_ids=["basin_1", "basin_2"],
+        t_range_list=["2020-01-01", "2020-01-03"],
+        relevant_cols=["streamflow"],
+    )
+    assert isinstance(result, dict)
+    assert "basin_1" in result and "basin_2" in result
+    assert all(isinstance(df, pd.DataFrame) for df in result.values())

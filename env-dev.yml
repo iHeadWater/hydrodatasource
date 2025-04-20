@@ -46,3 +46,4 @@ dependencies:
     - wheel
     - twine
     - bump2version
+    - pytest-mock
