@@ -7,6 +7,9 @@ dependencies:
   - python=3.11
   - geopandas
   - requests
+  - scipy=1.14
+  # some funcs in scipy signal are moved to pywavelets in 1.15
+  # - pywavelets
   # for excel
   - openpyxl=3.1
   - xlrd
