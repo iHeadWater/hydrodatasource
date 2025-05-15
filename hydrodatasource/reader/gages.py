@@ -1,7 +1,7 @@
 """
 Author: Wenyu Ouyang
 Date: 2021-12-05 11:21:58
-LastEditTime: 2025-05-13 21:24:34
+LastEditTime: 2025-05-14 14:13:37
 LastEditors: Wenyu Ouyang
 Description: Data source class for Gages
 FilePath: \hydrodatasource\hydrodatasource\reader\gages.py
@@ -587,7 +587,7 @@ class Gages(HydroData):
                 out[s] = data_all[s].values.tolist()
             else:
                 out[s] = data_all[s].values
-        return out
+        return pd.DataFrame(out)
 
     def prepare_usgs_data(self):
         hydro_logger.info(
