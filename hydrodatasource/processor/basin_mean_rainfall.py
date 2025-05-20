@@ -262,3 +262,44 @@ def _plot_voronoi_polygons(arg0, ax, basin, arg3):
     arg0.plot(ax=ax, edgecolor="black")
     basin.boundary.plot(ax=ax, color="red")
     ax.set_title(arg3)
+
+
+def stations_within_basin(basin_gdf, station_gdf, buffer_m=0, basin_crs_epsg=3857):
+    """
+    Get stations within the buffered basin boundary
+    Parameters
+    ----------
+    basin_gdf : GeoDataFrame
+        GeoDataFrame containing the basin shapefile
+    station_gdf : GeoDataFrame
+        GeoDataFrame containing the station shapefile
+    buffer_m : float
+        Buffer distance in meters, default 0
+    basin_crs_epsg : int
+        EPSG code for projected coordinate system, default 3857 (in meters)
+    Returns
+    -------
+    GeoDataFrame
+        Stations within the buffered basin boundary
+    """
+    # Project to coordinate system in meters
+    basin_proj = basin_gdf.to_crs(epsg=basin_crs_epsg)
+    station_proj = station_gdf.to_crs(epsg=basin_crs_epsg)
+    # Add buffer to basin
+    basin_proj = basin_proj.copy()
+    basin_proj["geometry"] = basin_proj.geometry.buffer(buffer_m)
+    # Convert back to original coordinate system
+    basin_buffered = basin_proj.to_crs(basin_gdf.crs)
+    station_proj = station_proj.to_crs(basin_gdf.crs)
+    return gpd.sjoin(station_proj, basin_buffered, how="inner", predicate="within")
+
+
+if __name__ == "__main__":
+    basin_gdf = gpd.read_file(
+        r"D:\Code\songliaodb_analysis\data\11rsvr_basins_shp\20800900-柴河水库                      .shp"
+    )
+    station_gdf = gpd.read_file(
+        r"D:\Code\songliaodb_analysis\results\chn_dllg_data\all_stations.shp"
+    )
+    stations = stations_within_basin(basin_gdf, station_gdf, buffer_m=200)
+    print(stations)
