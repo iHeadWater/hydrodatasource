@@ -2,23 +2,25 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-19 14:00:06
 LastEditors: Wenyu Ouyang
-LastEditTime: 2025-01-16 11:31:37
+LastEditTime: 2025-05-20 12:00:37
 FilePath: \hydrodatasource\hydrodatasource\cleaner\rainfall_cleaner.py
 Description: data preprocessing for station gauged rainfall data
 """
 
 import collections
 import logging
-import numpy as np
 import pandas as pd
 import os
 import geopandas as gpd
 import matplotlib.pyplot as plt
-from shapely.geometry import Point, Polygon
-from scipy.spatial import Voronoi
+from shapely.geometry import Point
 from geopandas.tools import sjoin
 from tqdm import tqdm
 from hydroutils.hydro_log import hydro_logger
+from hydrodatasource.processor.basin_mean_rainfall import (
+    calculate_thiesen_polygons,
+    calculate_weighted_rainfall,
+)
 from hydrodatasource.cleaner.cleaner import Cleaner
 
 
@@ -683,116 +685,6 @@ class RainfallAnalyzer:
         self.logger.debug(stations_within_basin)
         return stations_within_basin
 
-    def calculate_voronoi_polygons(self, stations, basin):
-        """
-        计算泰森多边形并裁剪至流域边界。
-
-        参数：
-        stations - 位于流域内部的站点GeoDataFrame。
-        basin - 流域shapefile的GeoDataFrame。
-
-        返回：
-        clipped_polygons - 裁剪后的泰森多边形GeoDataFrame。
-        """
-        if len(stations) < 2:
-            stations["original_area"] = np.nan
-            stations["clipped_area"] = np.nan
-            stations["area_ratio"] = 1.0
-            return stations
-
-        # 获取流域边界的最小和最大坐标，构建边界框
-        x_min, y_min, x_max, y_max = basin.total_bounds
-
-        # 扩展边界框
-        x_min -= 1.0 * (x_max - x_min)
-        x_max += 1.0 * (x_max - x_min)
-        y_min -= 1.0 * (y_max - y_min)
-        y_max += 1.0 * (y_max - y_min)
-
-        bounding_box = np.array(
-            [[x_min, y_min], [x_max, y_min], [x_max, y_max], [x_min, y_max]]
-        )
-
-        # 提取站点坐标
-        points = np.array([point.coords[0] for point in stations.geometry])
-
-        # 将站点坐标与边界框点结合，确保Voronoi多边形覆盖整个流域
-        points_extended = np.concatenate((points, bounding_box), axis=0)
-
-        # 计算Voronoi图
-        vor = Voronoi(points_extended)
-
-        # 提取每个点对应的Voronoi区域
-        regions = [vor.regions[vor.point_region[i]] for i in range(len(points))]
-
-        # 生成多边形
-        polygons = [
-            Polygon([vor.vertices[i] for i in region if i != -1])
-            for region in regions
-            if -1 not in region
-        ]
-
-        # 创建GeoDataFrame
-        gdf_polygons = gpd.GeoDataFrame(geometry=polygons, crs=stations.crs)
-        gdf_polygons["STCD"] = stations["STCD"].values
-        gdf_polygons["original_area"] = gdf_polygons.geometry.area
-
-        # 计算流域的总面积
-        basin_area = basin.geometry.area.sum()
-        self.logger.debug(f"Basin area: {basin_area}")
-
-        # 计算原始泰森多边形的总面积
-        total_original_area = gdf_polygons["original_area"].sum()
-        self.logger.debug(
-            f"Total original Voronoi polygons area: {total_original_area}"
-        )
-
-        # 将多边形裁剪到流域边界
-        clipped_polygons = gpd.clip(gdf_polygons, basin)
-        clipped_polygons["clipped_area"] = clipped_polygons.geometry.area
-        clipped_polygons["area_ratio"] = (
-            clipped_polygons["clipped_area"] / clipped_polygons["clipped_area"].sum()
-        )
-
-        # 计算裁剪后泰森多边形的总面积
-        total_clipped_area = clipped_polygons["clipped_area"].sum()
-        self.logger.debug(f"Total clipped Voronoi polygons area: {total_clipped_area}")
-
-        # 打印年度数据汇总并将其追加到日志文件中
-        log_entries = [
-            f"Basin area: {basin_area}",
-            f"Total original Voronoi polygons area: {total_original_area}",
-            f"Total clipped Voronoi polygons area: {total_clipped_area}",
-        ]
-        for entry in log_entries:
-            self.logger.info(entry + "\n")
-
-        return clipped_polygons
-
-    def calculate_weighted_rainfall(self, thiesen_polygons, rainfall_df):
-        """
-        计算加权平均降雨量。
-
-        参数：
-        thiesen_polygons - 泰森多边形GeoDataFrame。
-        rainfall_df - 降雨数据DataFrame。
-
-        返回：
-        weighted_average_rainfall - 加权平均降雨量DataFrame。
-        """
-        thiesen_polygons["STCD"] = thiesen_polygons["STCD"].astype(str)
-        # rainfall_df["STCD"] = rainfall_df["STCD"].astype(str)
-
-        # 合并泰森多边形和降雨数据
-        merged_data = pd.merge(thiesen_polygons, rainfall_df, on="STCD")
-
-        # 计算加权降雨量
-        merged_data["weighted_rainfall"] = (
-            merged_data["DRP"] * merged_data["area_ratio"]
-        )
-
-        return merged_data.groupby("TM")["weighted_rainfall"].sum().reset_index()
-
     def display_results(
         self,
         year,
@@ -906,10 +798,9 @@ class RainfallAnalyzer:
                 )
                 continue
 
-            thiesen_polygons_year = self.calculate_voronoi_polygons(
-                valid_stations, basin
-            )
-            average_rainfall = self.calculate_weighted_rainfall(
+            thiesen_polygons_year = calculate_thiesen_polygons(valid_stations, basin)
+            # TODO: calculate_weighted_rainfall will be deprecated in the future
+            average_rainfall = calculate_weighted_rainfall(
                 thiesen_polygons_year, yearly_data
             )
             average_rainfall.columns = ["TM", "mean_rainfall"]
