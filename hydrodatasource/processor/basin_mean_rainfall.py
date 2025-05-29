@@ -39,14 +39,14 @@ def read_data(rainfall_data_paths: list, head="local", check_time=None):
 
 def calculate_thiesen_polygons(stations, basin):
     """
-    计算泰森多边形并裁剪至流域边界。
+    Calculate Thiessen polygons and clip to basin boundary.
 
     Parameters:
     ------------
     stations: GeoDataFrame
-        位于流域内部的站点
+        stations within the basin
     basin: GeoDataFrame
-        流域shapefile
+        basin shapefile
 
     Returns:
     ---------
@@ -59,10 +59,10 @@ def calculate_thiesen_polygons(stations, basin):
         stations["area_ratio"] = 1.0
         return stations
 
-    # 获取流域边界的最小和最大坐标，构建边界框
+    # get the minimum and maximum coordinates of the basin boundary, and build the bounding box
     x_min, y_min, x_max, y_max = basin.total_bounds
 
-    # 扩展边界框
+    # extend the bounding box
     x_min -= 1.0 * (x_max - x_min)
     x_max += 1.0 * (x_max - x_min)
     y_min -= 1.0 * (y_max - y_min)
@@ -72,31 +72,31 @@ def calculate_thiesen_polygons(stations, basin):
         [[x_min, y_min], [x_max, y_min], [x_max, y_max], [x_min, y_max]]
     )
 
-    # 提取站点坐标
+    # extract the coordinates of the stations
     points = np.array([point.coords[0] for point in stations.geometry])
 
-    # 将站点坐标与边界框点结合，确保Voronoi多边形覆盖整个流域
+    # combine the coordinates of the stations with the bounding box points, ensuring that the Voronoi polygons cover the entire basin
     points_extended = np.concatenate((points, bounding_box), axis=0)
 
-    # 计算Voronoi图
+    # calculate the Voronoi diagram
     vor = Voronoi(points_extended)
 
-    # 提取每个点对应的Voronoi区域
+    # extract the Voronoi region corresponding to each point
     regions = [vor.regions[vor.point_region[i]] for i in range(len(points))]
 
-    # 生成多边形
+    # generate polygons
     polygons = [
         Polygon([vor.vertices[i] for i in region if i != -1])
         for region in regions
         if -1 not in region
     ]
 
-    # 创建GeoDataFrame
+    # create a GeoDataFrame
     gdf_polygons = gpd.GeoDataFrame(geometry=polygons, crs=stations.crs)
     gdf_polygons["STCD"] = stations["STCD"].values
     gdf_polygons["original_area"] = gdf_polygons.geometry.area
 
-    # 将多边形裁剪到流域边界
+    # clip the polygons to the basin boundary
     clipped_polygons = gpd.clip(gdf_polygons, basin)
     clipped_polygons["clipped_area"] = clipped_polygons.geometry.area
     clipped_polygons["area_ratio"] = (
@@ -116,15 +116,15 @@ def calculate_voronoi_polygons(stations, basin_geom):
 
     Parameters
     ----------
-    stations : _type_
-        _description_
-    basin_geom : _type_
-        _description_
+    stations : GeoDataFrame
+        stations within the basin
+    basin_geom : GeoDataFrame
+        basin shapefile
 
     Returns
     -------
-    _type_
-        _description_
+    clipped_polygons_gdf : GeoDataFrame
+        clipped voronoi polygons
     """
 
     bounding_box = basin_geom.envelope.exterior.coords
@@ -157,7 +157,7 @@ def calculate_weighted_rainfall(
     time_name="TM",
 ):
     """
-    计算加权平均降雨量
+    Calculate weighted average rainfall.
 
     @deprecated
     Deprecated in favor of basin_mean_func.
@@ -168,19 +168,19 @@ def calculate_weighted_rainfall(
     station_weights
         the weight of each station.
     rainfall_df
-        降雨数据DataFrame。
+        rainfall data DataFrame.
 
     Returns:
     ---------
     weighted_average_rainfall
-        加权平均降雨量DataFrame
+        weighted average rainfall DataFrame.
     """
     station_weights[station_id_name] = station_weights[station_id_name].astype(str)
 
-    # 合并泰森多边形和降雨数据
+    # merge thiesen polygons and rainfall data
     merged_data = pd.merge(station_weights, rainfall_df, on=station_id_name)
 
-    # 计算加权降雨量
+    # calculate weighted rainfall
     merged_data["weighted_rainfall"] = (
         merged_data[rainfall_name] * merged_data["area_ratio"]
     )
@@ -296,10 +296,10 @@ def stations_within_basin(basin_gdf, station_gdf, buffer_m=0, basin_crs_epsg=385
 
 if __name__ == "__main__":
     basin_gdf = gpd.read_file(
-        r"D:\Code\songliaodb_analysis\data\11rsvr_basins_shp\20800900-柴河水库                      .shp"
+        r"D:\Code\songliaodb_analysis\data\11rsvr_basins_shp\21100150-大伙房水库                    .shp"
     )
     station_gdf = gpd.read_file(
         r"D:\Code\songliaodb_analysis\results\chn_dllg_data\all_stations.shp"
     )
-    stations = stations_within_basin(basin_gdf, station_gdf, buffer_m=200)
+    stations = stations_within_basin(basin_gdf, station_gdf, buffer_m=5000)
     print(stations)
