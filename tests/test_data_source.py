@@ -1,10 +1,10 @@
 """
 Author: Wenyu Ouyang
 Date: 2024-07-06 19:20:59
-LastEditTime: 2025-04-19 19:44:12
+LastEditTime: 2025-06-14 16:06:35
 LastEditors: Wenyu Ouyang
 Description: Test funcs for data source
-FilePath: /hydrodatasource/tests/test_data_source.py
+FilePath: \hydrodatasource\tests\test_data_source.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 
@@ -114,19 +114,19 @@ def test_selfmadehydrodataset_cache_timeseries_xrdataset(
     # 8D
     eight_day_dataset.cache_timeseries_xrdataset(
         time_units=["8D"],
-        t_range=["1980-01-01", "2023-12-31"],
+        trange4cache=["1980-01-01", "2023-12-31"],
         start0101_freq=True,
         batchsize=200,
     )
     # 1h
     one_hour_dataset.cache_timeseries_xrdataset(
         time_units=["1h"],
-        t_range=["1980-01-01", "2023-12-31"],
+        trange4cache=["1980-01-01", "2023-12-31"],
     )
     # 3h
     three_hour_dataset.cache_timeseries_xrdataset(
         time_units=["3h"],
-        t_range=["1980-01-01 01", "2023-12-31 22"],
+        trange4cache=["1980-01-01 01", "2023-12-31 22"],
     )
     # 1D
     one_day_dataset.cache_timeseries_xrdataset()
@@ -135,7 +135,7 @@ def test_selfmadehydrodataset_cache_timeseries_xrdataset(
 def test_selfmadehydrodataset_cache_pqds(three_hour_pqdataset):
     three_hour_pqdataset.cache_timeseries_xrdataset(
         time_units=["3h"],
-        t_range=["1980-01-01 01", "2023-12-31 22"],
+        trange4cache=["1980-01-01 01", "2023-12-31 22"],
     )
 
 
