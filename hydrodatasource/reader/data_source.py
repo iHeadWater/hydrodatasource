@@ -75,8 +75,10 @@ class SelfMadeHydroDataset(HydroData):
             _description_, by default False
         time_unit : list, optional
             we have different time units, by default None
-        dataset_name : _type_, optional
+        dataset_name : str, optional
             SelfMadeHydroDataset's name, for example, googleflood or fdsources, different dataset may use this same datasource class, by default None
+        kwargs : dict, optional
+            additional keyword arguments, by default None
         """
         if time_unit is None:
             time_unit = ["1D"]
@@ -93,7 +95,10 @@ class SelfMadeHydroDataset(HydroData):
         self.camels_sites = self.read_site_info()
         self.time_unit = time_unit
         self.dataset_name = dataset_name
+        # version is used for the version of the dataset, for example, camels_v2.0
         self.version = kwargs.get("version", None)
+        # offset_to_utc is used for the offset to UTC, for example, for Chinese basins' data, we generally set it to True as we always use 08:00 with Beijing Time
+        self.offset_to_utc = kwargs.get("offset_to_utc", None)
 
     @property
     def streamflow_unit(self):
@@ -177,23 +182,26 @@ class SelfMadeHydroDataset(HydroData):
         """
         time_units = kwargs.get("time_units", ["1D"])
         start0101_freq = kwargs.get("start0101_freq", False)
+        offset_to_utc = kwargs.get("offset_to_utc", self.offset_to_utc)
 
         results = {}
 
         for time_unit in time_units:
-            # whether to convert the time to UTC, for 1D time unit, default set False,
-            # and for 3h time unit, set True
-            offset_to_utc = time_unit == "3h"
+            # whether to convert the time to UTC, for 1D time unit, if time is Beijing Time,
+            # you need to set offset_to_utc to True in the initialization;
+            # and for 3h time unit, we will set True even if offset_to_utc is None
+            if time_unit == "3h":
+                offset_to_utc = True
             if offset_to_utc:
                 basinoutlets_path = os.path.join(
                     self.data_source_description["SHAPE_DIR"], "basinoutlets.shp"
                 )
                 try:
                     offset_dict = calculate_basin_offsets(basinoutlets_path)
-                except:
+                except FileNotFoundError as e:
                     raise FileNotFoundError(
                         f"basinoutlets.shp not found in {basinoutlets_path}."
-                    )
+                    ) from e
             ts_dir = self._get_ts_dir(
                 self.data_source_description["TS_DIRS"], time_unit
             )
@@ -468,7 +476,7 @@ class SelfMadeHydroDataset(HydroData):
             "1D"
         ]  # Default to ["1D"] if not specified or if time_units is None
         start0101_freq = kwargs.get("start0101_freq", False)
-
+        offset_to_utc = kwargs.get("offset_to_utc", self.offset_to_utc)
         variables = self.get_timeseries_cols()
         basins = self.camels_sites["basin_id"].values
 
@@ -526,6 +534,7 @@ class SelfMadeHydroDataset(HydroData):
                         time_unit
                     ],  # Pass the time unit to ensure correct data retrieval
                     start0101_freq=start0101_freq,
+                    offset_to_utc=offset_to_utc,
                 )
 
                 dataset = xr.Dataset(
