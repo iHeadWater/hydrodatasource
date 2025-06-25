@@ -99,6 +99,7 @@ class SelfMadeHydroDataset(HydroData):
         self.version = kwargs.get("version", None)
         # offset_to_utc is used for the offset to UTC, for example, for Chinese basins' data, we generally set it to True as we always use 08:00 with Beijing Time
         self.offset_to_utc = kwargs.get("offset_to_utc", None)
+        self.trange4cache = kwargs.get("trange4cache", None)
 
     @property
     def streamflow_unit(self):
@@ -459,7 +460,7 @@ class SelfMadeHydroDataset(HydroData):
         prefix_ = "" if dataset_name is None else dataset_name + "_"
         ds.to_netcdf(os.path.join(CACHE_DIR, f"{prefix_}attributes.nc"))
 
-    def cache_timeseries_xrdataset(self, trange4cache=None, **kwargs):
+    def cache_timeseries_xrdataset(self, **kwargs):
         """Save all timeseries data in separate NetCDF files for each time unit.
 
         Parameters
@@ -486,18 +487,18 @@ class SelfMadeHydroDataset(HydroData):
                 yield basins[i : i + batch_size]
 
         for time_unit in time_units:
-            if trange4cache is None:
+            if self.trange4cache is None:
                 if time_unit != "3h":
-                    trange4cache = ["1960-01-01", "2024-12-31"]
+                    self.trange4cache = ["1960-01-01", "2024-12-31"]
                 else:
-                    trange4cache = ["1960-01-01 01", "2024-12-31 22"]
+                    self.trange4cache = ["1960-01-01 01", "2024-12-31 22"]
 
             # Generate the time range specific to the time unit
             if start0101_freq:
                 times = (
                     generate_start0101_time_range(
-                        start_time=trange4cache[0],
-                        end_time=trange4cache[-1],
+                        start_time=self.trange4cache[0],
+                        end_time=self.trange4cache[-1],
                         freq=time_unit,
                     )
                     .strftime("%Y-%m-%d %H:%M:%S")
@@ -506,7 +507,9 @@ class SelfMadeHydroDataset(HydroData):
             else:
                 times = (
                     pd.date_range(
-                        start=trange4cache[0], end=trange4cache[-1], freq=time_unit
+                        start=self.trange4cache[0],
+                        end=self.trange4cache[-1],
+                        freq=time_unit,
                     )
                     .strftime("%Y-%m-%d %H:%M:%S")
                     .tolist()
@@ -526,7 +529,7 @@ class SelfMadeHydroDataset(HydroData):
             for basin_batch in data_generator(basins, batchsize):
                 data = self.read_timeseries(
                     object_ids=basin_batch,
-                    t_range_list=trange4cache,
+                    t_range_list=self.trange4cache,
                     relevant_cols=variables[
                         time_unit
                     ],  # Ensure we use the right columns for the time unit
@@ -567,7 +570,7 @@ class SelfMadeHydroDataset(HydroData):
     def cache_xrdataset(self, t_range=None, time_units=None):
         """Save all data in a netcdf file in the cache directory"""
         self.cache_attributes_xrdataset()
-        self.cache_timeseries_xrdataset(trange4cache=t_range, time_units=time_units)
+        self.cache_timeseries_xrdataset(time_units=time_units)
 
     def read_ts_xrdataset(
         self,
