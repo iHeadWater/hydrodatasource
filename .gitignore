@@ -163,3 +163,5 @@ cython_debug/
 .vscode/
 
 tests/test.py
+results/
+const4scripts_private.py

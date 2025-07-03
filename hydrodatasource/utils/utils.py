@@ -393,3 +393,12 @@ def calculate_basin_offsets(shp_file_path):
         basin_offset_dict[basin_id] = offset
 
     return basin_offset_dict
+
+
+def cal_area_from_shp(shp):
+    gdf_equal_area = shp.to_crs(epsg=6933)
+    gdf_equal_area["shp_area"] = gdf_equal_area["geometry"].area / 10**6
+    result_df = gdf_equal_area[["BASIN_ID", "shp_area"]]
+    result_df.rename(columns={"BASIN_ID": "basin_id"}, inplace=True)
+    result_df.sort_values("basin_id", inplace=True)
+    return result_df

@@ -4,9 +4,12 @@ channels:
   - anaconda
   - defaults
 dependencies:
-  - python=3.10
+  - python=3.11
   - geopandas
   - requests
+  - scipy=1.14
+  # some funcs in scipy signal are moved to pywavelets in 1.15
+  # - pywavelets
   # for excel
   - openpyxl=3.1
   - xlrd
@@ -30,7 +33,6 @@ dependencies:
   - pytest-asyncio
   - black
   - flake8
-  - twine
   - mkdocstrings
   - mkdocstrings-python
   - mkdocs-git-revision-date-plugin
@@ -46,3 +48,4 @@ dependencies:
     - wheel
     - twine
     - bump2version
+    - pytest-mock

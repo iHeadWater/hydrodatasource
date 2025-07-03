@@ -1,9 +1,9 @@
 """
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-19 14:00:27
-LastEditors: liutiaxqabs 1498093445@qq.com
-LastEditTime: 2024-04-24 13:48:19
-FilePath: /hydrodatasource/hydrodatasource/cleaner/waterlevel_cleaner.py
+LastEditors: Wenyu Ouyang
+LastEditTime: 2025-01-15 11:24:17
+FilePath: \hydrodatasource\hydrodatasource\cleaner\waterlevel_cleaner.py
 Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
 """
 
@@ -14,12 +14,12 @@ from .cleaner import Cleaner
 
 class WaterlevelCleaner(Cleaner):
 
-    def __init__(self, data_path, grad_max=200, window_size=24, *args, **kwargs):
+    def __init__(self, data_folder, grad_max=200, window_size=24, *args, **kwargs):
         self.temporal_list = pd.DataFrame()  # 初始化为空的DataFrame
         self.spatial_list = pd.DataFrame()
         self.grad_max = grad_max
         self.window_size = window_size
-        super().__init__(data_path, *args, **kwargs)
+        super().__init__(data_folder, *args, **kwargs)
 
     def rolling_fill(self, waterlevel_data):
         df = waterlevel_data.copy()
@@ -85,9 +85,7 @@ class WaterlevelCleaner(Cleaner):
                     waterlevel_data=waterlevel_data
                 )
             if method == "roll":
-                waterlevel_data = self.rolling_fill(
-                    waterlevel_data=waterlevel_data
-                )
+                waterlevel_data = self.rolling_fill(waterlevel_data=waterlevel_data)
             else:
                 print("please check your method name")
 

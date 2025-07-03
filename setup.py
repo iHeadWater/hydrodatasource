@@ -1,3 +1,12 @@
+"""
+Author: Wenyu Ouyang
+Date: 2024-12-12 11:04:10
+LastEditTime: 2025-06-09 17:06:19
+LastEditors: Wenyu Ouyang
+Description: setup.py for hydrodatasource
+FilePath: \hydrodatasource\setup.py
+Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
+"""
 #!/usr/bin/env python
 
 """The setup script."""
@@ -54,6 +63,6 @@ setup(
     test_suite='tests',
     tests_require=test_requirements,
     url='https://github.com/iHeadWater/hydrodatasource',
-    version='0.0.9',
+    version='0.1.1',
     zip_safe=False,
 )

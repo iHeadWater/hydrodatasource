@@ -1,7 +1,7 @@
 """
 Author: Wenyu Ouyang
 Date: 2024-07-06 19:20:59
-LastEditTime: 2024-11-05 08:56:42
+LastEditTime: 2025-06-14 16:06:35
 LastEditors: Wenyu Ouyang
 Description: Test funcs for data source
 FilePath: \hydrodatasource\tests\test_data_source.py
@@ -13,8 +13,11 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
-from hydrodatasource.configs.config import SETTING
-from hydrodatasource.reader.data_source import CACHE_DIR, SelfMadeHydroDataset, SelfMadeHydroDataset_PQ
+from hydrodatasource.configs.config import CACHE_DIR, SETTING
+from hydrodatasource.reader.data_source import (
+    SelfMadeForecastDataset,
+    SelfMadeHydroDataset,
+)
 
 
 @pytest.fixture
@@ -34,13 +37,6 @@ def three_hour_dataset():
     # selfmadehydrodataset_path = "s3://basins-interim"
     return SelfMadeHydroDataset(data_path=selfmadehydrodataset_path, time_unit=["3h"])
 
-@pytest.fixture
-def three_hour_pqdataset():
-    # local
-    selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
-    # minio
-    # selfmadehydrodataset_path = "s3://basins-interim"
-    return SelfMadeHydroDataset_PQ(data_path=selfmadehydrodataset_path, time_unit=["3h"])
 
 @pytest.fixture
 def one_day_dataset():
@@ -118,28 +114,30 @@ def test_selfmadehydrodataset_cache_timeseries_xrdataset(
     # 8D
     eight_day_dataset.cache_timeseries_xrdataset(
         time_units=["8D"],
-        t_range=["1980-01-01", "2023-12-31"],
+        trange4cache=["1980-01-01", "2023-12-31"],
         start0101_freq=True,
         batchsize=200,
     )
     # 1h
     one_hour_dataset.cache_timeseries_xrdataset(
         time_units=["1h"],
-        t_range=["1980-01-01", "2023-12-31"],
+        trange4cache=["1980-01-01", "2023-12-31"],
     )
     # 3h
     three_hour_dataset.cache_timeseries_xrdataset(
         time_units=["3h"],
-        t_range=["1980-01-01 01", "2023-12-31 22"],
+        trange4cache=["1980-01-01 01", "2023-12-31 22"],
     )
     # 1D
     one_day_dataset.cache_timeseries_xrdataset()
 
+
 def test_selfmadehydrodataset_cache_pqds(three_hour_pqdataset):
     three_hour_pqdataset.cache_timeseries_xrdataset(
         time_units=["3h"],
-        t_range=["1980-01-01 01", "2023-12-31 22"],
+        trange4cache=["1980-01-01 01", "2023-12-31 22"],
     )
+
 
 def test_selfmadehydrodataset_cache_xrdataset(one_day_dataset):
     one_day_dataset.cache_xrdataset()
@@ -219,6 +217,7 @@ def test_selfmadehydrodataset_read_ts_xrdataset(
         xrdataset_dict["1D"]["streamflow"].values, target_cols["1D"][:, :, 0]
     )
 
+
 def test_read_pdts_cache(three_hour_pqdataset):
     pqdataset_dict = three_hour_pqdataset.read_ts_xrdataset(
         gage_id_lst=["camels_01013500", "camels_01022500"],
@@ -227,6 +226,7 @@ def test_read_pdts_cache(three_hour_pqdataset):
         time_units=["3h"],
     )
     assert isinstance(pqdataset_dict, dict)
+
 
 def test_selfmadehydrodataset_read_attr_xrdataset(one_day_dataset):
     xrdataset = one_day_dataset.read_attr_xrdataset(
@@ -296,3 +296,59 @@ def test_read_mean_prcp_invalid_unit(one_day_dataset):
         one_day_dataset.read_mean_prcp(
             gage_id_lst=["camels_01013500", "camels_01022500"], unit="invalid_unit"
         )
+
+
+@pytest.mark.parametrize(
+    "object_ids, t_range_list, relevant_cols, expected_exception",
+    [
+        (None, ["2020-01-01", "2020-01-05"], ["streamflow"], ValueError),
+        (["basin_1"], None, ["streamflow"], ValueError),
+        (["basin_1"], ["2020-01-01", "2020-01-05"], None, ValueError),
+        ([], ["2020-01-01", "2020-01-05"], ["streamflow"], ValueError),
+        (["basin_1"], [], ["streamflow"], ValueError),
+        (["basin_1"], ["2020-01-01", "2020-01-05"], [], ValueError),
+    ],
+)
+def test_read_forecast_invalid_args(
+    one_day_dataset, object_ids, t_range_list, relevant_cols, expected_exception
+):
+    with pytest.raises(expected_exception):
+        one_day_dataset.read_forecast(
+            object_ids=object_ids,
+            t_range_list=t_range_list,
+            relevant_cols=relevant_cols,
+        )
+
+
+@pytest.fixture
+def one_day_forecast_dataset():
+    # local
+    selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
+    # minio
+    # selfmadehydrodataset_path = "s3://basins-interim"
+    return SelfMadeForecastDataset(data_path=selfmadehydrodataset_path)
+
+
+def test_read_forecast_multiple_basins_all_exist(mocker, one_day_forecast_dataset):
+    mocker.patch.object(
+        one_day_forecast_dataset,
+        "data_source_description",
+        {"FORECAST_DIR": "/mock/forecast_dir"},
+    )
+    mocker.patch("os.path.exists", return_value=True)
+    mock_data = pd.DataFrame(
+        {
+            "date": pd.date_range("2020-01-01", periods=3),
+            "forecast_date": pd.date_range("2020-01-01", periods=3),
+            "streamflow": [1.0, 2.0, 3.0],
+        }
+    )
+    mocker.patch("pandas.read_csv", return_value=mock_data)
+    result = one_day_forecast_dataset.read_forecast(
+        object_ids=["basin_1", "basin_2"],
+        t_range_list=["2020-01-01", "2020-01-03"],
+        relevant_cols=["streamflow"],
+    )
+    assert isinstance(result, dict)
+    assert "basin_1" in result and "basin_2" in result
+    assert all(isinstance(df, pd.DataFrame) for df in result.values())
