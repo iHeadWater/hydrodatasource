@@ -1108,3 +1108,525 @@ class SelfMadeForecastDataset(SelfMadeHydroDataset):
             results[basin_id] = df.reset_index(drop=True)
 
         return results
+
+
+class StationHydroDataset(SelfMadeHydroDataset):
+    """A class for reading hydrodataset with additional station data.
+
+    This class extends SelfMadeHydroDataset to handle datasets that include
+    a stations folder containing individual station data and basin-station
+    relationship information.
+
+    Directory structure:
+    - attributes/
+    - shapes/
+    - timeseries/
+    - stations/
+      - 1D/                              # Daily data for all stations
+      - 3h/                              # 3h data for all stations
+      - basin_station_info/              # Basin-station relationship info
+        - all_basin_station_mapping.csv
+        - basin_summary.csv
+        - basin_xxx_stations.csv
+        - adjacency_xxx_True.csv
+    """
+
+    def __init__(
+        self, data_path, download=False, time_unit=None, dataset_name=None, **kwargs
+    ):
+        """Initialize StationHydroDataset.
+
+        Parameters
+        ----------
+        data_path : str
+            Path to the dataset directory
+        download : bool, optional
+            Whether to download data, by default False
+        time_unit : list, optional
+            Time units for the data, by default None
+        dataset_name : str, optional
+            Name of the dataset, by default None
+        **kwargs : dict
+            Additional keyword arguments passed to parent class
+        """
+        super().__init__(data_path, download, time_unit, dataset_name, **kwargs)
+        self.station_info = None
+        self.basin_station_mapping = None
+
+    def set_data_source_describe(self):
+        """Set data source description including stations directory."""
+        # Get the base description from parent class
+        data_source_description = super().set_data_source_describe()
+
+        # Add stations-related paths
+        data_root_dir = self.data_source_dir
+        stations_dir = os.path.join(data_root_dir, "stations")
+        station_ts_dirs = self._where_ts_dir(stations_dir)
+        basin_station_info_dir = os.path.join(stations_dir, "basin_station_info")
+
+        # Add stations paths to description
+        data_source_description["STATIONS_DIR"] = stations_dir
+        data_source_description["STATION_TS_DIRS"] = station_ts_dirs
+        data_source_description["BASIN_STATION_INFO_DIR"] = basin_station_info_dir
+
+        return data_source_description
+
+    def read_station_info(self):
+        """Read basic station information and basin-station mapping."""
+        info_dir = self.data_source_description["BASIN_STATION_INFO_DIR"]
+
+        # Read all_basin_station_mapping.csv
+        mapping_file = os.path.join(info_dir, "all_basin_station_mapping.csv")
+        if "s3://" in mapping_file:
+            with conf.FS.open(mapping_file, mode="rb") as f:
+                mapping_data = pd.read_csv(
+                    f, dtype={"basin_id": str, "station_id": str}
+                )
+        else:
+            mapping_data = pd.read_csv(
+                mapping_file, dtype={"basin_id": str, "station_id": str}
+            )
+
+        # Read basin_summary.csv
+        summary_file = os.path.join(info_dir, "basin_summary.csv")
+        if "s3://" in summary_file:
+            with conf.FS.open(summary_file, mode="rb") as f:
+                summary_data = pd.read_csv(f, dtype={"basin_id": str})
+        else:
+            summary_data = pd.read_csv(summary_file, dtype={"basin_id": str})
+
+        self.basin_station_mapping = mapping_data
+        self.station_info = summary_data
+
+        return mapping_data, summary_data
+
+    def read_station_object_ids(self) -> np.array:
+        """Get all station IDs."""
+        if self.basin_station_mapping is None:
+            self.read_station_info()
+        return self.basin_station_mapping["station_id"].unique()
+
+    def read_basin_stations(self, basin_id: str) -> pd.DataFrame:
+        """Read detailed station information for a specific basin.
+
+        Parameters
+        ----------
+        basin_id : str
+            Basin ID
+
+        Returns
+        -------
+        pd.DataFrame
+            Station details for the basin
+        """
+        info_dir = self.data_source_description["BASIN_STATION_INFO_DIR"]
+        station_file = os.path.join(info_dir, f"basin_{basin_id}_stations.csv")
+
+        if "s3://" in station_file:
+            with conf.FS.open(station_file, mode="rb") as f:
+                station_data = pd.read_csv(f, dtype={"station_id": str})
+        else:
+            station_data = pd.read_csv(station_file, dtype={"station_id": str})
+
+        return station_data
+
+    def read_basin_adjacency(self, basin_id: str) -> pd.DataFrame:
+        """Read adjacency matrix for a specific basin.
+
+        Parameters
+        ----------
+        basin_id : str
+            Basin ID
+
+        Returns
+        -------
+        pd.DataFrame
+            Adjacency matrix for stations in the basin
+        """
+        info_dir = self.data_source_description["BASIN_STATION_INFO_DIR"]
+        adjacency_file = os.path.join(info_dir, f"adjacency_{basin_id}_True.csv")
+
+        if "s3://" in adjacency_file:
+            with conf.FS.open(adjacency_file, mode="rb") as f:
+                adjacency_data = pd.read_csv(f, index_col=0)
+        else:
+            adjacency_data = pd.read_csv(adjacency_file, index_col=0)
+
+        return adjacency_data
+
+    def read_station_timeseries(
+        self, station_ids=None, t_range_list: list = None, relevant_cols=None, **kwargs
+    ) -> dict:
+        """Read timeseries data for stations.
+
+        Parameters
+        ----------
+        station_ids : list, optional
+            List of station IDs, by default None
+        t_range_list : list, optional
+            Time range [start_time, end_time], by default None
+        relevant_cols : list, optional
+            List of relevant columns, by default None
+        **kwargs : dict
+            Additional keyword arguments
+
+        Returns
+        -------
+        dict
+            Dictionary containing data with different time scales
+        """
+        time_units = kwargs.get("time_units", ["1D"])
+        start0101_freq = kwargs.get("start0101_freq", False)
+        offset_to_utc = kwargs.get("offset_to_utc", self.offset_to_utc)
+
+        results = {}
+
+        for time_unit in time_units:
+            if time_unit == "3h":
+                offset_to_utc = True
+
+            # Get station data directory for this time unit
+            station_ts_dir = self._get_station_ts_dir(
+                self.data_source_description["STATION_TS_DIRS"], time_unit
+            )
+
+            if start0101_freq:
+                t_range = generate_start0101_time_range(
+                    start_time=t_range_list[0],
+                    end_time=t_range_list[-1],
+                    freq=time_unit,
+                )
+            else:
+                t_range = pd.date_range(
+                    start=t_range_list[0], end=t_range_list[-1], freq=time_unit
+                )
+
+            nt = len(t_range)
+            x = np.full([len(station_ids), nt, len(relevant_cols)], np.nan)
+
+            for k in tqdm(
+                range(len(station_ids)), desc=f"Reading station data with {time_unit}"
+            ):
+                station_file = os.path.join(
+                    station_ts_dir,
+                    station_ids[k] + ".csv",
+                )
+
+                if "s3://" in station_file:
+                    with conf.FS.open(station_file, mode="rb") as f:
+                        station_data = pd.read_csv(f, engine="c")
+                else:
+                    station_data = pd.read_csv(station_file, engine="c")
+
+                date = pd.to_datetime(station_data["time"]).values
+                if offset_to_utc:
+                    # For station data, we might need a different offset handling
+                    # For now, use a default offset, but this could be customized
+                    date = date - np.timedelta64(8, "h")  # Default Beijing time offset
+
+                [_, ind1, ind2] = np.intersect1d(date, t_range, return_indices=True)
+
+                for j in range(len(relevant_cols)):
+                    if relevant_cols[j] in station_data.columns:
+                        tmp_ = station_data[relevant_cols[j]].values
+                        x[k, ind2, j] = tmp_[ind1]
+
+            results[time_unit] = x
+
+        return results
+
+    def _get_station_ts_dir(self, station_ts_dirs, time_unit):
+        """Get the station timeseries directory for a specific time unit."""
+        station_ts_dir = next(
+            dir_path
+            for dir_path in station_ts_dirs
+            if time_unit == dir_path.split(os.sep)[-1]
+        )
+        version = self.version
+        station_ts_dir = (
+            station_ts_dir + f"_{version}"
+            if version is not None and version != ""
+            else station_ts_dir
+        )
+        return station_ts_dir
+
+    def cache_station_timeseries_xrdataset(self, **kwargs):
+        """Cache all station timeseries data in separate NetCDF files.
+
+        Parameters
+        ----------
+        **kwargs : dict
+            batchsize -- Number of stations to process per batch, by default 100
+            time_units -- List of time units to process, by default None
+            start0101_freq -- Whether to use start0101 frequency, by default False
+        """
+        batchsize = kwargs.get("batchsize", 100)
+        time_units = kwargs.get("time_units", self.time_unit) or ["1D"]
+        start0101_freq = kwargs.get("start0101_freq", False)
+        offset_to_utc = kwargs.get("offset_to_utc", self.offset_to_utc)
+
+        # Get all station IDs
+        station_ids = self.read_station_object_ids()
+
+        # Define generator for batching
+        def station_data_generator(stations, batch_size):
+            for i in range(0, len(stations), batch_size):
+                yield stations[i : i + batch_size]
+
+        for time_unit in time_units:
+            if self.trange4cache is None:
+                if time_unit != "3h":
+                    self.trange4cache = ["1960-01-01", "2024-12-31"]
+                else:
+                    self.trange4cache = ["1960-01-01 01", "2024-12-31 22"]
+
+            # Generate time range
+            if start0101_freq:
+                times = (
+                    generate_start0101_time_range(
+                        start_time=self.trange4cache[0],
+                        end_time=self.trange4cache[-1],
+                        freq=time_unit,
+                    )
+                    .strftime("%Y-%m-%d %H:%M:%S")
+                    .tolist()
+                )
+            else:
+                times = (
+                    pd.date_range(
+                        start=self.trange4cache[0],
+                        end=self.trange4cache[-1],
+                        freq=time_unit,
+                    )
+                    .strftime("%Y-%m-%d %H:%M:%S")
+                    .tolist()
+                )
+
+            # Get sample station data to determine variables
+            sample_station_file = os.path.join(
+                self._get_station_ts_dir(
+                    self.data_source_description["STATION_TS_DIRS"], time_unit
+                ),
+                station_ids[0] + ".csv",
+            )
+
+            if "s3://" in sample_station_file:
+                with conf.FS.open(sample_station_file, mode="rb") as f:
+                    sample_data = pd.read_csv(f, engine="c")
+            else:
+                sample_data = pd.read_csv(sample_station_file, engine="c")
+
+            variables = [col for col in sample_data.columns if col != "time"]
+
+            # Get units info if available
+            units_info = {var: "unknown" for var in variables}
+
+            for station_batch in station_data_generator(station_ids, batchsize):
+                data = self.read_station_timeseries(
+                    station_ids=station_batch,
+                    t_range_list=self.trange4cache,
+                    relevant_cols=variables,
+                    time_units=[time_unit],
+                    start0101_freq=start0101_freq,
+                    offset_to_utc=offset_to_utc,
+                )
+
+                dataset = xr.Dataset(
+                    data_vars={
+                        variables[i]: (
+                            ["station", "time"],
+                            data[time_unit][:, :, i],
+                            {"units": units_info.get(variables[i], "unknown")},
+                        )
+                        for i in range(len(variables))
+                    },
+                    coords={
+                        "station": station_batch,
+                        "time": pd.to_datetime(times),
+                    },
+                )
+
+                # Save dataset
+                prefix_ = self._get_station_file_prefix_(
+                    self.dataset_name, self.version
+                )
+                batch_file_path = os.path.join(
+                    CACHE_DIR,
+                    f"{prefix_}stations_{time_unit}_batch_{station_batch[0]}_{station_batch[-1]}.nc",
+                )
+                dataset.to_netcdf(batch_file_path)
+
+                # Clean up memory
+                del dataset
+                del data
+
+    def cache_station_info_xrdataset(self):
+        """Cache station information and basin-station relationships."""
+        # Read station info
+        mapping_data, summary_data = self.read_station_info()
+
+        # Cache basin-station mapping
+        mapping_ds = xr.Dataset(
+            data_vars={
+                col: (["mapping_id"], mapping_data[col].values)
+                for col in mapping_data.columns
+            },
+            coords={"mapping_id": range(len(mapping_data))},
+        )
+
+        # Cache basin summary
+        summary_ds = xr.Dataset(
+            data_vars={
+                col: (["basin"], summary_data[col].values)
+                for col in summary_data.columns
+                if col != "basin_id"
+            },
+            coords={"basin": summary_data["basin_id"].values},
+        )
+
+        # Save datasets
+        dataset_name = self.dataset_name
+        prefix_ = "" if dataset_name is None else dataset_name + "_"
+
+        mapping_ds.to_netcdf(
+            os.path.join(CACHE_DIR, f"{prefix_}basin_station_mapping.nc")
+        )
+        summary_ds.to_netcdf(os.path.join(CACHE_DIR, f"{prefix_}basin_summary.nc"))
+
+    def read_station_ts_xrdataset(
+        self,
+        station_id_lst: list = None,
+        t_range: list = None,
+        var_lst: list = None,
+        **kwargs,
+    ) -> dict:
+        """Read station timeseries data from cached NetCDF files.
+
+        Parameters
+        ----------
+        station_id_lst : list, optional
+            List of station IDs to select, by default None
+        t_range : list, optional
+            Time range [start_time, end_time], by default None
+        var_lst : list, optional
+            List of variables to select, by default None
+        **kwargs : dict
+            Additional arguments
+
+        Returns
+        -------
+        dict
+            Dictionary with time units as keys and xarray.Dataset as values
+        """
+        time_units = kwargs.get("time_units", self.time_unit)
+        if var_lst is None:
+            return None
+
+        datasets_by_time_unit = {}
+        prefix_ = self._get_station_file_prefix_(self.dataset_name, self.version)
+
+        for time_unit in time_units:
+            batch_files = self._get_station_batch_files(prefix_, time_unit)
+
+            if not batch_files:
+                # Cache data if not found
+                self.cache_station_timeseries_xrdataset(**kwargs)
+                batch_files = self._get_station_batch_files(prefix_, time_unit)
+
+            selected_datasets = []
+
+            for batch_file in batch_files:
+                ds = xr.open_dataset(batch_file)
+
+                if any(var not in ds.variables for var in var_lst):
+                    raise ValueError(f"var_lst must all be in {ds.data_vars}")
+
+                if valid_station_ids := [
+                    sid for sid in station_id_lst if sid in ds["station"].values
+                ]:
+                    ds_selected = ds[var_lst].sel(
+                        station=valid_station_ids, time=slice(t_range[0], t_range[1])
+                    )
+                    selected_datasets.append(ds_selected)
+
+                ds.close()
+
+            if selected_datasets:
+                datasets_by_time_unit[time_unit] = xr.concat(
+                    selected_datasets, dim="station"
+                ).sortby("station")
+            else:
+                datasets_by_time_unit[time_unit] = xr.Dataset()
+
+        return datasets_by_time_unit
+
+    def read_station_info_xrdataset(self, **kwargs):
+        """Read station information from cached NetCDF files.
+
+        Returns
+        -------
+        tuple
+            (basin_station_mapping_dataset, basin_summary_dataset)
+        """
+        dataset_name = self.dataset_name
+        prefix_ = "" if dataset_name is None else dataset_name + "_"
+
+        try:
+            mapping_ds = xr.open_dataset(
+                os.path.join(CACHE_DIR, f"{prefix_}basin_station_mapping.nc")
+            )
+            summary_ds = xr.open_dataset(
+                os.path.join(CACHE_DIR, f"{prefix_}basin_summary.nc")
+            )
+        except FileNotFoundError:
+            self.cache_station_info_xrdataset()
+            mapping_ds = xr.open_dataset(
+                os.path.join(CACHE_DIR, f"{prefix_}basin_station_mapping.nc")
+            )
+            summary_ds = xr.open_dataset(
+                os.path.join(CACHE_DIR, f"{prefix_}basin_summary.nc")
+            )
+
+        return mapping_ds, summary_ds
+
+    def _get_station_file_prefix_(self, dataset_name, version):
+        """Get file prefix for station data files."""
+        prefix_ = "" if dataset_name is None else dataset_name + "_"
+        prefix_ = prefix_ + f"{version}_" if version is not None else prefix_
+        return prefix_
+
+    def _get_station_batch_files(self, prefix_, time_unit):
+        """Get station batch files for a specific time unit."""
+        return [
+            os.path.join(CACHE_DIR, f)
+            for f in os.listdir(CACHE_DIR)
+            if re.match(
+                rf"^{prefix_}stations_{time_unit}_batch_[A-Za-z0-9_]+_[A-Za-z0-9_]+\.nc$",
+                f,
+            )
+        ]
+
+    def cache_all_station_data(self, **kwargs):
+        """Cache all station-related data including timeseries and info."""
+        self.cache_station_timeseries_xrdataset(**kwargs)
+        self.cache_station_info_xrdataset()
+
+    def get_stations_by_basin(self, basin_id: str) -> list:
+        """Get all station IDs for a specific basin.
+
+        Parameters
+        ----------
+        basin_id : str
+            Basin ID
+
+        Returns
+        -------
+        list
+            List of station IDs in the basin
+        """
+        if self.basin_station_mapping is None:
+            self.read_station_info()
+
+        return self.basin_station_mapping[
+            self.basin_station_mapping["basin_id"] == basin_id
+        ]["station_id"].tolist()
