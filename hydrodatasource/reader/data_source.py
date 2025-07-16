@@ -188,11 +188,6 @@ class SelfMadeHydroDataset(HydroData):
         results = {}
 
         for time_unit in time_units:
-            # whether to convert the time to UTC, for 1D time unit, if time is Beijing Time,
-            # you need to set offset_to_utc to True in the initialization;
-            # and for 3h time unit, we will set True even if offset_to_utc is None
-            if time_unit == "3h":
-                offset_to_utc = True
             if offset_to_utc:
                 basinoutlets_path = os.path.join(
                     self.data_source_description["SHAPE_DIR"], "basinoutlets.shp"
@@ -600,6 +595,7 @@ class SelfMadeHydroDataset(HydroData):
         dataset_name = self.dataset_name
         version = self.version
         time_units = kwargs.get("time_units", self.time_unit)
+        recache = kwargs.get("recache", False)
         if var_lst is None:
             return None
 
@@ -612,7 +608,7 @@ class SelfMadeHydroDataset(HydroData):
             # Collect batch files specific to the current time unit
             batch_files = self._get_batch_files(prefix_, time_unit)
 
-            if not batch_files:
+            if not batch_files or recache:
                 # Cache the data if no batch files are found for the current time unit
                 self.cache_timeseries_xrdataset(**kwargs)
                 batch_files = self._get_batch_files(prefix_, time_unit)
@@ -667,11 +663,13 @@ class SelfMadeHydroDataset(HydroData):
         prefix_ = "" if dataset_name is None else dataset_name + "_"
         if var_lst is None or len(var_lst) == 0:
             return None
-        try:
-            attr = xr.open_dataset(os.path.join(CACHE_DIR, f"{prefix_}attributes.nc"))
-        except FileNotFoundError:
+        recache = kwargs.get("recache", False)
+        if (
+            not os.path.exists(os.path.join(CACHE_DIR, f"{prefix_}attributes.nc"))
+            or recache
+        ):
             self.cache_attributes_xrdataset()
-            attr = xr.open_dataset(os.path.join(CACHE_DIR, f"{prefix_}attributes.nc"))
+        attr = xr.open_dataset(os.path.join(CACHE_DIR, f"{prefix_}attributes.nc"))
         return attr[var_lst].sel(basin=gage_id_lst)
 
     def read_area(self, gage_id_lst=None):
