@@ -1,10 +1,10 @@
 """
 Author: Wenyu Ouyang
 Date: 2024-08-09 19:38:52
-LastEditTime: 2024-09-15 14:51:07
+LastEditTime: 2025-07-17 16:10:37
 LastEditors: Wenyu Ouyang
 Description: Some constants for data source
-FilePath: \hydrodatasource\hydrodatasource\configs\data_consts.py
+FilePath: /hydrodatasource/hydrodatasource/configs/data_consts.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 
@@ -103,3 +103,9 @@ MODIS_ET_PET_8D_VARS = [
     "PET_modis16a2006",
     "PET_modis16a2gf061",
 ]
+
+# flood event related variables
+FLOOD_EVENT_VARS = {
+    "NET_RAIN": "P_eff",
+    "OBS_FLOW": "Q_obs_eff",
+}
