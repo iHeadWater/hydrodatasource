@@ -18,14 +18,14 @@ from hydrodatasource.reader.data_source import StationHydroDataset
 
 def main():
     # Initialize the dataset
-    # Replace with your actual data path
-    data_path = "/path/to/your/station/dataset"
+    # Use actual data path for songliao dataset
+    data_path = "/mnt/data/ClassC/songliaorrevent"
 
     # Create StationHydroDataset instance
     dataset = StationHydroDataset(
         data_path=data_path,
         time_unit=["1D", "3h"],  # Support both daily and 3-hourly data
-        dataset_name="my_station_dataset",
+        dataset_name="songliao_station_dataset",
         version="v1.0",
         offset_to_utc=True,  # Convert Beijing time to UTC
     )
@@ -77,7 +77,7 @@ def main():
 
         # Define time range and variables
         t_range = ["2020-01-01", "2020-01-31"]
-        variables = ["streamflow", "water_level"]  # Replace with actual variable names
+        variables = ["DRP", "flood_event"]  # Use actual variable names from the data
 
         try:
             station_data = dataset.read_station_timeseries(
@@ -135,6 +135,24 @@ def main():
     except Exception as e:
         print(f"Error reading cached station info: {e}")
 
+    # 10. Test new adjacency matrix caching and reading functions
+    print("\n10. Testing adjacency matrix functions...")
+    try:
+        # Cache adjacency matrices
+        print("  Caching adjacency matrices...")
+        dataset.cache_adjacency_xrdataset()
+        print("  Adjacency matrices cached successfully!")
+        
+        # Read cached adjacency matrix
+        print("  Reading cached adjacency matrix...")
+        adjacency_ds = dataset.read_adjacency_xrdataset(basin_id)
+        print(f"  Adjacency dataset variables: {list(adjacency_ds.data_vars)}")
+        print(f"  Adjacency dataset coordinates: {list(adjacency_ds.coords)}")
+        print(f"  Number of stations in adjacency: {len(adjacency_ds.station_from)}")
+        
+    except Exception as e:
+        print(f"Error with adjacency matrix functions: {e}")
+
     print("\n=== Example completed ===")
 
 
@@ -143,7 +161,7 @@ def demonstrate_basin_analysis():
     print("\n=== Basin Analysis Example ===")
 
     # This is a more advanced example showing how to analyze data by basin
-    data_path = "/path/to/your/station/dataset"
+    data_path = "/mnt/data/ClassC/songliaorrevent"
 
     dataset = StationHydroDataset(
         data_path=data_path,
@@ -168,13 +186,14 @@ def demonstrate_basin_analysis():
             try:
                 # Read station details
                 station_details = dataset.read_basin_stations(basin_id)
-                print(
-                    f"  Station types: {station_details['station_type'].value_counts().to_dict()}"
-                )
+                print(f"  Station details columns: {station_details.columns.tolist()}")
+                if 'data_type' in station_details.columns:
+                    print(f"  Data types: {station_details['data_type'].value_counts().to_dict()}")
 
                 # Read adjacency matrix
                 adjacency = dataset.read_basin_adjacency(basin_id)
-                print(f"  Network connectivity: {adjacency.sum().sum()} connections")
+                print(f"  Network connectivity - adjacency shape: {adjacency.shape}")
+                print(f"  Network columns: {adjacency.columns.tolist()}")
 
             except FileNotFoundError:
                 print(f"  Detailed info not available for basin {basin_id}")

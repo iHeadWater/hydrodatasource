@@ -1316,7 +1316,18 @@ class StationHydroDataset(SelfMadeHydroDataset):
                 else:
                     station_data = pd.read_csv(station_file, engine="c")
 
-                date = pd.to_datetime(station_data["time"]).values
+                # Check for different time column names
+                time_col = None
+                for col in ["time", "TM", "Time", "DATE", "date"]:
+                    if col in station_data.columns:
+                        time_col = col
+                        break
+                
+                if time_col is None:
+                    print(f"Warning: No time column found in {station_file}")
+                    continue
+
+                date = pd.to_datetime(station_data[time_col]).values
                 if offset_to_utc:
                     # For station data, we might need a different offset handling
                     # For now, use a default offset, but this could be customized
@@ -1340,12 +1351,8 @@ class StationHydroDataset(SelfMadeHydroDataset):
             for dir_path in station_ts_dirs
             if time_unit == dir_path.split(os.sep)[-1]
         )
-        version = self.version
-        station_ts_dir = (
-            station_ts_dir + f"_{version}"
-            if version is not None and version != ""
-            else station_ts_dir
-        )
+        # For station data, we don't append version to directory path
+        # The version is only used for caching and file naming
         return station_ts_dir
 
     def cache_station_timeseries_xrdataset(self, **kwargs):
@@ -1414,7 +1421,14 @@ class StationHydroDataset(SelfMadeHydroDataset):
             else:
                 sample_data = pd.read_csv(sample_station_file, engine="c")
 
-            variables = [col for col in sample_data.columns if col != "time"]
+            # Find time column and exclude it from variables
+            time_col = None
+            for col in ["time", "TM", "Time", "DATE", "date"]:
+                if col in sample_data.columns:
+                    time_col = col
+                    break
+            
+            variables = [col for col in sample_data.columns if col != time_col]
 
             # Get units info if available
             units_info = {var: "unknown" for var in variables}
@@ -1587,6 +1601,68 @@ class StationHydroDataset(SelfMadeHydroDataset):
 
         return mapping_ds, summary_ds
 
+    def cache_adjacency_xrdataset(self):
+        """Cache adjacency matrices for all basins as NetCDF files."""
+        # Get all basin IDs
+        if self.basin_station_mapping is None:
+            self.read_station_info()
+        
+        basin_ids = self.basin_station_mapping["basin_id"].unique()
+        
+        # Read all adjacency matrices
+        adjacency_datasets = {}
+        for basin_id in basin_ids:
+            try:
+                adjacency_data = self.read_basin_adjacency(basin_id)
+                # Convert to xarray Dataset, keeping string types
+                adjacency_ds = xr.Dataset(
+                    data_vars={
+                        col: (["station_from"], adjacency_data[col].values.astype(str))
+                        for col in adjacency_data.columns
+                    },
+                    coords={"station_from": adjacency_data.index.values.astype(str)},
+                )
+                adjacency_datasets[basin_id] = adjacency_ds
+            except FileNotFoundError:
+                # Skip basins without adjacency files
+                continue
+        
+        # Save individual adjacency matrices for each basin
+        dataset_name = self.dataset_name
+        prefix_ = "" if dataset_name is None else dataset_name + "_"
+        
+        for basin_id, adj_ds in adjacency_datasets.items():
+            adj_ds.to_netcdf(
+                os.path.join(CACHE_DIR, f"{prefix_}adjacency_{basin_id}.nc")
+            )
+
+    def read_adjacency_xrdataset(self, basin_id: str) -> xr.Dataset:
+        """Read cached adjacency matrix for a specific basin from NetCDF file.
+
+        Parameters
+        ----------
+        basin_id : str
+            Basin ID
+
+        Returns
+        -------
+        xr.Dataset
+            Adjacency matrix dataset for the basin
+        """
+        dataset_name = self.dataset_name
+        prefix_ = "" if dataset_name is None else dataset_name + "_"
+        
+        adjacency_file = os.path.join(CACHE_DIR, f"{prefix_}adjacency_{basin_id}.nc")
+        
+        try:
+            adjacency_ds = xr.open_dataset(adjacency_file)
+        except FileNotFoundError:
+            # Cache the adjacency data if not found
+            self.cache_adjacency_xrdataset()
+            adjacency_ds = xr.open_dataset(adjacency_file)
+        
+        return adjacency_ds
+
     def _get_station_file_prefix_(self, dataset_name, version):
         """Get file prefix for station data files."""
         prefix_ = "" if dataset_name is None else dataset_name + "_"
@@ -1605,9 +1681,10 @@ class StationHydroDataset(SelfMadeHydroDataset):
         ]
 
     def cache_all_station_data(self, **kwargs):
-        """Cache all station-related data including timeseries and info."""
+        """Cache all station-related data including timeseries, info and adjacency."""
         self.cache_station_timeseries_xrdataset(**kwargs)
         self.cache_station_info_xrdataset()
+        self.cache_adjacency_xrdataset()
 
     def get_stations_by_basin(self, basin_id: str) -> list:
         """Get all station IDs for a specific basin.
@@ -1627,4 +1704,4 @@ class StationHydroDataset(SelfMadeHydroDataset):
 
         return self.basin_station_mapping[
             self.basin_station_mapping["basin_id"] == basin_id
-        ]["station_id"].tolist()
+        ]["station_id"].unique().tolist()
