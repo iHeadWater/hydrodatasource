@@ -153,5 +153,7 @@ try:
     )
 except KeyError as e:
     print(f"PostgreSQL configuration error: {e}")
+    PS = None
 except Exception as e:
     print(f"Failed to connect to PostgreSQL: {e}")
+    PS = None

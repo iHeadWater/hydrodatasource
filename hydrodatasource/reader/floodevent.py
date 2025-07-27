@@ -1,17 +1,19 @@
 """
 Author: Wenyu Ouyang
 Date: 2025-01-19 18:05:00
-LastEditTime: 2025-07-17 16:22:06
+LastEditTime: 2025-07-17 17:59:41
 LastEditors: Wenyu Ouyang
 Description: 流域场次数据处理类 - 继承自SelfMadeHydroDataset
-FilePath: /hydrodatasource/hydrodatasource/reader/floodevent.py
+FilePath: \hydrodatasource\hydrodatasource\reader\floodevent.py
 Copyright (c) 2023-2026 Wenyu Ouyang. All rights reserved.
 """
 
 import pandas as pd
 import numpy as np
-import os
 from typing import List, Dict, Optional, Tuple
+from datetime import datetime
+import glob
+from pathlib import Path
 from hydrodatasource.configs.data_consts import FLOOD_EVENT_VARS
 from hydrodatasource.utils.utils import streamflow_unit_conv
 from hydrodatasource.reader.data_source import SelfMadeHydroDataset
@@ -23,6 +25,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
 
     继承自SelfMadeHydroDataset，专门用于处理到逐个洪水场次数据，
     包括读取流域面积、单位转换、场次提取等功能。
+    支持读取生成的洪水场次数据并拼接真实数据。
     """
 
     def __init__(
@@ -31,6 +34,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         dataset_name: str = "songliaorrevents",
         time_unit: Optional[List[str]] = None,
         flow_unit: str = "mm/3h",
+        augmented_data_path: Optional[str] = None,
         **kwargs,
     ):
         """
@@ -41,6 +45,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             dataset_name: 数据集名称
             time_unit: 时间单位列表，默认为["3h"]
             flow_unit: 径流单位，默认为"mm/3h"
+            augmented_data_path: 生成数据文件夹路径，可选
             **kwargs: 其他参数传递给父类
         """
         if time_unit is None:
@@ -48,6 +53,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         # sometimes we load the data with different flow unit
         # so we need to store the flow unit
         self.flow_unit = flow_unit
+        self.augmented_data_path = augmented_data_path
         super().__init__(
             data_path=data_path,
             download=False,
@@ -55,6 +61,40 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             dataset_name=dataset_name,
             **kwargs,
         )
+
+    def _get_ts_file_prefix_(self, dataset_name: str, version: str = None) -> str:
+        """
+        重写时序文件前缀方法，为生成数据添加标识
+
+        Args:
+            dataset_name: 数据集名称
+            version: 版本号
+
+        Returns:
+            带有augmented标识的文件前缀
+        """
+        # 调用父类方法获取基础前缀
+        base_prefix = super()._get_ts_file_prefix_(dataset_name, version)
+
+        if self.augmented_data_path:
+            return f"augmented_{base_prefix}" if base_prefix else "augmented_"
+        return base_prefix
+
+    def set_data_description(self):
+        """设置数据源描述，继承父类方法并扩展"""
+        # 调用父类方法
+        super().set_data_description()
+
+        # 如果有生成数据路径，添加相关描述
+        if self.augmented_data_path:
+            prefix = "augmented_" if self.augmented_data_path else ""
+            self.data_source_description.update(
+                {
+                    "data_type": f"{prefix}flood_events",
+                    "augmented_data_path": self.augmented_data_path,
+                    "supports_augmented_data": True,
+                }
+            )
 
     def extract_flood_events(
         self, df: pd.DataFrame
@@ -64,12 +104,12 @@ class FloodEventDatasource(SelfMadeHydroDataset):
 
         Args:
             df: 站点数据框
-            station_id: 站点ID（用于打印信息）
 
         Returns:
-            List[Tuple[np.ndarray, np.ndarray, str]]: (净雨数组, 径流数组, 洪峰日期) 列表
+            List[Tuple[np.ndarray, np.ndarray, str]]:
+                (净雨数组, 径流数组, 洪峰日期) 列表
         """
-        events = []
+        events: List[Tuple[np.ndarray, np.ndarray, str]] = []
         # 找到连续的flood_event > 0区间
         flood_mask = df["flood_event"] > 0
 
@@ -115,8 +155,6 @@ class FloodEventDatasource(SelfMadeHydroDataset):
                         else:
                             # 如果是字符串，尝试解析
                             try:
-                                from datetime import datetime
-
                                 if isinstance(time_obj, str):
                                     dt = datetime.fromisoformat(
                                         time_obj.replace("Z", "+00:00")
@@ -124,7 +162,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
                                     return dt.strftime("%Y%m%d%H")
                                 else:
                                     return "0000000000"  # 默认值
-                            except:
+                            except Exception:
                                 return "0000000000"  # 默认值
 
                     start_digits = time_to_ten_digits(start_time)
@@ -137,6 +175,293 @@ class FloodEventDatasource(SelfMadeHydroDataset):
 
                 in_event = False
         return events
+
+    def parse_augmented_event_metadata(
+        self, file_path: str
+    ) -> Optional[Dict[str, str]]:
+        """
+        解析生成事件文件的元信息
+
+        Args:
+            file_path: 事件文件路径
+
+        Returns:
+            Dict: 包含源事件、缩放因子等元信息的字典
+        """
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+
+            metadata = {}
+            for line in lines:
+                if line.startswith("# "):
+                    if "Source:" in line:
+                        source_file = line.split("Source:")[1].strip()
+                        metadata["source_event"] = source_file.replace(".csv", "")
+                    elif "Scale Factor:" in line:
+                        metadata["scale_factor"] = line.split("Scale Factor:")[
+                            1
+                        ].strip()
+                    elif "Start Time:" in line:
+                        metadata["start_time"] = line.split("Start Time:")[1].strip()
+                    elif "End Time:" in line:
+                        metadata["end_time"] = line.split("End Time:")[1].strip()
+                    elif "Sample ID:" in line:
+                        metadata["sample_id"] = line.split("Sample ID:")[1].strip()
+                elif not line.startswith("#"):
+                    break  # 结束元信息读取
+
+            return metadata
+        except Exception as e:
+            print(f"解析元信息失败 {file_path}: {e}")
+            return None
+
+    def read_augmented_events(self) -> List[Dict]:
+        """
+        读取所有生成的事件数据
+
+        Returns:
+            List[Dict]: 生成事件数据列表
+        """
+        if not self.augmented_data_path:
+            return []
+
+        augmented_path = Path(self.augmented_data_path)
+        if not augmented_path.exists():
+            print(f"生成数据路径不存在: {self.augmented_data_path}")
+            return []
+
+        event_files = glob.glob(str(augmented_path / "event_*_aug_*.csv"))
+
+        augmented_events = []
+        for file_path in sorted(event_files):
+            try:
+                # 解析元信息
+                metadata = self.parse_augmented_event_metadata(file_path)
+                if not metadata:
+                    continue
+
+                # 读取数据
+                df = pd.read_csv(file_path, comment="#")
+                if df.empty:
+                    continue
+
+                # 处理数据
+                event_data = {
+                    "file_path": file_path,
+                    "metadata": metadata,
+                    "data": df,
+                    "start_time": metadata.get("start_time"),
+                    "end_time": metadata.get("end_time"),
+                    "source_event": metadata.get("source_event"),
+                }
+
+                augmented_events.append(event_data)
+
+            except Exception as e:
+                print(f"读取生成事件文件失败 {file_path}: {e}")
+                continue
+
+        return augmented_events
+
+    def get_warmup_data(
+        self, station_id: str, source_event_name: str, warmup_hours: int = 240
+    ) -> Optional[pd.DataFrame]:
+        """
+        获取指定事件的预热期数据
+
+        Args:
+            station_id: 站点ID
+            source_event_name: 源事件名称 (如 event_1994081520_1994081805)
+            warmup_hours: 预热期小时数
+
+        Returns:
+            预热期数据DataFrame
+        """
+        try:
+            # 从事件名称解析时间
+            parts = source_event_name.replace("event_", "").split("_")
+            if len(parts) < 2:
+                return None
+
+            start_time_str = parts[0]  # 如 1994081520
+            # 转换为datetime
+            start_time = datetime.strptime(start_time_str, "%Y%m%d%H")
+
+            # 计算预热期开始时间
+            warmup_start = start_time - pd.Timedelta(hours=warmup_hours)
+
+            # 使用父类方法读取数据
+            xr_ds = self.read_ts_xrdataset(
+                gage_id_lst=[station_id],
+                t_range=[
+                    warmup_start.strftime("%Y-%m-%d %H"),
+                    start_time.strftime("%Y-%m-%d %H"),
+                ],
+                var_lst=["gauge_rain", "streamflow"],
+            )["3h"]
+
+            if xr_ds is None:
+                return None
+
+            return xr_ds.to_dataframe().loc[station_id].reset_index()
+        except Exception as e:
+            print(f"获取预热期数据失败: {e}")
+            return None
+
+    def create_continuous_timeseries(
+        self, station_id: str, start_year: int = 1960, end_year: int = 2500
+    ) -> Optional[pd.DataFrame]:
+        """
+        创建连续时间序列，拼接真实数据和生成数据
+
+        Args:
+            station_id: 站点ID
+            start_year: 开始年份
+            end_year: 结束年份
+
+        Returns:
+            拼接后的连续时间序列DataFrame
+        """
+        try:
+            # 1. 读取真实数据（到当前时间）
+            current_year = datetime.now().year
+            real_data = self.read_ts_xrdataset(
+                gage_id_lst=[station_id],
+                t_range=[f"{start_year}-01-01", f"{current_year}-12-31"],
+                var_lst=["gauge_rain", "streamflow"],
+            )["3h"]
+
+            if real_data is None:
+                return None
+
+            real_df = real_data.to_dataframe().loc[station_id].reset_index()
+
+            # 2. 读取生成数据
+            augmented_events = self.read_augmented_events()
+            if not augmented_events:
+                return real_df
+
+            # 3. 创建完整时间范围
+            full_time_range = pd.date_range(
+                start=f"{start_year}-01-01", end=f"{end_year}-12-31 23:00", freq="3H"
+            )
+
+            # 4. 初始化完整DataFrame
+            full_df = pd.DataFrame(
+                {
+                    "time": full_time_range,
+                    "gauge_rain": np.nan,
+                    "streamflow": np.nan,
+                }
+            )
+
+            # 5. 填入真实数据
+            real_df["time"] = pd.to_datetime(real_df["time"])
+            full_df = full_df.set_index("time")
+            real_df = real_df.set_index("time")
+
+            # 使用真实数据更新
+            full_df.update(real_df[["gauge_rain", "streamflow"]])
+
+            # 6. 处理每个生成事件
+            for event in augmented_events:
+                event_df = event["data"].copy()
+                metadata = event["metadata"]
+                source_event = metadata.get("source_event")
+
+                if not source_event:
+                    continue
+
+                # 获取预热期数据
+                warmup_df = self.get_warmup_data(station_id, source_event)
+
+                # 处理生成事件时间
+                event_df["time"] = pd.to_datetime(event_df["time"])
+
+                # 变量重命名
+                if "flow_m3s" in event_df.columns:
+                    event_df = event_df.rename(columns={"flow_m3s": "streamflow"})
+
+                # 从预热期数据获取对应的降雨数据
+                if warmup_df is not None and "gauge_rain" in warmup_df.columns:
+                    # 将预热期降雨数据映射到生成事件时间
+                    warmup_rain = warmup_df["gauge_rain"].values
+                    if len(warmup_rain) >= len(event_df):
+                        # 取预热期后面部分对应事件期间的降雨
+                        event_df["gauge_rain"] = warmup_rain[-len(event_df) :]
+                    else:
+                        # 如果预热期不足，用可用数据填充
+                        event_df["gauge_rain"] = list(warmup_rain) + [np.nan] * (
+                            len(event_df) - len(warmup_rain)
+                        )
+
+                # 更新到完整DataFrame
+                event_df = event_df.set_index("time")
+                full_df.update(event_df[["gauge_rain", "streamflow"]])
+
+            # 7. 重置索引并返回
+            full_df = full_df.reset_index()
+            return full_df
+
+        except Exception as e:
+            print(f"创建连续时间序列失败: {e}")
+            return None
+
+    def read_ts_xrdataset(
+        self,
+        gage_id_lst: list = None,
+        t_range: list = None,
+        var_lst: list = None,
+        **kwargs,
+    ) -> dict:
+        """
+        重载读取时间序列数据方法，支持生成数据
+
+        Args:
+            gage_id_lst: 站点ID列表
+            t_range: 时间范围
+            var_lst: 变量列表
+            **kwargs: 其他参数
+
+        Returns:
+            xarray数据集或拼接后的数据
+        """
+        # 如果没有生成数据路径，使用父类方法
+        if not self.augmented_data_path:
+            return super().read_ts_xrdataset(gage_id_lst, t_range, var_lst, **kwargs)
+
+        # 检查时间范围是否涉及未来数据
+        start_time = pd.to_datetime(t_range[0])
+        end_time = pd.to_datetime(t_range[1])
+        current_time = pd.to_datetime(datetime.now())
+
+        # 如果完全是历史数据，使用父类方法
+        if end_time <= current_time:
+            return super().read_ts_xrdataset(gage_id_lst, t_range, var_lst, **kwargs)
+
+        # 如果涉及未来数据，使用拼接方法
+        result_dict = {}
+        for station_id in gage_id_lst:
+            continuous_df = self.create_continuous_timeseries(
+                station_id, start_year=start_time.year, end_year=end_time.year
+            )
+
+            if continuous_df is not None:
+                # 筛选时间范围
+                mask = (continuous_df["time"] >= start_time) & (
+                    continuous_df["time"] <= end_time
+                )
+                filtered_df = continuous_df[mask]
+
+                # 转换为xarray格式
+                import xarray as xr
+
+                ds = xr.Dataset.from_dataframe(filtered_df.set_index(["time"]))
+                ds = ds.expand_dims(dim={"basin": [station_id]})
+                result_dict["3h"] = ds
+
+        return result_dict if result_dict else None
 
     def create_event_dict(
         self,
@@ -181,7 +506,8 @@ class FloodEventDatasource(SelfMadeHydroDataset):
                 FLOOD_EVENT_VARS["OBS_FLOW"]: inflow,  # 观测径流
                 "m_eff": m_eff,  # 有效降雨时段数
                 "n_specific": len(net_rain),  # 单位线长度
-                "filepath": f"event_{event_name}.csv",  # 添加filepath字段避免KeyError
+                # 添加filepath字段避免KeyError
+                "filepath": f"event_{event_name}.csv",
             }
 
             # 添加洪峰观测值
@@ -294,7 +620,9 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             return None
 
 
-def _calculate_event_characteristics(event: Dict, delta_t_hours: float = 3.0) -> Dict:
+def _calculate_event_characteristics(
+    event: Dict, delta_t_hours: float = 3.0
+) -> Optional[Dict]:
     """
     计算洪水事件的详细特征指标，用于画图和分析
 
@@ -360,8 +688,7 @@ def _calculate_event_characteristics(event: Dict, delta_t_hours: float = 3.0) ->
         # 8. 计算单位线长度
         n_specific = n_obs - m_eff + 1
 
-        # 返回计算结果
-        characteristics = {
+        return {
             "peak_obs": peak_obs,  # 洪峰流量 (m³/s)
             "runoff_volume_m3": runoff_volume_m3,  # 洪量 (m³)
             "runoff_duration_hours": runoff_duration_hours,  # 洪水历时 (小时)
@@ -372,9 +699,6 @@ def _calculate_event_characteristics(event: Dict, delta_t_hours: float = 3.0) ->
             "n_specific": n_specific,  # 单位线长度
             "delta_t_hours": delta_t_hours,  # 时段长度
         }
-
-        return characteristics
-
     except Exception as e:
         print(f"计算事件特征时出错: {e}")
         return None
@@ -416,16 +740,18 @@ def load_and_preprocess_events_unified(
     include_peak_obs: bool = True,
     verbose: bool = True,
     flow_unit: str = "mm/3h",
+    augmented_data_path: Optional[str] = None,
 ) -> Optional[List[Dict]]:
     """
     向后兼容的统一接口函数
 
     Args:
-        data_source: 数据文件夹路径
+        data_dir: 数据文件夹路径
         station_id: 流域站点ID（可选）
         include_peak_obs: 是否包含洪峰观测值
         verbose: 是否打印详细信息
-        recache: 是否重新缓存数据，默认为False
+        flow_unit: 流量单位
+        augmented_data_path: 生成数据路径（可选）
 
     Returns:
         List[Dict]: 标准格式的事件字典列表，与现有单位线算法完全兼容
@@ -434,6 +760,7 @@ def load_and_preprocess_events_unified(
     dataset = FloodEventDatasource(
         data_dir,
         flow_unit=flow_unit,
+        augmented_data_path=augmented_data_path,
         trange4cache=["1960-01-01 02", "2024-12-31 23"],
     )
     return dataset._load_1basin_flood_events(station_id, include_peak_obs, verbose)
@@ -460,8 +787,67 @@ def check_event_data_nan(all_event_data: List[Dict]):
         if q_obs is not None and np.any(np.isnan(q_obs)):
             nan_idx = np.where(np.isnan(q_obs))[0]
             print(
-                f"❌ 场次 {event_name} 的 {FLOOD_EVENT_VARS['OBS_FLOW']} 存在空值，索引: {nan_idx}"
+                f"❌ 场次 {event_name} 的 "
+                f"{FLOOD_EVENT_VARS['OBS_FLOW']} 存在空值，索引: {nan_idx}"
             )
             raise ValueError(
-                f"Event {event_name} has NaN in {FLOOD_EVENT_VARS['OBS_FLOW']} at index {nan_idx}"
+                f"Event {event_name} has NaN in "
+                f"{FLOOD_EVENT_VARS['OBS_FLOW']} at index {nan_idx}"
             )
+
+
+# 使用示例
+"""
+完善后的FloodEventDatasource类使用示例：
+
+# 1. 基本用法 - 仅读取真实历史数据
+dataset = FloodEventDatasource(
+    data_path="/path/to/historical/data",
+    dataset_name="songliaorrevents",
+    flow_unit="mm/3h"
+)
+
+# 2. 高级用法 - 支持生成数据的连续时间序列
+dataset = FloodEventDatasource(
+    data_path="/path/to/historical/data",
+    dataset_name="songliaorrevents",
+    flow_unit="mm/3h",
+    augmented_data_path="D:/Code/hydromodel_dev/results/real_data_augmentation_shared"
+)
+
+# 读取历史和生成数据的混合时间序列（历史+未来）
+xr_data = dataset.read_ts_xrdataset(
+    gage_id_lst=["station_id"],
+    t_range=["1960-01-01", "2500-12-31"],  # 包含未来时间
+    var_lst=["gauge_rain", "streamflow"]
+)
+
+# 读取生成的事件数据
+augmented_events = dataset.read_augmented_events()
+
+# 获取预热期数据
+warmup_data = dataset.get_warmup_data(
+    station_id="station_id",
+    source_event_name="event_1994081520_1994081805",
+    warmup_hours=240
+)
+
+# 创建连续时间序列
+continuous_df = dataset.create_continuous_timeseries(
+    station_id="station_id",
+    start_year=1960,
+    end_year=2500
+)
+
+# Cache功能 - 生成数据会自动添加"augmented_"前缀
+dataset.cache_xrdataset()
+
+主要功能特点：
+1. 向后兼容：不传augmented_data_path时，行为与原类完全相同
+2. 自动拼接：读取未来时间时自动拼接历史数据和生成数据
+3. 预热期支持：自动获取生成事件对应的历史降雨数据
+4. 变量映射：flow_m3s -> streamflow, 从原数据获取gauge_rain
+5. Cache支持：生成数据cache文件自动添加"augmented_"前缀
+6. 元信息解析：自动解析生成事件文件的Source、Scale Factor等信息
+7. 时间映射：生成数据的假时间自动映射到连续时间序列中
+"""

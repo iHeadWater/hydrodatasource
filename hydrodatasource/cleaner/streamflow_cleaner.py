@@ -2,16 +2,17 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-04-19 14:00:16
 LastEditors: Wenyu Ouyang
-LastEditTime: 2025-01-07 21:06:53
+LastEditTime: 2025-07-27 10:03:39
 FilePath: \hydrodatasource\hydrodatasource\cleaner\streamflow_cleaner.py
 Description: clean streamflow (reservoir inflow) using moving average methods
 """
 
 import numpy as np
 import pandas as pd
+import pywt
 from scipy.fft import fft, fftfreq, ifft
 from scipy.optimize import curve_fit
-from scipy.signal import butter, cwt, filtfilt, morlet
+from scipy.signal import butter, filtfilt
 
 from hydrodatasource.cleaner.cleaner import Cleaner
 
@@ -260,11 +261,12 @@ class StreamflowCleaner(Cleaner):
             ]
         )
         widths = np.arange(1, 31)
-        # Wavelet transform by Morlet wavelet directly
-        extended_cwt = cwt(extended_data, morlet, widths)
+        # Wavelet transform by Morlet wavelet using pywavelets
+        extended_cwt, _ = pywt.cwt(extended_data, widths, "morl")
         scaled_cwtmatr = np.abs(extended_cwt)
 
-        # Select a specific width for analysis (can be briefly understood as selecting a cutoff frequency)
+        # Select a specific width for analysis
+        # (can be briefly understood as selecting a cutoff frequency)
         cwt_row_extended = scaled_cwtmatr[self.cwt_row, :]
 
         # Remove the extended part
