@@ -288,6 +288,154 @@ def test_streamflow_unit_conv_numpy_no_area_units(
     np.testing.assert_array_almost_equal(result, expected, decimal=6)
 
 
+# Test case for identical units (early return)
+@pytest.mark.parametrize(
+    "streamflow, area, target_unit, source_unit, inverse",
+    [
+        # Test case 1: xarray with identical units in attrs
+        (
+            xr.Dataset(
+                {
+                    "streamflow": xr.DataArray(
+                        np.array([[100, 200], [300, 400]]),
+                        dims=["time", "basin"],
+                        attrs={"units": "mm/d"},
+                    )
+                }
+            ),
+            xr.Dataset(
+                {
+                    "area": xr.DataArray(
+                        np.array([1, 2]), dims=["basin"], attrs={"units": "km^2"}
+                    )
+                }
+            ),
+            "mm/d",
+            None,
+            False,
+        ),
+        # Test case 2: xarray with identical units in attrs (custom unit)
+        (
+            xr.Dataset(
+                {
+                    "streamflow": xr.DataArray(
+                        np.array([[100, 200], [300, 400]]),
+                        dims=["time", "basin"],
+                        attrs={"units": "mm/3h"},
+                    )
+                }
+            ),
+            xr.Dataset(
+                {
+                    "area": xr.DataArray(
+                        np.array([1, 2]), dims=["basin"], attrs={"units": "km^2"}
+                    )
+                }
+            ),
+            "mm/3h",
+            None,
+            True,  # Even with wrong inverse, should return early
+        ),
+        # Test case 3: numpy array with explicit source_unit same as target_unit
+        (
+            np.array([100.0, 200.0, 300.0]),
+            np.array([1000]),
+            "m^3/s",
+            "m^3/s",
+            False,
+        ),
+        # Test case 4: pint quantity with identical units
+        # Note: For pint quantities, the function extracts units automatically
+        # and when units are identical, it should return early with magnitude only
+        (
+            np.array([100.0, 200.0, 300.0]) * ureg.m**3 / ureg.s,
+            np.array([1000]) * ureg.km**2,
+            "m^3/s",
+            None,
+            False,
+        ),
+        # Test case 5: normalized units (m3/s vs m^3/s)
+        (
+            np.array([100.0, 200.0, 300.0]),
+            np.array([1000]),
+            "m^3/s",
+            "m3/s",  # Different notation but same unit
+            True,
+        ),
+    ],
+)
+def test_streamflow_unit_conv_identical_units(
+    streamflow, area, target_unit, source_unit, inverse
+):
+    """Test that function returns original data when source and target units are identical"""
+    result = streamflow_unit_conv(streamflow, area, target_unit, inverse, source_unit)
+
+    # For xarray, should return exact same object (early return)
+    if isinstance(streamflow, xr.Dataset):
+        assert result is streamflow, "Should return original xarray dataset object"
+    # For numpy arrays, should return same values
+    elif isinstance(streamflow, np.ndarray):
+        np.testing.assert_array_equal(result, streamflow)
+    # For pint quantities, early return should return original streamflow object
+    elif isinstance(streamflow, pint.Quantity):
+        assert result is streamflow, "Should return original pint quantity object"
+
+
+# Test case for inverse parameter validation
+@pytest.mark.parametrize(
+    "streamflow, area, target_unit, source_unit, inverse, should_raise",
+    [
+        # Valid conversions - should not raise
+        (
+            np.array([100.0, 200.0, 300.0]),
+            np.array([1000]),
+            "mm/d",
+            "m^3/s",
+            False,  # volume -> depth: inverse=False
+            False,
+        ),
+        (
+            np.array([100.0, 200.0, 300.0]),
+            np.array([1000]),
+            "m^3/s",
+            "mm/d",
+            True,  # depth -> volume: inverse=True
+            False,
+        ),
+        # Invalid conversions - should raise ValueError
+        (
+            np.array([100.0, 200.0, 300.0]),
+            np.array([1000]),
+            "mm/d",
+            "m^3/s",
+            True,  # volume -> depth: should be inverse=False
+            True,
+        ),
+        (
+            np.array([100.0, 200.0, 300.0]),
+            np.array([1000]),
+            "m^3/s",
+            "mm/d",
+            False,  # depth -> volume: should be inverse=True
+            True,
+        ),
+    ],
+)
+def test_streamflow_unit_conv_inverse_validation(
+    streamflow, area, target_unit, source_unit, inverse, should_raise
+):
+    """Test validation of inverse parameter consistency with unit conversion direction"""
+    if should_raise:
+        with pytest.raises(ValueError, match="Inverse parameter.*inconsistent"):
+            streamflow_unit_conv(streamflow, area, target_unit, inverse, source_unit)
+    else:
+        # Should not raise an error
+        result = streamflow_unit_conv(
+            streamflow, area, target_unit, inverse, source_unit
+        )
+        assert isinstance(result, np.ndarray)
+
+
 @pytest.mark.skip(reason="MinIO tests are optional and require server connection")
 def test_minio_file_list():
     minio_folder_url = "s3://basins-interim/timeseries/1D"

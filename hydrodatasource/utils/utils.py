@@ -235,6 +235,126 @@ def _get_unit_conversion_info(unit_str):
         raise ValueError(f"Unsupported unit: {unit}")
 
 
+def _get_actual_source_unit(streamflow_data, source_unit=None):
+    """Determine the actual source unit from streamflow data.
+
+    Parameters
+    ----------
+    streamflow_data : xarray.Dataset, pint.Quantity, numpy.ndarray,
+                      pandas.DataFrame/Series
+        The streamflow data to extract units from
+    source_unit : str, optional
+        Explicitly provided source unit that overrides data units
+
+    Returns
+    -------
+    str or None
+        The actual source unit string, or None if no unit information found
+    """
+    if source_unit is not None:
+        return source_unit
+
+    if isinstance(streamflow_data, xr.Dataset):
+        streamflow_key = list(streamflow_data.keys())[0]
+        # First check attrs for units
+        if "units" in streamflow_data[streamflow_key].attrs:
+            return streamflow_data[streamflow_key].attrs["units"]
+        # Then check if it has pint units
+        try:
+            return str(streamflow_data[streamflow_key].pint.units)
+        except (AttributeError, ValueError):
+            return None
+    elif isinstance(streamflow_data, pint.Quantity):
+        return str(streamflow_data.units)
+    else:
+        # numpy array or pandas without units
+        return None
+
+
+def _normalize_unit(unit_str):
+    """Normalize unit string for comparison (handle m3/s vs m^3/s and pint format)."""
+    if not unit_str:
+        return unit_str
+    
+    # Handle pint verbose format
+    normalized = unit_str.replace("meter ** 3 / second", "m^3/s")
+    normalized = normalized.replace("meter**3/second", "m^3/s")
+    normalized = normalized.replace("cubic_meter / second", "m^3/s")
+    normalized = normalized.replace("cubic_meter/second", "m^3/s") 
+    
+    # Handle short format variations
+    normalized = normalized.replace("m3/s", "m^3/s")
+    normalized = normalized.replace("ft3/s", "ft^3/s")
+    normalized = normalized.replace("ft**3/s", "ft^3/s")
+    normalized = normalized.replace("cubic_foot / second", "ft^3/s")
+    normalized = normalized.replace("cubic_foot/second", "ft^3/s")
+    
+    # Handle pint format for depth units
+    normalized = normalized.replace("millimeter / day", "mm/d")
+    normalized = normalized.replace("millimeter/day", "mm/d")
+    normalized = normalized.replace("millimeter / hour", "mm/h")
+    normalized = normalized.replace("millimeter/hour", "mm/h")
+    
+    return normalized
+
+
+def _is_inverse_conversion(source_unit, target_unit):
+    """Determine if this should be an inverse conversion based on units.
+
+    Returns True if converting from depth units (mm/time) to volume units
+    (m^3/s).
+    Returns False if converting from volume units to depth units.
+    """
+    source_norm = _normalize_unit(source_unit) if source_unit else ""
+    target_norm = _normalize_unit(target_unit)
+
+    # Define unit patterns
+    depth_pattern = re.compile(r"mm/(?:\d+)?[hd]?(?:ay|our)?$")
+    volume_pattern = re.compile(r"(?:m\^?3|ft\^?3)/s$")
+
+    source_is_depth = bool(depth_pattern.match(source_norm))
+    source_is_volume = bool(volume_pattern.match(source_norm))
+    target_is_depth = bool(depth_pattern.match(target_norm))
+    target_is_volume = bool(volume_pattern.match(target_norm))
+
+    if source_is_depth and target_is_volume:
+        return True
+    elif source_is_volume and target_is_depth:
+        return False
+    else:
+        # If we can't determine from units, return None to indicate ambiguity
+        return None
+
+
+def _validate_inverse_consistency(source_unit, target_unit, inverse_param):
+    """Validate that the inverse parameter is consistent with the units.
+
+    Parameters
+    ----------
+    source_unit : str
+        Source unit string
+    target_unit : str
+        Target unit string
+    inverse_param : bool
+        The inverse parameter provided by user
+
+    Raises
+    ------
+    ValueError
+        If inverse parameter is inconsistent with unit conversion direction
+    """
+    expected_inverse = _is_inverse_conversion(source_unit, target_unit)
+
+    if expected_inverse is not None and expected_inverse != inverse_param:
+        direction = "depth->volume" if expected_inverse else "volume->depth"
+        raise ValueError(
+            f"Inverse parameter ({inverse_param}) is inconsistent with unit "
+            f"conversion direction. Converting from '{source_unit}' to "
+            f"'{target_unit}' suggests {direction} conversion "
+            f"(inverse={expected_inverse})."
+        )
+
+
 def streamflow_unit_conv(
     streamflow,
     area,
@@ -243,7 +363,7 @@ def streamflow_unit_conv(
     source_unit=None,
     area_unit="km^2",
 ):
-    """Convert the unit of streamflow data to mm/xx(time) for a basin or inverse.
+    """Convert the unit of streamflow data from m^3/s or ft^3/s to mm/xx(time) for a basin or inverse.
 
     Parameters
     ----------
@@ -270,6 +390,21 @@ def streamflow_unit_conv(
     Converted data in the same type as the input streamflow.
     For numpy arrays, returns numpy array directly.
     """
+    # Determine the actual source unit from data or parameter
+    actual_source_unit = _get_actual_source_unit(streamflow, source_unit)
+
+    # Normalize units for comparison
+    source_normalized = _normalize_unit(actual_source_unit)
+    target_normalized = _normalize_unit(target_unit)
+
+    # Early return if source and target units are identical
+    if source_normalized and source_normalized == target_normalized:
+        return streamflow
+
+    # Validate inverse parameter consistency with units
+    if actual_source_unit:
+        _validate_inverse_consistency(actual_source_unit, target_unit, inverse)
+
     # Get conversion information for target unit
     target_standard_unit, target_conversion_factor = _get_unit_conversion_info(
         target_unit
