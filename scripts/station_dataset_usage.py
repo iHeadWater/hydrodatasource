@@ -26,8 +26,7 @@ def main():
         data_path=data_path,
         time_unit=["1D", "3h"],  # Support both daily and 3-hourly data
         dataset_name="songliao_station_dataset",
-        version="v1.0",
-        offset_to_utc=True,  # Convert Beijing time to UTC
+        offset_to_utc=False,  # Convert Beijing time to UTC
     )
 
     print("=== StationHydroDataset Usage Example ===")
@@ -77,14 +76,14 @@ def main():
 
         # Define time range and variables
         t_range = ["2020-01-01", "2020-01-31"]
-        variables = ["DRP", "flood_event"]  # Use actual variable names from the data
+        variables = ["streamflow", "water_level"]  # Replace with actual variable names
 
         try:
             station_data = dataset.read_station_timeseries(
                 station_ids=sample_stations,
                 t_range_list=t_range,
                 relevant_cols=variables,
-                time_units=["1D"],
+                time_units=["3h"],
             )
 
             for time_unit, data in station_data.items():
@@ -101,7 +100,7 @@ def main():
     try:
         dataset.cache_all_station_data(
             batchsize=50,  # Process 50 stations per batch
-            time_units=["1D"],  # Cache daily data
+            time_units=["3h"],  # Cache 3-hourly data for testing
         )
         print("Station data cached successfully!")
     except Exception as e:
@@ -114,7 +113,7 @@ def main():
             station_id_lst=sample_stations,
             t_range=t_range,
             var_lst=variables,
-            time_units=["1D"],
+            time_units=["3h"],
         )
 
         for time_unit, ds in cached_data.items():
