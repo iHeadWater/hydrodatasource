@@ -486,7 +486,7 @@ class SelfMadeHydroDataset(HydroData):
                 if time_unit != "3h":
                     self.trange4cache = ["1960-01-01", "2024-12-31"]
                 else:
-                    self.trange4cache = ["1960-01-01 01", "2024-12-31 22"]
+                    self.trange4cache = ["1960-01-01 02", "2024-12-31 23"] #这个是实际的时间范围是这样的
 
             # Generate the time range specific to the time unit
             if start0101_freq:
@@ -1280,8 +1280,10 @@ class StationHydroDataset(SelfMadeHydroDataset):
         results = {}
 
         for time_unit in time_units:
-            if time_unit == "3h":
-                offset_to_utc = True
+            # Remove the forced offset_to_utc=True for 3h data
+            # The offset should be controlled by the parameter or instance setting
+            # if time_unit == "3h":
+            #     offset_to_utc = True
 
             # Get station data directory for this time unit
             station_ts_dir = self._get_station_ts_dir(
@@ -1383,7 +1385,7 @@ class StationHydroDataset(SelfMadeHydroDataset):
                 if time_unit != "3h":
                     self.trange4cache = ["1960-01-01", "2024-12-31"]
                 else:
-                    self.trange4cache = ["1960-01-01 01", "2024-12-31 22"]
+                    self.trange4cache = ["1960-01-01 02", "2024-12-31 23"]
 
             # Generate time range
             if start0101_freq:
@@ -1531,8 +1533,8 @@ class StationHydroDataset(SelfMadeHydroDataset):
             Dictionary with time units as keys and xarray.Dataset as values
         """
         time_units = kwargs.get("time_units", self.time_unit)
-        if var_lst is None:
-            return None
+        # if var_lst is None:
+        #     return None
 
         datasets_by_time_unit = {}
         prefix_ = self._get_station_file_prefix_(self.dataset_name, self.version)
@@ -1617,10 +1619,10 @@ class StationHydroDataset(SelfMadeHydroDataset):
                 # Convert to xarray Dataset, keeping string types
                 adjacency_ds = xr.Dataset(
                     data_vars={
-                        col: (["station_from"], adjacency_data[col].values.astype(str))
+                        col: (["ID"], adjacency_data[col].values.astype(str))
                         for col in adjacency_data.columns
                     },
-                    coords={"station_from": adjacency_data.index.values.astype(str)},
+                    coords={"ID": adjacency_data.index.values.astype(str)},
                 )
                 adjacency_datasets[basin_id] = adjacency_ds
             except FileNotFoundError:
