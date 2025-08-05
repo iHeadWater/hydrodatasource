@@ -1,10 +1,10 @@
 """
 Author: Wenyu Ouyang
 Date: 2025-01-19 18:05:00
-LastEditTime: 2025-08-05 09:33:18
+LastEditTime: 2025-08-05 13:55:21
 LastEditors: Wenyu Ouyang
 Description: 流域场次数据处理类 - 继承自SelfMadeHydroDataset
-FilePath: \hydrodatasource\hydrodatasource\reader\floodevent.py
+FilePath: \flooddataaugmentationd:\Code\hydrodatasource\hydrodatasource\reader\floodevent.py
 Copyright (c) 2023-2026 Wenyu Ouyang. All rights reserved.
 """
 
@@ -506,7 +506,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
 
         return combined_df
 
-    def create_xarray_dataset_from_timeseries(
+    def create_xarray_dataset_from_augdf(
         self, df: pd.DataFrame, station_id: str, time_unit: str = "3h"
     ) -> xr.Dataset:
         """
@@ -526,12 +526,12 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         xr.Dataset
             xarray格式的数据集
         """
-        # 创建xarray Dataset
+        # The gen_discharge is the generated discharge by the data augmentation method
         ds = xr.Dataset(
             {
                 "inflow": (
                     ["time", "basin"],
-                    df[["obs_discharge"]].values.reshape(-1, 1),
+                    df[["gen_discharge"]].values.reshape(-1, 1),
                 ),
                 "net_rain": (
                     ["time", "basin"],
@@ -541,11 +541,25 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             coords={"time": df["time"].values, "basin": [station_id]},
         )
 
-        # 添加属性
+        # 添加数据集属性
         ds.attrs["description"] = "Augmented hydrological time series data"
         ds.attrs["station_id"] = station_id
         ds.attrs["time_unit"] = time_unit
         ds.attrs["creation_time"] = datetime.now().isoformat()
+
+        # 为每个变量添加 units 属性
+        for var_name in ds.data_vars:
+            if any(
+                keyword in var_name.lower()
+                for keyword in ["flow", "inflow", "streamflow"]
+            ):
+                ds[var_name].attrs["units"] = "m^3/s"  # 流量单位
+            elif "rain" in var_name.lower() or "precipitation" in var_name.lower():
+                ds[var_name].attrs["units"] = f"mm/{time_unit}"  # 降雨单位
+            elif "flood_event" in var_name.lower():
+                ds[var_name].attrs["units"] = "dimensionless"  # 无量纲
+            else:
+                ds[var_name].attrs["units"] = "unknown"  # 默认值
 
         return ds
 
@@ -656,6 +670,25 @@ class FloodEventDatasource(SelfMadeHydroDataset):
                     if available_vars:
                         ds = ds[available_vars]
 
+                # 为变量添加必需的 units 属性
+                for var_name in ds.data_vars:
+                    if "units" not in ds[var_name].attrs:
+                        # 根据变量类型添加合适的单位
+                        if any(
+                            keyword in var_name.lower()
+                            for keyword in ["flow", "inflow", "streamflow"]
+                        ):
+                            ds[var_name].attrs["units"] = "m^3/s"  # 流量单位
+                        elif (
+                            "rain" in var_name.lower()
+                            or "precipitation" in var_name.lower()
+                        ):
+                            ds[var_name].attrs["units"] = f"mm/{time_unit}"  # 降雨单位
+                        elif "flood_event" in var_name.lower():
+                            ds[var_name].attrs["units"] = "dimensionless"  # 无量纲
+                        else:
+                            ds[var_name].attrs["units"] = "unknown"  # 默认值
+
                 print(f"成功从增强数据缓存读取: {cache_file_path}")
                 return {time_unit: ds}
 
@@ -663,7 +696,29 @@ class FloodEventDatasource(SelfMadeHydroDataset):
                 print(f"读取增强数据缓存失败，回退到原始数据: {e}")
 
         # 如果增强数据不存在或读取失败，回退到原始数据
-        return super().read_ts_xrdataset(gage_id_lst, t_range, var_lst, **kwargs)
+        result = super().read_ts_xrdataset(gage_id_lst, t_range, var_lst, **kwargs)
+
+        # 为所有返回的数据集添加 units 属性
+        for time_unit_key, ds in result.items():
+            for var_name in ds.data_vars:
+                if "units" not in ds[var_name].attrs:
+                    # 根据变量类型添加合适的单位
+                    if any(
+                        keyword in var_name.lower()
+                        for keyword in ["flow", "inflow", "streamflow"]
+                    ):
+                        ds[var_name].attrs["units"] = "m^3/s"  # 流量单位
+                    elif (
+                        "rain" in var_name.lower()
+                        or "precipitation" in var_name.lower()
+                    ):
+                        ds[var_name].attrs["units"] = f"mm/{time_unit}"  # 降雨单位
+                    elif "flood_event" in var_name.lower():
+                        ds[var_name].attrs["units"] = "dimensionless"  # 无量纲
+                    else:
+                        ds[var_name].attrs["units"] = "unknown"  # 默认值
+
+        return result
 
     def discover_augmented_files(
         self,
@@ -945,7 +1000,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
                 combined_df = combined_df.sort_values("time").reset_index(drop=True)
 
                 # 转换为xarray Dataset
-                station_ds = self.create_xarray_dataset_from_timeseries(
+                station_ds = self.create_xarray_dataset_from_augdf(
                     combined_df, station_id, time_unit
                 )
                 all_datasets.append(station_ds)
