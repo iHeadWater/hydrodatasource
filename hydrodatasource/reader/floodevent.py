@@ -1,7 +1,7 @@
 """
 Author: Wenyu Ouyang
 Date: 2025-01-19 18:05:00
-LastEditTime: 2025-08-05 13:55:21
+LastEditTime: 2025-08-05 15:37:53
 LastEditors: Wenyu Ouyang
 Description: 流域场次数据处理类 - 继承自SelfMadeHydroDataset
 FilePath: \flooddataaugmentationd:\Code\hydrodatasource\hydrodatasource\reader\floodevent.py
@@ -34,6 +34,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         data_path: str,
         dataset_name: str = "songliaorrevents",
         time_unit: Optional[List[str]] = None,
+        rain_key: str = "rain",
         net_rain_key: str = "P_eff",
         obs_flow_key: str = "Q_obs_eff",
         delta_t_hours: float = 3.0,
@@ -50,6 +51,8 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             Name of the dataset.
         time_unit : list of str, optional
             List of time units, default is ["3h"].
+        rain_key : str, optional
+            Key name for rain data, default is "rain".
         net_rain_key : str, optional
             Key name for net rain data, default is "P_eff".
         obs_flow_key : str, optional
@@ -63,6 +66,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             time_unit = ["3h"]
 
         # Store constants as instance attributes
+        self.rain_key = rain_key
         self.net_rain_key = net_rain_key
         self.obs_flow_key = obs_flow_key
         self.delta_t_hours = delta_t_hours
@@ -100,14 +104,17 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         self, df: pd.DataFrame
     ) -> List[Tuple[np.ndarray, np.ndarray, str]]:
         """
-        从数据框中提取洪水事件，返回净雨、径流数组和洪峰日期
+        Extract flood events from the DataFrame, returning rain, net_rain, inflow, and peak date.
 
-        Args:
-            df: 站点数据框
-            station_id: 站点ID（用于打印信息）
+        Parameters
+        ----------
+        df : pd.DataFrame
+            DataFrame containing station data.
 
-        Returns:
-            List[Tuple[np.ndarray, np.ndarray, str]]: (净雨数组, 径流数组, 洪峰日期) 列表
+        Returns
+        -------
+        List[Tuple[np.ndarray, np.ndarray, str]]
+            A list of tuples, each containing (net_rain array, inflow array, peak date as string).
         """
         events: List[Tuple[np.ndarray, np.ndarray, str]] = []
         # 找到连续的flood_event > 0区间
@@ -127,6 +134,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             elif not is_flood and in_event:
                 # 事件结束，提取数据
                 event_data = df.iloc[start_idx:idx]
+                rain = event_data["rain"].values
                 net_rain = event_data["net_rain"].values
                 inflow = event_data["inflow"].values
                 event_times = event_data["time"].values
@@ -173,27 +181,30 @@ class FloodEventDatasource(SelfMadeHydroDataset):
                     # 组合成场次名称：起始时间_结束时间
                     event_name = f"{start_digits}_{end_digits}"
 
-                    events.append((net_rain, inflow, event_name))
+                    events.append((rain, net_rain, inflow, event_name))
 
                 in_event = False
         return events
 
     def create_event_dict(
         self,
+        rain: np.ndarray,
         net_rain: np.ndarray,
         inflow: np.ndarray,
         event_name: str,
         include_peak_obs: bool = True,
     ) -> Optional[Dict]:
         """
-        将净雨和径流数组转换为标准事件字典格式
+        Transform rain, net_rain and inflow arrays into a standard event dictionary format
 
         Parameters
         ----------
+        rain: np.ndarray
+            rain array
         net_rain: np.ndarray
-            净雨数组
+            net_rain array
         inflow: np.ndarray
-            径流数组
+            inflow array
         event_name: str
             洪峰日期（8位数字格式）
         include_peak_obs: bool
@@ -217,6 +228,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
 
             # 创建标准格式字典（与uh_utils.py期望的key完全一致）
             event_dict = {
+                self.rain_key: rain,
                 self.net_rain_key: net_rain,  # 有效降雨（净雨）
                 self.obs_flow_key: inflow,  # 观测径流
                 "m_eff": m_eff,  # 有效降雨时段数
@@ -278,10 +290,10 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             all_events = []
             total_events = 0
 
-            xr_ds = super().read_ts_xrdataset(
+            xr_ds = self.read_ts_xrdataset(
                 gage_id_lst=[station_id],
                 t_range=["1960-01-01", "2024-12-31"],
-                var_lst=["inflow", "net_rain", "flood_event"],
+                var_lst=["rain", "inflow", "net_rain", "flood_event"],
                 # recache=True,
             )["3h"]
 
@@ -304,9 +316,9 @@ class FloodEventDatasource(SelfMadeHydroDataset):
 
             # 转换为标准格式
             station_event_count = 0
-            for net_rain, inflow, event_name in flood_events:
+            for rain, net_rain, inflow, event_name in flood_events:
                 event_dict = self.create_event_dict(
-                    net_rain, inflow, event_name, include_peak_obs
+                    rain, net_rain, inflow, event_name, include_peak_obs
                 )
                 if event_dict is not None:
                     all_events.append(event_dict)
@@ -414,7 +426,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             warmup_end = start_dt - timedelta(hours=3)
 
             # 读取预热期数据
-            xr_ds = super().read_ts_xrdataset(
+            xr_ds = self.read_ts_xrdataset(
                 gage_id_lst=[station_id],
                 t_range=[
                     warmup_start.strftime("%Y-%m-%d %H"),
@@ -602,7 +614,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         print(f"增强时间序列数据已保存到: {cache_file_path}")
         return cache_file_path
 
-    def read_ts_xrdataset(
+    def read_ts_xrdataset_augmented(
         self,
         gage_id_lst: Optional[List[str]] = None,
         t_range: Optional[List[str]] = None,
@@ -632,7 +644,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             包含增强数据的字典，格式与read_ts_xrdataset一致
         """
         if gage_id_lst is None or len(gage_id_lst) == 0:
-            return super().read_ts_xrdataset(gage_id_lst, t_range, var_lst, **kwargs)
+            return self.read_ts_xrdataset(gage_id_lst, t_range, var_lst, **kwargs)
 
         # 构造增强数据缓存文件路径，支持多流域
         prefix = f"{self.dataset_name}_dataaugment_"
@@ -696,7 +708,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
                 print(f"读取增强数据缓存失败，回退到原始数据: {e}")
 
         # 如果增强数据不存在或读取失败，回退到原始数据
-        result = super().read_ts_xrdataset(gage_id_lst, t_range, var_lst, **kwargs)
+        result = self.read_ts_xrdataset(gage_id_lst, t_range, var_lst, **kwargs)
 
         # 为所有返回的数据集添加 units 属性
         for time_unit_key, ds in result.items():
