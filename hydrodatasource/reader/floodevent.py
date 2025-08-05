@@ -1,7 +1,7 @@
 """
 Author: Wenyu Ouyang
 Date: 2025-01-19 18:05:00
-LastEditTime: 2025-08-05 09:06:48
+LastEditTime: 2025-08-05 09:33:18
 LastEditors: Wenyu Ouyang
 Description: 流域场次数据处理类 - 继承自SelfMadeHydroDataset
 FilePath: \hydrodatasource\hydrodatasource\reader\floodevent.py
@@ -15,7 +15,7 @@ import numpy as np
 import os
 import xarray as xr
 from datetime import datetime, timedelta
-from typing import Any, List, Dict, Optional, Tuple
+from typing import Any, List, Dict, Optional, Tuple, Union
 from hydrodatasource.utils.utils import streamflow_unit_conv
 from hydrodatasource.reader.data_source import SelfMadeHydroDataset
 from hydrodatasource.configs.config import CACHE_DIR
@@ -550,7 +550,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         return ds
 
     def save_augmented_timeseries_to_cache(
-        self, ds: xr.Dataset, station_id: str, time_unit: str = "3h"
+        self, ds: xr.Dataset, station_ids: Union[str, List[str]], time_unit: str = "3h"
     ) -> str:
         """
         将增强时间序列数据保存到cache目录
@@ -559,8 +559,8 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         ----------
         ds : xr.Dataset
             要保存的数据集
-        station_id : str
-            站点ID
+        station_ids : Union[str, List[str]]
+            站点ID或站点ID列表
         time_unit : str, optional
             时间单位，默认"3h"
 
@@ -569,10 +569,16 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         str
             保存的文件路径
         """
+        # 兼容单个站点的情况
+        if isinstance(station_ids, str):
+            station_ids = [station_ids]
+
         # 构造文件名，参考原有的命名规则，加上dataaugment前缀
         prefix = f"{self.dataset_name}_dataaugment_"
+        first_station = station_ids[0]
+        last_station = station_ids[-1]
         cache_file_name = (
-            f"{prefix}timeseries_{time_unit}_batch_{station_id}_{station_id}.nc"
+            f"{prefix}timeseries_{time_unit}_batch_{first_station}_{last_station}.nc"
         )
         cache_file_path = os.path.join(CACHE_DIR, cache_file_name)
 
@@ -614,12 +620,12 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         if gage_id_lst is None or len(gage_id_lst) == 0:
             return super().read_ts_xrdataset(gage_id_lst, t_range, var_lst, **kwargs)
 
-        station_id = gage_id_lst[0]
-
-        # 构造增强数据缓存文件路径
+        # 构造增强数据缓存文件路径，支持多流域
         prefix = f"{self.dataset_name}_dataaugment_"
+        first_station = gage_id_lst[0]
+        last_station = gage_id_lst[-1]
         cache_file_name = (
-            f"{prefix}timeseries_{time_unit}_batch_{station_id}_{station_id}.nc"
+            f"{prefix}timeseries_{time_unit}_batch_{first_station}_{last_station}.nc"
         )
         cache_file_path = os.path.join(CACHE_DIR, cache_file_name)
 
@@ -628,6 +634,15 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             try:
                 # 读取增强数据
                 ds = xr.open_dataset(cache_file_path)
+
+                # 过滤站点ID
+                available_stations = [
+                    station
+                    for station in gage_id_lst
+                    if station in ds.coords.get("gage_id", [])
+                ]
+                if available_stations:
+                    ds = ds.sel(gage_id=available_stations)
 
                 # 应用时间范围过滤
                 if t_range is not None and len(t_range) >= 2:
@@ -783,7 +798,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
 
     def process_augmented_files_by_discovery(
         self,
-        station_id: str,
+        station_ids: Union[str, List[str]],
         augmented_files_dir: str,
         source_event: Optional[str] = None,
         modified_by: Optional[List[str]] = None,
@@ -797,8 +812,8 @@ class FloodEventDatasource(SelfMadeHydroDataset):
 
         Parameters
         ----------
-        station_id : str
-            Station ID.
+        station_ids : Union[str, List[str]]
+            Station ID or list of station IDs.
         augmented_files_dir : str
             Directory containing augmented data files.
         source_event : Optional[str], optional
@@ -819,6 +834,9 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         Optional[str]
             Path to the cache file, or None if processing fails.
         """
+        # 兼容单个站点的情况
+        if isinstance(station_ids, str):
+            station_ids = [station_ids]
 
         # 发现可用文件
         discovered_files = self.discover_augmented_files(
@@ -840,7 +858,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         file_paths = [file_info["file_path"] for file_info in discovered_files]
         # 调用现有的处理方法，但使用文件路径而不是编号
         return self._process_augmented_files_by_paths(
-            station_id=station_id,
+            station_ids=station_ids,
             file_paths=file_paths,
             warmup_hours=warmup_hours,
             time_unit=time_unit,
@@ -848,88 +866,111 @@ class FloodEventDatasource(SelfMadeHydroDataset):
 
     def _process_augmented_files_by_paths(
         self,
-        station_id: str,
+        station_ids: Union[str, List[str]],
         file_paths: List[str],
         warmup_hours: int = 240,
         time_unit: str = "3h",
     ) -> Optional[str]:
         """
-        Process augmented data files based on file paths.d data files based on file paths.
+        Process augmented data files based on file paths.
 
         Parameters
         ----------
-        station_id : str
-            Station ID.
+        station_ids : Union[str, List[str]]
+            Station ID or list of station IDs.
         file_paths : List[str]
             List of file paths to process.
-        Parameters
-        ----------
-        station_id : str
-            Station ID.
-        file_paths : List[str]
-            List of file paths to process.
+        warmup_hours : int, optional
+            Number of warmup hours.
+        time_unit : str, optional
+            Time unit.
+
+        Returns
+        -------
+        Optional[str]
+            Path to the cache file, or None if processing fails.
         """
+        # 兼容单个站点的情况
+        if isinstance(station_ids, str):
+            station_ids = [station_ids]
 
-        all_timeseries = []
+        all_datasets = []
         processed_count = 0
 
-        for file_path in file_paths:
-            try:
-                print(f"🔄 处理文件: {os.path.basename(file_path)}")
+        # 对每个站点处理增强数据
+        for station_id in station_ids:
+            print(f"🔄 处理站点: {station_id}")
+            station_timeseries = []
 
-                # 解析增强文件的元信息
-                metadata = self.parse_augmented_file_metadata(file_path)
-                if not metadata:
-                    print(f"   ⚠️ 跳过文件 {file_path}: 无法解析元数据")
+            for file_path in file_paths:
+                try:
+                    print(f"   🔄 处理文件: {os.path.basename(file_path)}")
+
+                    # 解析增强文件的元信息
+                    metadata = self.parse_augmented_file_metadata(file_path)
+                    if not metadata:
+                        print(f"      ⚠️ 跳过文件 {file_path}: 无法解析元数据")
+                        continue
+
+                    # 获取预热期数据
+                    warmup_df = self.get_warmup_period_data(
+                        original_start_time=metadata.get("original_start_time"),
+                        original_end_time=metadata.get("original_end_time"),
+                        station_id=station_id,
+                        warmup_hours=warmup_hours,
+                    )
+
+                    if warmup_df is None:
+                        print(f"      ⚠️ 跳过文件 {file_path}: 无法获取预热期数据")
+                        continue
+
+                    # 调整预热期时间并拼接增强数据
+                    timeseries_df = self.concatenate_warmup_and_augmented_data(
+                        warmup_df, file_path
+                    )
+
+                    if timeseries_df is not None and len(timeseries_df) > 0:
+                        station_timeseries.append(timeseries_df)
+                        print(f"      ✅ 成功处理: {len(timeseries_df)} 条记录")
+                    else:
+                        print(f"      ⚠️ 跳过文件 {file_path}: 处理后数据为空")
+                except Exception as e:
+                    print(f"      ❌ 处理文件失败 {file_path}: {str(e)}")
                     continue
 
-                # 获取预热期数据
-                warmup_df = self.get_warmup_period_data(
-                    original_start_time=metadata.get("original_start_time"),
-                    original_end_time=metadata.get("original_end_time"),
-                    station_id=station_id,
-                    warmup_hours=warmup_hours,
+            # 如果该站点有数据，则合并并转换为xarray Dataset
+            if station_timeseries:
+                print(f"   🔄 合并站点 {station_id} 的时间序列数据...")
+                combined_df = pd.concat(station_timeseries, ignore_index=True)
+                combined_df = combined_df.sort_values("time").reset_index(drop=True)
+
+                # 转换为xarray Dataset
+                station_ds = self.create_xarray_dataset_from_timeseries(
+                    combined_df, station_id, time_unit
                 )
+                all_datasets.append(station_ds)
+                processed_count += 1
+                print(f"   ✅ 站点 {station_id} 处理完成: {len(combined_df)} 条记录")
+            else:
+                print(f"   ⚠️ 站点 {station_id} 没有可用数据")
 
-                if warmup_df is None:
-                    print(f"   ⚠️ 跳过文件 {file_path}: 无法获取预热期数据")
-                    continue
-                # 调整预热期时间并拼接增强数据
-                timeseries_df = self.concatenate_warmup_and_augmented_data(
-                    warmup_df, file_path
-                )
-
-                if timeseries_df is not None and len(timeseries_df) > 0:
-                    all_timeseries.append(timeseries_df)
-                    processed_count += 1
-                    print(f"   ✅ 成功处理: {len(timeseries_df)} 条记录")
-                else:
-                    print(f"   ⚠️ 跳过文件 {file_path}: 处理后数据为空")
-            except Exception as e:
-                print(f"   ❌ 处理文件失败 {file_path}: {str(e)}")
-                continue
-
-        if not all_timeseries:
-            print("❌ 没有成功处理任何增强文件")
+        if not all_datasets:
+            print("❌ 没有成功处理任何站点的数据")
             return None
-        print(f"✅ 成功处理 {processed_count} 个增强文件")
-        # 合并所有时间序列数据
-        print("🔄 合并所有时间序列数据...")
-        combined_df = pd.concat(all_timeseries, ignore_index=True)
-        combined_df = combined_df.sort_values("time").reset_index(drop=True)
-        print(f"   合并后数据形状: {combined_df.shape}")
-        min_time = combined_df["time"].min()
-        max_time = combined_df["time"].max()
-        print(f"   时间范围: {min_time} 到 {max_time}")
-        # 转换为xarray Dataset
-        print("🔄 转换为xarray Dataset...")
-        ds = self.create_xarray_dataset_from_timeseries(
-            combined_df, station_id, time_unit
-        )
+
+        print(f"✅ 成功处理 {processed_count} 个站点")
+
+        # 合并所有站点的数据集
+        if len(all_datasets) == 1:
+            final_ds = all_datasets[0]
+        else:
+            print("🔄 合并多个站点的数据集...")
+            final_ds = xr.concat(all_datasets, dim="gage_id")
+
         # 保存到缓存
         print("🔄 保存增强数据到缓存...")
         cache_file_path = self.save_augmented_timeseries_to_cache(
-            ds, station_id, time_unit
+            final_ds, station_ids, time_unit
         )
         return cache_file_path
 
