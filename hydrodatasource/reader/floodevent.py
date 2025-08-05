@@ -1,19 +1,21 @@
 """
 Author: Wenyu Ouyang
 Date: 2025-01-19 18:05:00
-LastEditTime: 2025-08-02 11:08:43
+LastEditTime: 2025-08-05 08:41:24
 LastEditors: Wenyu Ouyang
 Description: 流域场次数据处理类 - 继承自SelfMadeHydroDataset
-FilePath: \hydrodatasource\hydrodatasource\reader\floodevent.py
+FilePath: \flooddataaugmentationd:\Code\hydrodatasource\hydrodatasource\reader\floodevent.py
 Copyright (c) 2023-2026 Wenyu Ouyang. All rights reserved.
 """
 
+import glob
+import re
 import pandas as pd
 import numpy as np
 import os
 import xarray as xr
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional, Tuple
+from typing import Any, List, Dict, Optional, Tuple
 from hydrodatasource.utils.utils import streamflow_unit_conv
 from hydrodatasource.reader.data_source import SelfMadeHydroDataset
 from hydrodatasource.configs.config import CACHE_DIR
@@ -276,7 +278,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             all_events = []
             total_events = 0
 
-            xr_ds = self.read_ts_xrdataset(
+            xr_ds = super().read_ts_xrdataset(
                 gage_id_lst=[station_id],
                 t_range=["1960-01-01", "2024-12-31"],
                 var_lst=["inflow", "net_rain", "flood_event"],
@@ -412,7 +414,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             warmup_end = start_dt - timedelta(hours=3)
 
             # 读取预热期数据
-            xr_ds = self.read_ts_xrdataset(
+            xr_ds = super().read_ts_xrdataset(
                 gage_id_lst=[station_id],
                 t_range=[
                     warmup_start.strftime("%Y-%m-%d %H"),
@@ -680,7 +682,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         print(f"增强时间序列数据已保存到: {cache_file_path}")
         return cache_file_path
 
-    def read_ts_xrdataset_augmented(
+    def read_ts_xrdataset(
         self,
         gage_id_lst: Optional[List[str]] = None,
         t_range: Optional[List[str]] = None,
@@ -710,7 +712,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             包含增强数据的字典，格式与read_ts_xrdataset一致
         """
         if gage_id_lst is None or len(gage_id_lst) == 0:
-            return self.read_ts_xrdataset(gage_id_lst, t_range, var_lst, **kwargs)
+            return super().read_ts_xrdataset(gage_id_lst, t_range, var_lst, **kwargs)
 
         station_id = gage_id_lst[0]
 
@@ -746,7 +748,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
                 print(f"读取增强数据缓存失败，回退到原始数据: {e}")
 
         # 如果增强数据不存在或读取失败，回退到原始数据
-        return self.read_ts_xrdataset(gage_id_lst, t_range, var_lst, **kwargs)
+        return super().read_ts_xrdataset(gage_id_lst, t_range, var_lst, **kwargs)
 
     def generate_augmented_file_indices(
         self, start_idx: int = 1, end_idx: int = 100, step: int = 1
@@ -769,6 +771,320 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             文件编号列表
         """
         return list(range(start_idx, end_idx + 1, step))
+
+    def discover_augmented_files(
+        self,
+        augmented_files_dir: str,
+        source_event: Optional[str] = None,
+        modified_by: Optional[List[str]] = None,
+        time_range: Optional[Tuple[str, str]] = None,
+        latest_only: bool = False,
+    ) -> List[Dict]:
+        """
+        发现增强数据文件的智能接口
+
+        Args:
+            augmented_files_dir: 增强数据文件目录
+            source_event: 源事件名过滤 (如 "event_1994081520_1994081805")
+            modified_by: 修改者列表过滤
+            time_range: 修改时间范围过滤 ("2025-01-01", "2025-12-31")
+            latest_only: 是否只返回每个源事件的最新版本
+
+        Returns:
+            List[Dict]: 文件信息列表，包含文件路径、元数据等
+        """
+        print(f"🔍 搜索增强数据文件: {augmented_files_dir}")
+
+        # 查找所有CSV文件
+        csv_pattern = os.path.join(augmented_files_dir, "*.csv")
+        all_files = glob.glob(csv_pattern)
+
+        discovered_files = []
+
+        for file_path in all_files:
+            try:
+                file_info = self._parse_augmented_file_info(file_path)
+
+                # 应用过滤条件
+                if source_event and file_info["source_event"] != source_event:
+                    continue
+
+                if modified_by and file_info["modified_by"] not in modified_by:
+                    continue
+
+                if time_range and file_info["modified_time"]:
+                    file_time = datetime.strptime(
+                        file_info["modified_time"], "%Y-%m-%d %H:%M:%S"
+                    )
+                    start_time = datetime.strptime(time_range[0], "%Y-%m-%d")
+                    end_time = datetime.strptime(time_range[1], "%Y-%m-%d")
+                    if not (start_time <= file_time <= end_time):
+                        continue
+
+                discovered_files.append(file_info)
+            except Exception as e:
+                print(f"   ⚠️ 跳过文件 {file_path}: {str(e)}")
+                continue
+
+        # 按源事件分组并选择最新版本
+        if latest_only and discovered_files:
+            latest_files = {}
+            for file_info in discovered_files:
+                source = file_info["source_event"]
+                if source not in latest_files:
+                    latest_files[source] = file_info
+                else:
+                    # 比较修改时间，选择最新的
+                    current_time = file_info.get("modified_time") or ""
+                    existing_time = latest_files[source].get("modified_time") or ""
+                    if current_time > existing_time:
+                        latest_files[source] = file_info
+
+            discovered_files = list(latest_files.values())
+
+        # 按修改时间排序，处理None值
+        discovered_files.sort(key=lambda x: x.get("modified_time") or "", reverse=True)
+        print(f"   ✅ 发现 {len(discovered_files)} 个符合条件的文件")
+        return discovered_files
+
+    def _parse_augmented_file_info(self, file_path: str) -> Dict:
+        """解析增强数据文件的信息"""
+        filename = os.path.basename(file_path)
+
+        # 解析文件名格式: xxx_modifiedbyXXX_atYYYYMMDDHHMMSS.csv
+        name_pattern = r"(.+)_modifiedby(.+)_at(\d{14})\.csv"
+        match = re.match(name_pattern, filename)
+        file_info: Dict[str, Any] = {
+            "file_path": file_path,
+            "filename": filename,
+            "source_event": None,
+            "modified_by": None,
+            "modified_time": None,
+            "metadata": {},
+        }
+
+        if match:
+            base_name = match.group(1)
+            modifier = match.group(2)
+            timestamp = match.group(3)
+
+            file_info["source_event"] = base_name
+            file_info["modified_by"] = modifier
+
+            # 解析时间戳
+            try:
+                dt = datetime.strptime(timestamp, "%Y%m%d%H%M%S")
+                file_info["modified_time"] = dt.strftime("%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                pass
+        # 读取文件头部的元数据
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+
+            metadata = {}
+            for line in lines:
+                if line.startswith("#"):
+                    line = line.strip("#").strip()
+                    if ":" in line:
+                        key, value = line.split(":", 1)
+                        key_clean = key.strip().lower().replace(" ", "_")
+                        metadata[key_clean] = value.strip()
+                else:
+                    break
+
+            file_info["metadata"] = metadata
+
+            # 从元数据中获取更多信息
+            if "source" in metadata:
+                file_info["source_event"] = metadata["source"].replace(".csv", "")
+
+        except Exception as e:
+            print(f"   ⚠️ 无法读取文件头部: {file_path}, {str(e)}")
+        return file_info
+
+    def process_augmented_files_by_discovery(
+        self,
+        station_id: str,
+        augmented_files_dir: str,
+        source_event: Optional[str] = None,
+        modified_by: Optional[List[str]] = None,
+        time_range: Optional[Tuple[str, str]] = None,
+        latest_only: bool = True,
+        warmup_hours: int = 240,
+        time_unit: str = "3h",
+    ) -> Optional[str]:
+        """
+        Process augmented data files based on file discovery.
+
+        Parameters
+        ----------
+        station_id : str
+            Station ID.
+        augmented_files_dir : str
+            Directory containing augmented data files.
+        source_event : Optional[str], optional
+            Filter by source event name.
+        modified_by : Optional[List[str]], optional
+            Filter by list of modifiers.
+        time_range : Optional[Tuple[str, str]], optional
+            Filter by modification time range.
+        latest_only : bool, optional
+            Whether to process only the latest version for each source event.
+        warmup_hours : int, optional
+            Number of warmup hours.
+        time_unit : str, optional
+            Time unit.
+
+        Returns
+        -------
+        Optional[str]
+            Path to the cache file, or None if processing fails.
+        """
+
+        # 发现可用文件
+        discovered_files = self.discover_augmented_files(
+            augmented_files_dir=augmented_files_dir,
+            source_event=source_event,
+            modified_by=modified_by,
+            time_range=time_range,
+            latest_only=latest_only,
+        )
+
+        if not discovered_files:
+            print("❌ 未发现符合条件的增强数据文件")
+            return None
+        print(f"🔄 准备处理 {len(discovered_files)} 个增强数据文件:")
+        for file_info in discovered_files:
+            modified_by = file_info.get("modified_by", "unknown")
+            print(f"   - {file_info['filename']} (修改者: {modified_by})")
+        # 创建文件路径列表，用于现有的处理方法
+        file_paths = [file_info["file_path"] for file_info in discovered_files]
+        # 调用现有的处理方法，但使用文件路径而不是编号
+        return self._process_augmented_files_by_paths(
+            station_id=station_id,
+            file_paths=file_paths,
+            warmup_hours=warmup_hours,
+            time_unit=time_unit,
+        )
+
+    def _process_augmented_files_by_paths(
+        self,
+        station_id: str,
+        file_paths: List[str],
+        warmup_hours: int = 240,
+        time_unit: str = "3h",
+    ) -> Optional[str]:
+        """
+        基于文件路径列表处理增强数据文件
+
+        这个方法类似于原来的process_augmented_files_to_timeseries，
+        但直接使用文件路径而不是编号
+        """
+
+        all_timeseries = []
+        processed_count = 0
+
+        for file_path in file_paths:
+            try:
+                print(f"🔄 处理文件: {os.path.basename(file_path)}")
+
+                # 解析增强文件的元信息
+                metadata = self.parse_augmented_file_metadata(file_path)
+                if not metadata:
+                    print(f"   ⚠️ 跳过文件 {file_path}: 无法解析元数据")
+                    continue
+
+                # 获取预热期数据
+                warmup_df = self.get_warmup_period_data(
+                    original_start_time=metadata.get("original_start_time"),
+                    original_end_time=metadata.get("original_end_time"),
+                    station_id=station_id,
+                    warmup_hours=warmup_hours,
+                )
+
+                if warmup_df is None:
+                    print(f"   ⚠️ 跳过文件 {file_path}: 无法获取预热期数据")
+                    continue
+                # 调整预热期时间并拼接增强数据
+                timeseries_df = self.concatenate_warmup_and_augmented_data(
+                    warmup_df, file_path
+                )
+
+                if timeseries_df is not None and len(timeseries_df) > 0:
+                    all_timeseries.append(timeseries_df)
+                    processed_count += 1
+                    print(f"   ✅ 成功处理: {len(timeseries_df)} 条记录")
+                else:
+                    print(f"   ⚠️ 跳过文件 {file_path}: 处理后数据为空")
+            except Exception as e:
+                print(f"   ❌ 处理文件失败 {file_path}: {str(e)}")
+                continue
+
+        if not all_timeseries:
+            print("❌ 没有成功处理任何增强文件")
+            return None
+        print(f"✅ 成功处理 {processed_count} 个增强文件")
+        # 合并所有时间序列数据
+        print("🔄 合并所有时间序列数据...")
+        combined_df = pd.concat(all_timeseries, ignore_index=True)
+        combined_df = combined_df.sort_values("time").reset_index(drop=True)
+        print(f"   合并后数据形状: {combined_df.shape}")
+        min_time = combined_df["time"].min()
+        max_time = combined_df["time"].max()
+        print(f"   时间范围: {min_time} 到 {max_time}")
+        # 转换为xarray Dataset
+        print("🔄 转换为xarray Dataset...")
+        ds = self.create_xarray_dataset_from_timeseries(
+            combined_df, station_id, time_unit
+        )
+        # 保存到缓存
+        print("🔄 保存增强数据到缓存...")
+        cache_file_path = self.save_augmented_timeseries_to_cache(
+            ds, station_id, time_unit
+        )
+        return cache_file_path
+
+    def get_user_contributions_summary(self, augmented_files_dir: str) -> pd.DataFrame:
+        """获取用户贡献统计"""
+        discovered_files = self.discover_augmented_files(augmented_files_dir)
+        if not discovered_files:
+            return pd.DataFrame()
+        summary_data = []
+        user_stats = {}
+        for file_info in discovered_files:
+            user = file_info.get("modified_by", "unknown")
+            source = file_info.get("source_event", "unknown")
+
+            if user not in user_stats:
+                user_stats[user] = {
+                    "user": user,
+                    "total_files": 0,
+                    "unique_events": set(),
+                    "latest_modification": None,
+                }
+
+            user_stats[user]["total_files"] += 1
+            user_stats[user]["unique_events"].add(source)
+
+            mod_time = file_info.get("modified_time")
+            if mod_time:
+                latest = user_stats[user]["latest_modification"]
+                if latest is None or mod_time > latest:
+                    user_stats[user]["latest_modification"] = mod_time
+
+        for user, stats in user_stats.items():
+            summary_data.append(
+                {
+                    "user": user,
+                    "total_files": stats["total_files"],
+                    "unique_events": len(stats["unique_events"]),
+                    "latest_modification": stats["latest_modification"],
+                }
+            )
+        summary_df = pd.DataFrame(summary_data)
+        summary_df = summary_df.sort_values("total_files", ascending=False)
+        return summary_df
 
 
 def _calculate_event_characteristics(
