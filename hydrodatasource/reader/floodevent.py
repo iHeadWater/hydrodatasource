@@ -1,10 +1,10 @@
 """
 Author: Wenyu Ouyang
 Date: 2025-01-19 18:05:00
-LastEditTime: 2025-08-05 08:41:24
+LastEditTime: 2025-08-05 09:06:48
 LastEditors: Wenyu Ouyang
 Description: 流域场次数据处理类 - 继承自SelfMadeHydroDataset
-FilePath: \flooddataaugmentationd:\Code\hydrodatasource\hydrodatasource\reader\floodevent.py
+FilePath: \hydrodatasource\hydrodatasource\reader\floodevent.py
 Copyright (c) 2023-2026 Wenyu Ouyang. All rights reserved.
 """
 
@@ -490,121 +490,21 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         aug_df = pd.read_csv(augmented_file_path, comment="#")
         aug_df["time"] = pd.to_datetime(aug_df["time"])
 
+        # 获取增强数据的起始时间，用于调整预热期数据的年份
+        if not aug_df.empty:
+            aug_start_time = aug_df["time"].min().strftime("%Y%m%d%H")
+            # 调整预热期数据的年份到增强数据的年份
+            adjusted_warmup_df = self.adjust_warmup_time_to_augmented_year(
+                warmup_df, aug_start_time
+            )
+        else:
+            adjusted_warmup_df = warmup_df
+
         # 拼接数据
-        combined_df = pd.concat([warmup_df, aug_df], ignore_index=True)
+        combined_df = pd.concat([adjusted_warmup_df, aug_df], ignore_index=True)
         combined_df = combined_df.sort_values("time").reset_index(drop=True)
 
         return combined_df
-
-    def process_augmented_files_to_timeseries(
-        self,
-        station_id: str,
-        augmented_file_indices: List[int],
-        augmented_files_dir: str,
-        warmup_hours: int = 240,
-        time_unit: str = "3h",
-    ) -> Optional[str]:
-        """
-        批量处理增强文件，生成长时间序列数据并保存为nc文件
-
-        Parameters
-        ----------
-        station_id : str
-            站点ID
-        augmented_file_indices : List[int]
-            要处理的增强文件编号列表
-        augmented_files_dir : str
-            增强文件所在目录
-        warmup_hours : int, optional
-            预热期小时数，默认240小时
-        time_unit : str, optional
-            时间单位，默认"3h"
-
-        Returns
-        -------
-        Optional[str]
-            生成的nc文件路径，如果失败返回None
-        """
-        all_timeseries_data = []
-
-        # 获取目录下所有增强文件
-        aug_files = [
-            f
-            for f in os.listdir(augmented_files_dir)
-            if f.endswith(".csv") and "aug_" in f
-        ]
-        aug_files.sort()
-
-        # 筛选指定编号的文件
-        selected_files = []
-        for idx in augmented_file_indices:
-            matching_files = [f for f in aug_files if f"aug_{idx:04d}.csv" in f]
-            selected_files.extend(matching_files)
-
-        if not selected_files:
-            print(f"未找到指定编号的增强文件: {augmented_file_indices}")
-            return None
-
-        print(f"处理 {len(selected_files)} 个增强文件...")
-
-        for file_name in selected_files:
-            file_path = os.path.join(augmented_files_dir, file_name)
-
-            try:
-                # 解析元信息
-                metadata = self.parse_augmented_file_metadata(file_path)
-
-                if "original_start_time" not in metadata:
-                    print(f"跳过文件 {file_name}: 无法解析原始时间信息")
-                    continue
-
-                # 获取预热期数据
-                warmup_df = self.get_warmup_period_data(
-                    metadata["original_start_time"],
-                    metadata["original_end_time"],
-                    station_id,
-                    warmup_hours,
-                )
-
-                if warmup_df is None:
-                    print(f"跳过文件 {file_name}: 无法获取预热期数据")
-                    continue
-
-                # 调整预热期时间
-                warmup_df = self.adjust_warmup_time_to_augmented_year(
-                    warmup_df, metadata["augmented_start_time"]
-                )
-
-                # 拼接数据
-                combined_df = self.concatenate_warmup_and_augmented_data(
-                    warmup_df, file_path
-                )
-
-                all_timeseries_data.append(combined_df)
-
-            except Exception as e:
-                print(f"处理文件 {file_name} 时出错: {e}")
-                continue
-
-        if not all_timeseries_data:
-            print("没有成功处理的数据")
-            return None
-
-        # 合并所有时间序列数据
-        full_timeseries = pd.concat(all_timeseries_data, ignore_index=True)
-        full_timeseries = full_timeseries.sort_values("time").reset_index(drop=True)
-
-        # 转换为xarray Dataset
-        xr_ds = self.create_xarray_dataset_from_timeseries(
-            full_timeseries, station_id, time_unit
-        )
-
-        # 保存到cache目录
-        cache_file_path = self.save_augmented_timeseries_to_cache(
-            xr_ds, station_id, time_unit
-        )
-
-        return cache_file_path
 
     def create_xarray_dataset_from_timeseries(
         self, df: pd.DataFrame, station_id: str, time_unit: str = "3h"
@@ -749,28 +649,6 @@ class FloodEventDatasource(SelfMadeHydroDataset):
 
         # 如果增强数据不存在或读取失败，回退到原始数据
         return super().read_ts_xrdataset(gage_id_lst, t_range, var_lst, **kwargs)
-
-    def generate_augmented_file_indices(
-        self, start_idx: int = 1, end_idx: int = 100, step: int = 1
-    ) -> List[int]:
-        """
-        生成要处理的增强文件编号列表
-
-        Parameters
-        ----------
-        start_idx : int, optional
-            起始编号，默认1
-        end_idx : int, optional
-            结束编号，默认100
-        step : int, optional
-            步长，默认1
-
-        Returns
-        -------
-        List[int]
-            文件编号列表
-        """
-        return list(range(start_idx, end_idx + 1, step))
 
     def discover_augmented_files(
         self,
@@ -976,10 +854,20 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         time_unit: str = "3h",
     ) -> Optional[str]:
         """
-        基于文件路径列表处理增强数据文件
+        Process augmented data files based on file paths.d data files based on file paths.
 
-        这个方法类似于原来的process_augmented_files_to_timeseries，
-        但直接使用文件路径而不是编号
+        Parameters
+        ----------
+        station_id : str
+            Station ID.
+        file_paths : List[str]
+            List of file paths to process.
+        Parameters
+        ----------
+        station_id : str
+            Station ID.
+        file_paths : List[str]
+            List of file paths to process.
         """
 
         all_timeseries = []
