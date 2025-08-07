@@ -1,10 +1,10 @@
 """
 Author: Wenyu Ouyang
 Date: 2025-01-19 18:05:00
-LastEditTime: 2025-08-05 15:37:53
+LastEditTime: 2025-08-07 09:31:01
 LastEditors: Wenyu Ouyang
 Description: 流域场次数据处理类 - 继承自SelfMadeHydroDataset
-FilePath: \flooddataaugmentationd:\Code\hydrodatasource\hydrodatasource\reader\floodevent.py
+FilePath: \hydromodeld:\Code\hydrodatasource\hydrodatasource\reader\floodevent.py
 Copyright (c) 2023-2026 Wenyu Ouyang. All rights reserved.
 """
 
@@ -37,7 +37,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         rain_key: str = "rain",
         net_rain_key: str = "P_eff",
         obs_flow_key: str = "Q_obs_eff",
-        delta_t_hours: float = 3.0,
+        warmup_length: int = 0,
         **kwargs,
     ):
         """
@@ -57,20 +57,29 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             Key name for net rain data, default is "P_eff".
         obs_flow_key : str, optional
             Key name for observed flow data, default is "Q_obs_eff".
-        delta_t_hours : float, optional
-            Time step in hours, default is 3.0.
+        warmup_length : int, optional
+            Number of time steps to include before flood event starts as warmup
+            period, default is 0.
         **kwargs
             Additional keyword arguments passed to the parent class.
         """
         if time_unit is None:
             time_unit = ["3h"]
 
+        # Derive delta_t_hours from time_unit
+        # 从time_unit推导出时间步长（小时）
+        primary_time_unit = time_unit[0]  # 使用第一个时间单位作为主要单位
+        delta_t_hours = FloodEventDatasource._parse_time_unit_to_hours(
+            primary_time_unit
+        )
+
         # Store constants as instance attributes
         self.rain_key = rain_key
         self.net_rain_key = net_rain_key
         self.obs_flow_key = obs_flow_key
+        self.warmup_length = warmup_length
         self.delta_t_hours = delta_t_hours
-        self.delta_t_seconds = delta_t_hours * 3600.0
+        self.delta_t_seconds = self.delta_t_hours * 3600.0
 
         super().__init__(
             data_path=data_path,
@@ -90,21 +99,127 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             Dictionary containing constant values with keys:
             - 'net_rain_key': Key name for net rain data
             - 'obs_flow_key': Key name for observed flow data
-            - 'delta_t_hours': Time step in hours
+            - 'delta_t_hours': Time step in hours (derived from time_unit)
             - 'delta_t_seconds': Time step in seconds
+            - 'warmup_length': Number of warmup time steps
         """
         return {
             "net_rain_key": self.net_rain_key,
             "obs_flow_key": self.obs_flow_key,
             "delta_t_hours": self.delta_t_hours,
             "delta_t_seconds": self.delta_t_seconds,
+            "warmup_length": self.warmup_length,
         }
+
+    @staticmethod
+    def _parse_time_unit_to_hours(time_unit_str: str) -> float:
+        """
+        Parse time unit string to hours.
+
+        Parameters
+        ----------
+        time_unit_str : str
+            Time unit string like "1h", "3h", "1D", "2D", "8D", etc.
+
+        Returns
+        -------
+        float
+            Time step in hours.
+
+        Examples
+        --------
+        >>> FloodEventDatasource._parse_time_unit_to_hours("3h")
+        3.0
+        >>> FloodEventDatasource._parse_time_unit_to_hours("1D")
+        24.0
+        >>> FloodEventDatasource._parse_time_unit_to_hours("2D")
+        48.0
+        """
+        import re
+
+        # 使用正则表达式解析时间单位
+        pattern = r"^(\d+)([hdHD])$"
+        match = re.match(pattern, time_unit_str.strip())
+
+        if not match:
+            raise ValueError(
+                f"Invalid time_unit format: '{time_unit_str}'. "
+                f"Expected format: <number><unit> where unit is 'h' or 'D' "
+                f"(e.g., '1h', '3h', '1D', '2D')"
+            )
+
+        number = int(match.group(1))
+        unit = match.group(2).upper()
+
+        if unit == "H":
+            return float(number)
+        elif unit == "D":
+            return float(number * 24)
+        else:
+            # 这里实际上不会执行到，因为正则表达式已经限制了单位
+            raise ValueError(f"Unsupported time unit: {unit}")
+
+    def _time_to_ten_digits(self, time_obj):
+        """将时间对象转换为十位数字格式 YYYYMMDDHH"""
+        if isinstance(time_obj, np.datetime64):
+            # 如果是numpy datetime64对象
+            return (
+                time_obj.astype("datetime64[h]")
+                .astype(str)
+                .replace("-", "")
+                .replace("T", "")
+                .replace(":", "")
+            )
+        elif hasattr(time_obj, "strftime"):
+            # 如果是datetime对象
+            return time_obj.strftime("%Y%m%d%H")
+        else:
+            # 如果是字符串，尝试解析
+            try:
+                from datetime import datetime
+
+                if isinstance(time_obj, str):
+                    dt = datetime.fromisoformat(time_obj.replace("Z", "+00:00"))
+                    return dt.strftime("%Y%m%d%H")
+                else:
+                    return "0000000000"  # 默认值
+            except Exception:
+                return "0000000000"  # 默认值
+
+    def _extract_single_event(self, df, start_idx, end_idx, warmup_length):
+        """提取单个洪水事件的数据"""
+        warmup_start_idx = max(0, start_idx - warmup_length)
+
+        # 提取包含预热期的数据
+        event_data = df.iloc[warmup_start_idx:end_idx]
+        rain = event_data["rain"].values
+        net_rain = event_data["net_rain"].values
+        inflow = event_data["inflow"].values
+        flood_event_markers = event_data["flood_event"].values
+
+        # 基本验证 - 只验证实际洪水事件部分的数据
+        actual_inflow = df.iloc[start_idx:end_idx]["inflow"].values
+
+        if len(actual_inflow) > 0 and np.nansum(actual_inflow) > 1e-6:
+            # 获取实际洪水事件的开始和结束时间（不包括预热期）
+            actual_start_time = df.iloc[start_idx]["time"]
+            actual_end_time = df.iloc[end_idx - 1]["time"]
+
+            start_digits = self._time_to_ten_digits(actual_start_time)
+            end_digits = self._time_to_ten_digits(actual_end_time)
+
+            # 组合成场次名称：起始时间_结束时间
+            event_name = f"{start_digits}_{end_digits}"
+
+            return (rain, net_rain, inflow, flood_event_markers, event_name)
+
+        return None
 
     def extract_flood_events(
         self, df: pd.DataFrame
-    ) -> List[Tuple[np.ndarray, np.ndarray, str]]:
+    ) -> List[Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, str]]:
         """
-        Extract flood events from the DataFrame, returning rain, net_rain, inflow, and peak date.
+        Extract flood events from the DataFrame with warmup period.
 
         Parameters
         ----------
@@ -113,13 +228,17 @@ class FloodEventDatasource(SelfMadeHydroDataset):
 
         Returns
         -------
-        List[Tuple[np.ndarray, np.ndarray, str]]
-            A list of tuples, each containing (net_rain array, inflow array, peak date as string).
+        List[Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, str]]
+            A list of tuples, each containing (rain array, net_rain array,
+            inflow array, flood_event array, event name as string). The
+            flood_event array indicates which time steps belong to the actual
+            flood event (>0) vs warmup period (0). Warmup length is determined
+            by self.warmup_length.
         """
-        events: List[Tuple[np.ndarray, np.ndarray, str]] = []
+        events: List[Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, str]] = []
+
         # 找到连续的flood_event > 0区间
         flood_mask = df["flood_event"] > 0
-
         if not flood_mask.any():
             return events
 
@@ -131,68 +250,33 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             if is_flood and not in_event:
                 start_idx = idx
                 in_event = True
-            elif not is_flood and in_event:
-                # 事件结束，提取数据
-                event_data = df.iloc[start_idx:idx]
-                rain = event_data["rain"].values
-                net_rain = event_data["net_rain"].values
-                inflow = event_data["inflow"].values
-                event_times = event_data["time"].values
-
-                # 基本验证
-                if len(net_rain) > 0 and len(inflow) > 0 and np.nansum(inflow) > 1e-6:
-                    # 获取场次开始和结束时间
-                    start_time = event_times[0]
-                    end_time = event_times[-1]
-
-                    # 转换为十位数字格式 (YYYYMMDDHH)
-                    def time_to_ten_digits(time_obj):
-                        """将时间对象转换为十位数字格式 YYYYMMDDHH"""
-                        if isinstance(time_obj, np.datetime64):
-                            # 如果是numpy datetime64对象
-                            return (
-                                time_obj.astype("datetime64[h]")
-                                .astype(str)
-                                .replace("-", "")
-                                .replace("T", "")
-                                .replace(":", "")
-                            )
-                        elif hasattr(time_obj, "strftime"):
-                            # 如果是datetime对象
-                            return time_obj.strftime("%Y%m%d%H")
-                        else:
-                            # 如果是字符串，尝试解析
-                            try:
-                                from datetime import datetime
-
-                                if isinstance(time_obj, str):
-                                    dt = datetime.fromisoformat(
-                                        time_obj.replace("Z", "+00:00")
-                                    )
-                                    return dt.strftime("%Y%m%d%H")
-                                else:
-                                    return "0000000000"  # 默认值
-                            except Exception:
-                                return "0000000000"  # 默认值
-
-                    start_digits = time_to_ten_digits(start_time)
-                    end_digits = time_to_ten_digits(end_time)
-
-                    # 组合成场次名称：起始时间_结束时间
-                    event_name = f"{start_digits}_{end_digits}"
-
-                    events.append((rain, net_rain, inflow, event_name))
-
+            elif not is_flood and in_event and start_idx is not None:
+                # 事件结束，提取事件数据
+                event_tuple = self._extract_single_event(
+                    df, start_idx, idx, self.warmup_length
+                )
+                if event_tuple is not None:
+                    events.append(event_tuple)
                 in_event = False
+
+        # 处理最后一个事件（如果数据结束时仍在事件中）
+        if in_event and start_idx is not None:
+            event_tuple = self._extract_single_event(
+                df, start_idx, len(df), self.warmup_length
+            )
+            if event_tuple is not None:
+                events.append(event_tuple)
+
         return events
 
-    def create_event_dict(
+    def _create_event_dict(
         self,
         rain: np.ndarray,
         net_rain: np.ndarray,
         inflow: np.ndarray,
         event_name: str,
         include_peak_obs: bool = True,
+        flood_event_markers: Optional[np.ndarray] = None,
     ) -> Optional[Dict]:
         """
         Transform rain, net_rain and inflow arrays into a standard event dictionary format
@@ -209,10 +293,14 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             洪峰日期（8位数字格式）
         include_peak_obs: bool
             是否包含洪峰观测值
+        flood_event_markers: np.ndarray, optional
+            flood_event markers indicating which time steps belong to actual
+            flood event (>0) vs warmup period (0)
 
         Returns
         -------
-            Dict: 标准格式的事件字典，与uh_utils.py完全兼容
+            Dict: 标准格式的事件字典，与uh_utils.py完全兼容，
+            包含flood_event_markers信息
         """
         try:
             # 计算有效降雨时段数
@@ -229,12 +317,16 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             # 创建标准格式字典（与uh_utils.py期望的key完全一致）
             event_dict = {
                 self.rain_key: rain,
-                self.net_rain_key: net_rain,  # 有效降雨（净雨）
+                self.net_rain_key: net_rain,  # 净雨
                 self.obs_flow_key: inflow,  # 观测径流
-                "m_eff": m_eff,  # 有效降雨时段数
+                "m_eff": m_eff,  # 净雨时段数
                 "n_specific": len(net_rain),  # 单位线长度
                 "filepath": f"event_{event_name}.csv",  # 避免KeyError
             }
+
+            # 添加洪水事件标记（如果提供）
+            if flood_event_markers is not None:
+                event_dict["flood_event_markers"] = flood_event_markers
 
             # 添加洪峰观测值
             if include_peak_obs:
@@ -295,7 +387,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
                 t_range=["1960-01-01", "2024-12-31"],
                 var_lst=["rain", "inflow", "net_rain", "flood_event"],
                 # recache=True,
-            )["3h"]
+            )[self.time_unit[0]]
 
             xr_ds["inflow"] = streamflow_unit_conv(
                 xr_ds[["inflow"]],
@@ -316,9 +408,14 @@ class FloodEventDatasource(SelfMadeHydroDataset):
 
             # 转换为标准格式
             station_event_count = 0
-            for rain, net_rain, inflow, event_name in flood_events:
-                event_dict = self.create_event_dict(
-                    rain, net_rain, inflow, event_name, include_peak_obs
+            for rain, net_rain, inflow, flood_event_markers, event_name in flood_events:
+                event_dict = self._create_event_dict(
+                    rain,
+                    net_rain,
+                    inflow,
+                    event_name,
+                    include_peak_obs,
+                    flood_event_markers,
                 )
                 if event_dict is not None:
                     all_events.append(event_dict)
@@ -417,13 +514,13 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         Returns
         -------
         Optional[pd.DataFrame]
-            预热期数据，包含time, net_rain, inflow列
+            预热期数据，包含time, rain, net_rain, gen_discharge, obs_discharge列
         """
         try:
             # 解析时间
             start_dt = datetime.strptime(original_start_time, "%Y%m%d%H")
             warmup_start = start_dt - timedelta(hours=warmup_hours)
-            warmup_end = start_dt - timedelta(hours=3)
+            warmup_end = start_dt - timedelta(hours=self.delta_t_hours)
 
             # 读取预热期数据
             xr_ds = self.read_ts_xrdataset(
@@ -432,7 +529,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
                     warmup_start.strftime("%Y-%m-%d %H"),
                     warmup_end.strftime("%Y-%m-%d %H"),
                 ],
-                var_lst=["inflow", "net_rain"],
+                var_lst=["inflow", "net_rain", "rain"],
             )["3h"]
 
             if xr_ds is None:
@@ -446,7 +543,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             df = df.rename(columns={"inflow": "obs_discharge"})
             df["gen_discharge"] = df["obs_discharge"]
 
-            return df[["time", "net_rain", "gen_discharge", "obs_discharge"]]
+            return df[["time", "rain", "net_rain", "gen_discharge", "obs_discharge"]]
         except Exception as e:
             print(f"获取预热期数据失败: {e}")
             return None
@@ -548,6 +645,10 @@ class FloodEventDatasource(SelfMadeHydroDataset):
                 "net_rain": (
                     ["time", "basin"],
                     df[["net_rain"]].values.reshape(-1, 1),
+                ),
+                "rain": (
+                    ["time", "basin"],
+                    df[["rain"]].values.reshape(-1, 1),
                 ),
             },
             coords={"time": df["time"].values, "basin": [station_id]},
@@ -1082,6 +1183,106 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         summary_df = summary_df.sort_values("total_files", ascending=False)
         return summary_df
 
+    def check_event_data_nan(
+        self,
+        all_event_data: List[Dict],
+        exclude_warmup: bool = True,
+    ):
+        """
+        Check for NaN values in rainfall and runoff data for all flood events.
+
+        This method leverages the class's attributes (net_rain_key, obs_flow_key,
+        warmup_length) and can optionally exclude warmup period from NaN checking.
+
+        Parameters
+        ----------
+        all_event_data : list of dict
+            List of event dictionaries, each containing net rainfall, runoff, filepath, etc.
+        exclude_warmup : bool, optional
+            Whether to exclude warmup period data from NaN checking, by default True.
+            When True, only checks data points where flood_event_markers > 0 or
+            excludes the first warmup_length data points if markers are not available.
+
+        Raises
+        ------
+        ValueError
+            If any NaN values are found in the non-warmup data, raises an exception
+            and prints detailed information.
+
+        Notes
+        -----
+        This method uses the class attributes:
+        - self.net_rain_key: Key name for net rainfall data
+        - self.obs_flow_key: Key name for observed flow data
+        - self.warmup_length: Number of warmup time steps
+
+        When exclude_warmup=True:
+        1. If 'flood_event_markers' exists in event data, only checks where markers > 0
+        2. Otherwise, skips the first self.warmup_length data points
+        """
+        for event in all_event_data:
+            event_name = event.get("filepath", "unknown")
+            p_eff = event.get(self.net_rain_key)
+            q_obs = event.get(self.obs_flow_key)
+
+            if p_eff is None or q_obs is None:
+                continue
+
+            # Convert to numpy arrays if needed
+            p_eff = np.array(p_eff)
+            q_obs = np.array(q_obs)
+
+            # Determine which indices to check based on exclude_warmup setting
+            if exclude_warmup:
+                flood_event_markers = event.get("flood_event_markers")
+
+                if flood_event_markers is not None:
+                    # Use flood_event_markers to identify non-warmup data
+                    flood_event_markers = np.array(flood_event_markers)
+                    check_indices = flood_event_markers > 0
+
+                    # Apply mask to data arrays
+                    p_eff_to_check = p_eff[check_indices]
+                    q_obs_to_check = q_obs[check_indices]
+
+                    # Get the actual indices for error reporting
+                    original_indices = np.arange(len(p_eff))[check_indices]
+                else:
+                    # Fallback: exclude first warmup_length points
+                    start_idx = self.warmup_length
+                    p_eff_to_check = p_eff[start_idx:]
+                    q_obs_to_check = q_obs[start_idx:]
+
+                    # Get the actual indices for error reporting
+                    original_indices = np.arange(start_idx, len(p_eff))
+            else:
+                # Check all data points
+                p_eff_to_check = p_eff
+                q_obs_to_check = q_obs
+                original_indices = np.arange(len(p_eff))
+
+            # Check for NaN in net rain
+            if np.any(np.isnan(p_eff_to_check)):
+                nan_mask = np.isnan(p_eff_to_check)
+                nan_indices = original_indices[nan_mask]
+                print(
+                    f"❌ 场次 {event_name} 的 {self.net_rain_key} 存在空值，索引: {nan_indices}"
+                )
+                raise ValueError(
+                    f"Event {event_name} has NaN in {self.net_rain_key} at index {nan_indices}"
+                )
+
+            # Check for NaN in observed flow
+            if np.any(np.isnan(q_obs_to_check)):
+                nan_mask = np.isnan(q_obs_to_check)
+                nan_indices = original_indices[nan_mask]
+                print(
+                    f"❌ 场次 {event_name} 的 {self.obs_flow_key} 存在空值，索引: {nan_indices}"
+                )
+                raise ValueError(
+                    f"Event {event_name} has NaN in {self.obs_flow_key} at index {nan_indices}"
+                )
+
 
 def _calculate_event_characteristics(
     event: Dict,
@@ -1213,35 +1414,3 @@ def calculate_events_characteristics(
             print(f"⚠️ 事件 {i+1} 特征计算失败，跳过")
 
     return enhanced_events
-
-
-def check_event_data_nan(
-    all_event_data: List[Dict],
-    net_rain_key: str = "P_eff",
-    obs_flow_key: str = "Q_obs_eff",
-):
-    """
-    检查所有洪水事件数据中的降雨和径流是否有空值，若有则报错并打印详细信息。
-    Args:
-        all_event_data: 事件字典列表（每个字典包含净雨、径流、filepath等）
-        net_rain_key: 净雨数据的键名，默认"P_eff"
-        obs_flow_key: 观测流量数据的键名，默认"Q_obs_eff"
-    Raises:
-        ValueError: 如果发现空值，抛出异常并打印详细信息
-    """
-    for event in all_event_data:
-        event_name = event.get("filepath", "unknown")
-        p_eff = event.get(net_rain_key)
-        q_obs = event.get(obs_flow_key)
-        # 检查降雨
-        if p_eff is not None and np.any(np.isnan(p_eff)):
-            nan_idx = np.where(np.isnan(p_eff))[0]
-            print(f"❌ 场次 {event_name} 的 P_eff 存在空值，索引: {nan_idx}")
-            raise ValueError(f"Event {event_name} has NaN in P_eff at index {nan_idx}")
-        # 检查径流
-        if q_obs is not None and np.any(np.isnan(q_obs)):
-            nan_idx = np.where(np.isnan(q_obs))[0]
-            print(f"❌ 场次 {event_name} 的 {obs_flow_key} 存在空值，索引: {nan_idx}")
-            raise ValueError(
-                f"Event {event_name} has NaN in {obs_flow_key} at index {nan_idx}"
-            )
