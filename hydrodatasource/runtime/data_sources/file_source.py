@@ -213,6 +213,22 @@ class FileDataSource(BaseDataSource):
         if not self._data_cache:
             if self.layout == "single_file":
                 df = self._load_single_file()
+
+                # For single files without basin column, infer basin ID from filename
+                if self.basin_column not in df.columns:
+                    # Try to extract basin ID from filename
+                    basename = self.file_path.stem
+                    # Remove common extensions and prefixes
+                    for prefix in ["timeseries_", "data_", "hydro_"]:
+                        if basename.startswith(prefix):
+                            basename = basename[len(prefix) :]
+
+                    # Use filename as basin ID
+                    df[self.basin_column] = basename
+                    logger.info(
+                        f"Inferred basin ID '{basename}' from filename: {self.file_path.name}"
+                    )
+
             elif self.layout == "basin_files":
                 df = self._load_basin_files()
             else:
@@ -221,6 +237,9 @@ class FileDataSource(BaseDataSource):
             # Set up MultiIndex if needed
             if self.time_column in df.columns and self.basin_column in df.columns:
                 df = df.set_index([self.time_column, self.basin_column]).sort_index()
+            elif self.time_column in df.columns:
+                # Only time column available, set as single index
+                df = df.set_index(self.time_column).sort_index()
 
             self._data_cache = df
 
@@ -269,6 +288,7 @@ class FileDataSource(BaseDataSource):
 
         # Filter by time range
         if isinstance(df.index, pd.MultiIndex):
+            # MultiIndex case: (time, basin)
             time_mask = (df.index.get_level_values(0) >= start_time) & (
                 df.index.get_level_values(0) <= end_time
             )
@@ -278,14 +298,36 @@ class FileDataSource(BaseDataSource):
             basin_mask = df.index.get_level_values(1).isin(basin_ids)
             df = df[basin_mask]
         else:
-            # Handle case where index is not MultiIndex
-            if self.time_column in df.columns:
-                df = df[
-                    (df[self.time_column] >= start_time)
-                    & (df[self.time_column] <= end_time)
-                ]
-            if self.basin_column in df.columns:
-                df = df[df[self.basin_column].isin(basin_ids)]
+            # Single index case: check if index is time or something else
+            if pd.api.types.is_datetime64_any_dtype(df.index):
+                # Time index case
+                time_mask = (df.index >= start_time) & (df.index <= end_time)
+                df = df[time_mask]
+
+                # For single-basin files, check if requested basin matches inferred basin
+                if self.basin_column in df.columns:
+                    # Basin column exists, filter by it
+                    basin_mask = df[self.basin_column].isin(basin_ids)
+                    df = df[basin_mask]
+                    if df.empty:
+                        logger.warning(
+                            f"No data found for basins {basin_ids}. Available basin(s): {df[self.basin_column].unique().tolist()}"
+                        )
+                else:
+                    # No basin column, this is a single-basin file
+                    # The basin ID was inferred from filename, so we need to check if requested basin matches
+                    logger.info(
+                        f"Single-basin file detected. Requested basins: {basin_ids}"
+                    )
+            else:
+                # Non-time index, fallback to column filtering
+                if self.time_column in df.columns:
+                    df = df[
+                        (df[self.time_column] >= start_time)
+                        & (df[self.time_column] <= end_time)
+                    ]
+                if self.basin_column in df.columns:
+                    df = df[df[self.basin_column].isin(basin_ids)]
 
         # Select variables
         available_vars = [v for v in variables if v in df.columns]
@@ -321,7 +363,13 @@ class FileDataSource(BaseDataSource):
         elif self.basin_column in df.columns:
             return df[self.basin_column].unique().tolist()
         else:
-            return ["default_basin"]  # Fallback for data without basin column
+            # For single-basin files, return the basename from the filename
+            basename = self.file_path.stem
+            # Remove common prefixes if present
+            for prefix in ["timeseries_", "data_", "hydro_"]:
+                if basename.startswith(prefix):
+                    basename = basename[len(prefix) :]
+            return [basename]
 
     def get_time_range(
         self, basin_ids: Optional[List[str]] = None

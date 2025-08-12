@@ -307,7 +307,7 @@ class RuntimeDataLoader:
         Parameters
         ----------
         df : pd.DataFrame
-            DataFrame with MultiIndex (time, basin)
+            DataFrame with MultiIndex (time, basin) or single index (time)
         variables : List[str]
             Variable names in order
 
@@ -320,9 +320,9 @@ class RuntimeDataLoader:
         """
         # Determine variable mapping
         var_mapping = {
-            "prcp": ["prcp", "precipitation", "P", "rainfall"],
-            "pet": ["PET", "pet", "potential_evapotranspiration", "E"],
-            "flow": ["streamflow", "flow", "Q", "discharge"],
+            "prcp": ["prcp", "precipitation", "P", "rainfall", "rain"],
+            "pet": ["PET", "pet", "potential_evapotranspiration", "E", "ES"],
+            "flow": ["streamflow", "flow", "Q", "discharge", "inflow"],
         }
 
         # Find actual variable names
@@ -333,36 +333,70 @@ class RuntimeDataLoader:
         if not prcp_var:
             raise ValueError("Precipitation variable not found in data")
 
-        # Get unique time and basin values
-        time_values = df.index.get_level_values(0).unique().sort_values()
-        basin_values = df.index.get_level_values(1).unique().sort_values()
+        # Handle different index structures
+        if isinstance(df.index, pd.MultiIndex):
+            # Multi-basin data with MultiIndex (time, basin)
+            time_values = df.index.get_level_values(0).unique().sort_values()
+            basin_values = df.index.get_level_values(1).unique().sort_values()
 
-        n_time = len(time_values)
-        n_basin = len(basin_values)
+            n_time = len(time_values)
+            n_basin = len(basin_values)
 
-        # Initialize arrays
-        p_and_e = np.full((n_time, n_basin, 2), np.nan)
-        qobs = np.full((n_time, n_basin, 1), np.nan)
+            # Initialize arrays
+            p_and_e = np.full((n_time, n_basin, 2), np.nan)
+            qobs = np.full((n_time, n_basin, 1), np.nan)
 
-        # Fill arrays
-        for i, time_val in enumerate(time_values):
-            for j, basin_val in enumerate(basin_values):
+            # Fill arrays
+            for i, time_val in enumerate(time_values):
+                for j, basin_val in enumerate(basin_values):
+                    try:
+                        row_data = df.loc[(time_val, basin_val)]
+
+                        # Precipitation
+                        if prcp_var in row_data:
+                            p_and_e[i, j, 0] = row_data[prcp_var]
+
+                        # PET (use 0 if not available)
+                        if pet_var and pet_var in row_data:
+                            p_and_e[i, j, 1] = row_data[pet_var]
+                        else:
+                            p_and_e[i, j, 1] = 0.0
+
+                        # Flow
+                        if flow_var and flow_var in row_data:
+                            qobs[i, j, 0] = row_data[flow_var]
+
+                    except KeyError:
+                        # Missing data point - keep NaN values
+                        continue
+        else:
+            # Single-basin data with single time index
+            time_values = df.index.sort_values()
+            n_time = len(time_values)
+            n_basin = 1  # Single basin
+
+            # Initialize arrays for single basin
+            p_and_e = np.full((n_time, n_basin, 2), np.nan)
+            qobs = np.full((n_time, n_basin, 1), np.nan)
+
+            # Fill arrays for single basin (basin index = 0)
+            for i, time_val in enumerate(time_values):
                 try:
-                    row_data = df.loc[(time_val, basin_val)]
+                    row_data = df.loc[time_val]
 
                     # Precipitation
-                    if prcp_var in row_data:
-                        p_and_e[i, j, 0] = row_data[prcp_var]
+                    if prcp_var and prcp_var in df.columns:
+                        p_and_e[i, 0, 0] = row_data[prcp_var]
 
                     # PET (use 0 if not available)
-                    if pet_var and pet_var in row_data:
-                        p_and_e[i, j, 1] = row_data[pet_var]
+                    if pet_var and pet_var in df.columns:
+                        p_and_e[i, 0, 1] = row_data[pet_var]
                     else:
-                        p_and_e[i, j, 1] = 0.0
+                        p_and_e[i, 0, 1] = 0.0
 
                     # Flow
-                    if flow_var and flow_var in row_data:
-                        qobs[i, j, 0] = row_data[flow_var]
+                    if flow_var and flow_var in df.columns:
+                        qobs[i, 0, 0] = row_data[flow_var]
 
                 except KeyError:
                     # Missing data point - keep NaN values
