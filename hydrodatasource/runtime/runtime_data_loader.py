@@ -315,7 +315,7 @@ class RuntimeDataLoader:
         -------
         Tuple[np.ndarray, np.ndarray]
             (p_and_e, qobs) arrays in standard format:
-            - p_and_e: [time, basin, features=2] for precipitation and PET
+            - p_and_e: [time, basin, features] where features=2 (prcp, pet) or 3 (prcp, pet, flood_event)
             - qobs: [time, basin, features=1] for observed streamflow
         """
         # Determine variable mapping
@@ -323,15 +323,21 @@ class RuntimeDataLoader:
             "prcp": ["prcp", "precipitation", "P", "rainfall", "rain"],
             "pet": ["PET", "pet", "potential_evapotranspiration", "E", "ES"],
             "flow": ["streamflow", "flow", "Q", "discharge", "inflow"],
+            "flood_event": ["flood_event"],
         }
 
         # Find actual variable names
         prcp_var = self._find_variable(df.columns, var_mapping["prcp"])
         pet_var = self._find_variable(df.columns, var_mapping["pet"])
         flow_var = self._find_variable(df.columns, var_mapping["flow"])
+        flood_event_var = self._find_variable(df.columns, var_mapping["flood_event"])
 
         if not prcp_var:
             raise ValueError("Precipitation variable not found in data")
+
+        # Determine if we need to include flood_event
+        include_flood_event = flood_event_var is not None
+        n_features = 3 if include_flood_event else 2
 
         # Handle different index structures
         if isinstance(df.index, pd.MultiIndex):
@@ -342,8 +348,8 @@ class RuntimeDataLoader:
             n_time = len(time_values)
             n_basin = len(basin_values)
 
-            # Initialize arrays
-            p_and_e = np.full((n_time, n_basin, 2), np.nan)
+            # Initialize arrays with correct number of features
+            p_and_e = np.full((n_time, n_basin, n_features), np.nan)
             qobs = np.full((n_time, n_basin, 1), np.nan)
 
             # Fill arrays
@@ -366,6 +372,10 @@ class RuntimeDataLoader:
                         if flow_var and flow_var in row_data:
                             qobs[i, j, 0] = row_data[flow_var]
 
+                        # Flood event (if included)
+                        if include_flood_event and flood_event_var in row_data:
+                            p_and_e[i, j, 2] = row_data[flood_event_var]
+
                     except KeyError:
                         # Missing data point - keep NaN values
                         continue
@@ -375,8 +385,8 @@ class RuntimeDataLoader:
             n_time = len(time_values)
             n_basin = 1  # Single basin
 
-            # Initialize arrays for single basin
-            p_and_e = np.full((n_time, n_basin, 2), np.nan)
+            # Initialize arrays for single basin with correct number of features
+            p_and_e = np.full((n_time, n_basin, n_features), np.nan)
             qobs = np.full((n_time, n_basin, 1), np.nan)
 
             # Fill arrays for single basin (basin index = 0)
@@ -397,6 +407,14 @@ class RuntimeDataLoader:
                     # Flow
                     if flow_var and flow_var in df.columns:
                         qobs[i, 0, 0] = row_data[flow_var]
+
+                    # Flood event (if included)
+                    if (
+                        include_flood_event
+                        and flood_event_var
+                        and flood_event_var in df.columns
+                    ):
+                        p_and_e[i, 0, 2] = row_data[flood_event_var]
 
                 except KeyError:
                     # Missing data point - keep NaN values
