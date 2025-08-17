@@ -1,7 +1,7 @@
 """
 Author: Wenyu Ouyang
 Date: 2025-01-19 18:05:00
-LastEditTime: 2025-08-07 09:31:01
+LastEditTime: 2025-08-17 10:09:14
 LastEditors: Wenyu Ouyang
 Description: 流域场次数据处理类 - 继承自SelfMadeHydroDataset
 FilePath: \hydromodeld:\Code\hydrodatasource\hydrodatasource\reader\floodevent.py
@@ -16,6 +16,7 @@ import os
 import xarray as xr
 from datetime import datetime, timedelta
 from typing import Any, List, Dict, Optional, Tuple, Union
+from hydroutils import hydro_event
 from hydrodatasource.utils.utils import streamflow_unit_conv
 from hydrodatasource.reader.data_source import SelfMadeHydroDataset
 from hydrodatasource.configs.config import CACHE_DIR
@@ -35,8 +36,8 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         dataset_name: str = "songliaorrevents",
         time_unit: Optional[List[str]] = None,
         rain_key: str = "rain",
-        net_rain_key: str = "P_eff",
-        obs_flow_key: str = "Q_obs_eff",
+        net_rain_key: str = "net_rain",
+        obs_flow_key: str = "inflow",
         warmup_length: int = 0,
         **kwargs,
     ):
@@ -54,9 +55,9 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         rain_key : str, optional
             Key name for rain data, default is "rain".
         net_rain_key : str, optional
-            Key name for net rain data, default is "P_eff".
+            Key name for net rain data, default is "net_rain".
         obs_flow_key : str, optional
-            Key name for observed flow data, default is "Q_obs_eff".
+            Key name for observed flow data, default is "inflow".
         warmup_length : int, optional
             Number of time steps to include before flood event starts as warmup
             period, default is 0.
@@ -159,115 +160,56 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             # 这里实际上不会执行到，因为正则表达式已经限制了单位
             raise ValueError(f"Unsupported time unit: {unit}")
 
-    def _time_to_ten_digits(self, time_obj):
-        """将时间对象转换为十位数字格式 YYYYMMDDHH"""
-        if isinstance(time_obj, np.datetime64):
-            # 如果是numpy datetime64对象
-            return (
-                time_obj.astype("datetime64[h]")
-                .astype(str)
-                .replace("-", "")
-                .replace("T", "")
-                .replace(":", "")
-            )
-        elif hasattr(time_obj, "strftime"):
-            # 如果是datetime对象
-            return time_obj.strftime("%Y%m%d%H")
-        else:
-            # 如果是字符串，尝试解析
-            try:
-                from datetime import datetime
-
-                if isinstance(time_obj, str):
-                    dt = datetime.fromisoformat(time_obj.replace("Z", "+00:00"))
-                    return dt.strftime("%Y%m%d%H")
-                else:
-                    return "0000000000"  # 默认值
-            except Exception:
-                return "0000000000"  # 默认值
-
-    def _extract_single_event(self, df, start_idx, end_idx, warmup_length):
-        """提取单个洪水事件的数据"""
-        warmup_start_idx = max(0, start_idx - warmup_length)
-
-        # 提取包含预热期的数据
-        event_data = df.iloc[warmup_start_idx:end_idx]
-        rain = event_data["rain"].values
-        net_rain = event_data["net_rain"].values
-        inflow = event_data["inflow"].values
-        flood_event_markers = event_data["flood_event"].values
-
-        # 基本验证 - 只验证实际洪水事件部分的数据
-        actual_inflow = df.iloc[start_idx:end_idx]["inflow"].values
-
-        if len(actual_inflow) > 0 and np.nansum(actual_inflow) > 1e-6:
-            # 获取实际洪水事件的开始和结束时间（不包括预热期）
-            actual_start_time = df.iloc[start_idx]["time"]
-            actual_end_time = df.iloc[end_idx - 1]["time"]
-
-            start_digits = self._time_to_ten_digits(actual_start_time)
-            end_digits = self._time_to_ten_digits(actual_end_time)
-
-            # 组合成场次名称：起始时间_结束时间
-            event_name = f"{start_digits}_{end_digits}"
-
-            return (rain, net_rain, inflow, flood_event_markers, event_name)
-
-        return None
-
     def extract_flood_events(
-        self, df: pd.DataFrame
-    ) -> List[Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, str]]:
+        self, df: pd.DataFrame, include_peak_obs: bool = True
+    ) -> List[Dict]:
         """
-        Extract flood events from the DataFrame with warmup period.
+        提取洪水事件并转换为标准格式字典
 
         Parameters
         ----------
         df : pd.DataFrame
             DataFrame containing station data.
+        include_peak_obs : bool, default=True
+            是否包含洪峰观测值
 
         Returns
         -------
-        List[Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, str]]
-            A list of tuples, each containing (rain array, net_rain array,
-            inflow array, flood_event array, event name as string). The
-            flood_event array indicates which time steps belong to the actual
-            flood event (>0) vs warmup period (0). Warmup length is determined
-            by self.warmup_length.
+        List[Dict]
+            标准格式的事件字典列表，与现有算法完全兼容
         """
-        events: List[Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, str]] = []
+        # 调用hydroutils提取事件
+        flood_events = hydro_event.extract_flood_events(
+            df=df,
+            warmup_length=self.warmup_length,
+            flood_event_col="flood_event",
+            time_col="time",
+        )
 
-        # 找到连续的flood_event > 0区间
-        flood_mask = df["flood_event"] > 0
-        if not flood_mask.any():
-            return events
+        all_events = []
+        for event in flood_events:
+            event_data = event["data"]
 
-        # 找连续区间
-        in_event = False
-        start_idx = None
+            # 提取各列数据
+            rain = event_data[self.rain_key].values
+            net_rain = event_data[self.net_rain_key].values
+            inflow = event_data[self.obs_flow_key].values
+            flood_event_markers = event_data["flood_event"].values
 
-        for idx, is_flood in enumerate(flood_mask):
-            if is_flood and not in_event:
-                start_idx = idx
-                in_event = True
-            elif not is_flood and in_event and start_idx is not None:
-                # 事件结束，提取事件数据
-                event_tuple = self._extract_single_event(
-                    df, start_idx, idx, self.warmup_length
-                )
-                if event_tuple is not None:
-                    events.append(event_tuple)
-                in_event = False
-
-        # 处理最后一个事件（如果数据结束时仍在事件中）
-        if in_event and start_idx is not None:
-            event_tuple = self._extract_single_event(
-                df, start_idx, len(df), self.warmup_length
+            # 创建标准格式字典
+            event_dict = self._create_event_dict(
+                rain=rain,
+                net_rain=net_rain,
+                inflow=inflow,
+                event_name=event["event_name"],
+                include_peak_obs=include_peak_obs,
+                flood_event_markers=flood_event_markers,
             )
-            if event_tuple is not None:
-                events.append(event_tuple)
 
-        return events
+            if event_dict is not None:
+                all_events.append(event_dict)
+
+        return all_events
 
     def _create_event_dict(
         self,
@@ -379,9 +321,6 @@ class FloodEventDatasource(SelfMadeHydroDataset):
                 if station_id:
                     print(f"   指定站点: {station_id}")
 
-            all_events = []
-            total_events = 0
-
             xr_ds = self.read_ts_xrdataset(
                 gage_id_lst=[station_id],
                 t_range=["1960-01-01", "2024-12-31"],
@@ -398,39 +337,18 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             if df is None:
                 return None
 
-            # 提取洪水事件
-            flood_events = self.extract_flood_events(df.loc[station_id].reset_index())
+            # 直接提取洪水事件并转换为标准格式
+            all_events = self.extract_flood_events(
+                df.loc[station_id].reset_index(), include_peak_obs
+            )
 
-            if not flood_events:
+            if not all_events:
                 if verbose:
                     print(f"  ⚠️  {station_id}: 没有找到有效洪水事件")
                 return None
 
-            # 转换为标准格式
-            station_event_count = 0
-            for rain, net_rain, inflow, flood_event_markers, event_name in flood_events:
-                event_dict = self._create_event_dict(
-                    rain,
-                    net_rain,
-                    inflow,
-                    event_name,
-                    include_peak_obs,
-                    flood_event_markers,
-                )
-                if event_dict is not None:
-                    all_events.append(event_dict)
-                    station_event_count += 1
-
-            if verbose and station_event_count > 0:
-                print(f"  ✅ {station_id}: 成功处理 {station_event_count} 个洪水事件")
-                total_events += station_event_count
-
-            if not all_events:
-                if verbose:
-                    print("❌ 没有成功处理的洪水事件数据")
-                return None
-
             if verbose:
+                print(f"  ✅ {station_id}: 成功处理 {len(all_events)} 个洪水事件")
                 print(f"✅ 总共成功加载 {len(all_events)} 个洪水事件")
 
             return all_events
