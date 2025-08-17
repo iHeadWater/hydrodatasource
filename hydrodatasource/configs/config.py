@@ -1,7 +1,7 @@
 """
 Author: Jianfeng Zhu
 Date: 2023-10-25 18:49:02
-LastEditTime: 2024-08-15 10:02:10
+LastEditTime: 2025-08-17 21:04:26
 LastEditors: Wenyu Ouyang
 Description: Some configs for minio server
 FilePath: \hydrodatasource\hydrodatasource\configs\config.py
@@ -142,18 +142,51 @@ except KeyError as e:
 except Exception as e:
     print(f"Remote service setup failed: {e}")
 
-# Handle PostgreSQL connection
+# PostgreSQL connection parameters (lazy loading)
+POSTGRES_PARAM = {}
+PS = None
+
+# Initialize PostgreSQL parameters but don't connect yet
 try:
-    PS = psycopg2.connect(
-        database=SETTING["postgres"]["database"],
-        user=SETTING["postgres"]["username"],
-        password=SETTING["postgres"]["password"],
-        host=SETTING["postgres"]["server_url"],
-        port=SETTING["postgres"]["port"],
-    )
+    POSTGRES_PARAM = {
+        "database": SETTING["postgres"]["database"],
+        "user": SETTING["postgres"]["username"],
+        "password": SETTING["postgres"]["password"],
+        "host": SETTING["postgres"]["server_url"],
+        "port": SETTING["postgres"]["port"],
+    }
 except KeyError as e:
     print(f"PostgreSQL configuration error: {e}")
-    PS = None
-except Exception as e:
-    print(f"Failed to connect to PostgreSQL: {e}")
-    PS = None
+    POSTGRES_PARAM = {}
+
+
+def get_postgres_connection():
+    """
+    Get PostgreSQL connection with lazy initialization.
+
+    Returns:
+        psycopg2.connection: PostgreSQL connection object, or None if failed
+    """
+    global PS
+
+    if PS is not None:
+        # Check if connection is still alive
+        try:
+            PS.cursor().execute("SELECT 1")
+            return PS
+        except (psycopg2.OperationalError, psycopg2.InterfaceError):
+            # Connection is dead, need to reconnect
+            PS = None
+
+    # Create new connection
+    if POSTGRES_PARAM:
+        try:
+            PS = psycopg2.connect(**POSTGRES_PARAM)
+            return PS
+        except Exception as e:
+            print(f"Failed to connect to PostgreSQL: {e}")
+            PS = None
+            return None
+    else:
+        print("PostgreSQL configuration not available")
+        return None
