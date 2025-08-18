@@ -1,7 +1,7 @@
 """
 Author: Wenyu Ouyang
 Date: 2024-03-23 15:10:23
-LastEditTime: 2025-07-27 11:51:50
+LastEditTime: 2025-08-18 15:47:38
 LastEditors: Wenyu Ouyang
 Description: Test for utility functions
 FilePath: \hydrodatasource\tests\test_utils.py
@@ -173,33 +173,6 @@ def test_streamflow_unit_conv_xarray_inverse(
 # Test case for numpy and pandas input
 @pytest.mark.parametrize(
     "streamflow, area, target_unit, inverse, expected",
-    # [
-    #     (
-    #         np.array([100, 200]) * ureg.m**3 / ureg.s,
-    #         np.array([1]) * ureg.km**2,
-    #         "mm/d",
-    #         False,
-    #         np.array([8640.0, 17280.0]),
-    #     ),
-    # ],
-    # [
-    #     (
-    #         np.array([100, 200]) * ureg.m**3 / ureg.s,
-    #         np.array([1]) * ureg.km**2,
-    #         "mm/3h",
-    #         False,
-    #         np.array([1080.0, 2160.0]),
-    #     ),
-    # ],
-    # [
-    #     (
-    #         np.array([8640.0, 17280.0]) * ureg.mm / ureg.d,
-    #         np.array([1]) * ureg.km**2,
-    #         "m^3/s",
-    #         True,
-    #         np.array([100, 200]),
-    #     ),
-    # ],
     [
         (
             np.array([1080.0, 2160.0]) * ureg.mm / ureg.h / 3,
@@ -219,8 +192,8 @@ def test_streamflow_unit_conv_np_pd(streamflow, area, target_unit, inverse, expe
 @pytest.mark.parametrize(
     "streamflow, area, target_unit, inverse, expected_error",
     [
-        # streamflow is None should raise TypeError
-        (None, np.array([2, 2, 2]), "mm/d", False, TypeError),
+        # streamflow is None should raise ValueError
+        (None, np.array([2, 2, 2]), "mm/d", False, ValueError),
         # numpy streamflow without source_unit should raise ValueError
         (np.array([10, 20, 30]), np.array([2, 2, 2]), "mm/d", False, ValueError),
         # invalid target_unit with valid inputs should raise ValueError
