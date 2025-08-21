@@ -179,11 +179,28 @@ def basin_mean_func(df, weights_dict=None):
         use the same order to create the keys of weights_dict.
         for example:
         weights_dict = {
-            ("st1", "st2"): [0.6, 0.4],
-            ("st3", "st4"): [0.5, 0.5],
+            ("st1", "st2", "st3", "st4"): [0.25, 0.5, 0.1, 0.15],
         }
         df = df[["st1", "st2", "st3", "st4"]]
         then the keys of weights_dict must be in the same order as the columns of df.
+
+    NOTE:
+        we set the format of weights_dict like this because we want to extend it to match the weights_dict key based on the missing data situation and the key in weights_dict.
+        This is a TODO item.
+        if the key in weights_dict matches the columns of df, we use the weights in weights_dict;
+        if the key in weights_dict does not match the columns of df, we use the arithmetic mean.
+        For example, if the columns of df are ["st1", "st2", "st3", "st4"], and the weights_dict is:
+        weights_dict = {
+            ("st1", "st2", "st3", "st4"): [0.25, 0.5, 0.1, 0.15],
+            ("st1", "st2", "st3"): [0.25, 0.5, 0.1],
+            ("st3", "st4"): [0.1, 0.15],
+        }
+        then when st4 has missing data, we use the weights in ("st1", "st2", "st3") to calculate the weighted mean;
+        and when st1 and st2 have missing data, we use the weights in ("st3", "st4") to calculate the weighted mean.
+        Otherwise, we use the arithmetic mean.
+
+        But this function is not finished yet, and the weights_dict now only supports the case that the keys of weights_dict has all the columns of df;
+        if any column in df is missing, the function will use the arithmetic mean.
 
     Returns
     -------

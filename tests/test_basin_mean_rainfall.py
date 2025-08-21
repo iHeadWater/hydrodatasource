@@ -1,7 +1,7 @@
 """
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-12-12 11:04:10
-LastEditTime: 2025-08-21 08:31:38
+LastEditTime: 2025-08-21 09:11:01
 LastEditors: Wenyu Ouyang
 Description: Test for basin_mean_rainfall.py
 FilePath: \hydrodatasource\tests\test_basin_mean_rainfall.py
@@ -166,8 +166,6 @@ def test_basin_mean_func_multi_station_multi_weight():
     # Second weight type: partial station combinations
     weights2 = {
         ("st1", "st2", "st3", "st4"): [0.25, 0.25, 0.25, 0.25],
-        ("st1", "st2"): [0.6, 0.4],
-        ("st3", "st4"): [0.7, 0.3],
     }
     # Create partial missing data scenario
     df2 = pd.DataFrame(
@@ -208,8 +206,6 @@ def test_basin_mean_func_partial_weight_match():
     )
     weights = {
         ("A", "B", "C"): [0.2, 0.3, 0.5],
-        ("A", "C"): [0.4, 0.6],
-        ("B", "C"): [0.7, 0.3],
     }
     result = basin_mean_func(df, weights)
     # First row: (1*0.2+4*0.3+7*0.5)=0.2+1.2+3.5=4.9
