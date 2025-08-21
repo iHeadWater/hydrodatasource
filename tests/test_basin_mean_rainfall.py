@@ -1,7 +1,7 @@
 """
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-12-12 11:04:10
-LastEditTime: 2025-05-20 15:43:39
+LastEditTime: 2025-08-21 08:31:38
 LastEditors: Wenyu Ouyang
 Description: Test for basin_mean_rainfall.py
 FilePath: \hydrodatasource\tests\test_basin_mean_rainfall.py
@@ -213,9 +213,9 @@ def test_basin_mean_func_partial_weight_match():
     }
     result = basin_mean_func(df, weights)
     # First row: (1*0.2+4*0.3+7*0.5)=0.2+1.2+3.5=4.9
-    # Second row: (5*0.7+8*0.3)=3.5+2.4=5.9
-    # Third row: (3*0.4+9*0.6)=1.2+5.4=6.6
-    expected = pd.Series([4.9, 5.9, 6.6])
+    # Second row: arithmetic mean of (5,8)=6.5
+    # Third row: arithmetic mean of (3,9)=6.0
+    expected = pd.Series([4.9, 6.5, 6.0])
     pd.testing.assert_series_equal(
         result.reset_index(drop=True), expected, check_names=False
     )

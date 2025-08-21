@@ -7,36 +7,6 @@ from shapely.geometry import Polygon
 import hydrodatasource.configs.config as hdscc
 
 
-def read_data(rainfall_data_paths: list, head="local", check_time=None):
-    # Read rainfall CSV files
-    rainfall_dfs = []
-    check_time = pd.to_datetime(check_time, format="%Y-%m-%d %H:%M:%S")
-    latest_date = pd.Timestamp.min  # initialize latest date as minimum Timestamp
-    # Find latest date in CSV files
-    for file in rainfall_data_paths:
-        if head == "local":
-            df = pd.read_csv(file)
-        elif head == "minio":
-            df = pd.read_csv(file, storage_options=hdscc.MINIO_PARAM)
-        else:
-            df = pd.DataFrame()
-        first_row_date = pd.to_datetime(df.iloc[0]["TM"])
-        if (first_row_date > latest_date) & (first_row_date <= check_time):
-            latest_date = first_row_date
-            rainfall_dfs.append(df)
-    # Convert rainfall data and filter by latest date
-    if rainfall_dfs:
-        rainfall_df = pd.concat(rainfall_dfs).drop_duplicates().reset_index(drop=True)
-        rainfall_df["TM"] = pd.to_datetime(rainfall_df["TM"])
-        rainfall_df = rainfall_df[rainfall_df["TM"] >= latest_date]
-    else:
-        temp_range = pd.date_range("1990-01-01", "2038-12-31", freq="h")
-        rainfall_df = pd.DataFrame(
-            {"TM": temp_range, "DRP": np.repeat(0, len(temp_range.to_list()))}
-        )
-    return rainfall_df
-
-
 def calculate_thiesen_polygons(stations, basin):
     """
     Calculate Thiessen polygons and clip to basin boundary.
@@ -192,6 +162,9 @@ def basin_mean_func(df, weights_dict=None):
     """
     Generic basin averaging method that supports both arithmetic mean and weighted mean (e.g. Thiessen polygon weights)
 
+    When some columns have missing values in a row, the function automatically switches to arithmetic mean
+    for that row instead of using weights. This ensures robustness when dealing with incomplete data.
+
     Parameters
     ----------
     df : DataFrame
@@ -219,6 +192,7 @@ def basin_mean_func(df, weights_dict=None):
     """
     if not weights_dict:
         return df.mean(axis=1, skipna=True)
+
     # check if the keys of weights_dict are in the same order as the columns of df
     for key in weights_dict.keys():
         # Get indices of elements in key that exist in df.columns
@@ -229,21 +203,56 @@ def basin_mean_func(df, weights_dict=None):
                 "The station order in each weights_dict key must match the order in df.columns"
             )
 
-    def weighted_mean(row):
-        valid_cols = [
-            col for col, val in zip(df.columns, row.values) if not np.isnan(val)
-        ]
-        key = tuple(sorted(valid_cols))
-        if not valid_cols:
-            return np.nan
-        weights = weights_dict.get(key)
-        if weights is None:
-            # If no weights are provided for this combination of stations, just use equal weights
-            weights = np.ones(len(valid_cols)) / len(valid_cols)
-        vals = [row[col] for col in valid_cols]
-        return np.sum(np.array(vals) * np.array(weights))
+    # Get the complete set of stations that weights are defined for
+    all_weighted_stations = set()
+    for key in weights_dict.keys():
+        all_weighted_stations.update(key)
 
-    return df.apply(weighted_mean, axis=1)
+    # Check which columns exist in both df and weights_dict
+    weighted_cols = [col for col in df.columns if col in all_weighted_stations]
+
+    # Find the weights key that matches our available columns
+    # Try to find exact match first, then sorted match
+    full_weights = None
+    full_station_tuple = None
+
+    for key in weights_dict.keys():
+        # Check if this key contains exactly the same stations as our weighted_cols
+        if set(key) == set(weighted_cols):
+            full_station_tuple = key
+            full_weights = weights_dict[key]
+            break
+
+    if full_weights is None:
+        # If no weights for full set, fall back to arithmetic mean
+        return df.mean(axis=1, skipna=True)
+
+    # Reorder columns to match the order in the weights key
+    ordered_cols = list(full_station_tuple)
+
+    # Create a boolean mask for missing values
+    missing_mask = df[ordered_cols].isna()
+
+    # Check if all rows have complete data (no missing values)
+    complete_rows_mask = ~missing_mask.any(axis=1)
+
+    # Initialize result with NaN
+    result = pd.Series(index=df.index, dtype=float)
+
+    # For rows with complete data, use weighted average
+    if complete_rows_mask.any():
+        complete_data = df.loc[complete_rows_mask, ordered_cols]
+        # Vectorized weighted average calculation
+        weights_array = np.array(full_weights)
+        result.loc[complete_rows_mask] = (complete_data * weights_array).sum(axis=1)
+
+    # For rows with missing data, use arithmetic mean of available stations
+    incomplete_rows_mask = ~complete_rows_mask
+    if incomplete_rows_mask.any():
+        incomplete_data = df.loc[incomplete_rows_mask, ordered_cols]
+        result.loc[incomplete_rows_mask] = incomplete_data.mean(axis=1, skipna=True)
+
+    return result
 
 
 def plot_voronoi_polygons(original_polygons, clipped_polygons, basin):
