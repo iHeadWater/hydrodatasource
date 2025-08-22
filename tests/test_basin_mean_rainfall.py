@@ -215,3 +215,28 @@ def test_basin_mean_func_partial_weight_match():
     pd.testing.assert_series_equal(
         result.reset_index(drop=True), expected, check_names=False
     )
+
+
+def test_basin_mean_func_weights_for_more_stations_than_data():
+    # Test case: weights provided for 5 stations but only 3 stations have data
+    # Should fall back to arithmetic mean since no exact weight match is found
+    df = pd.DataFrame(
+        {
+            "st1": [1.0, 2.0, 3.0],
+            "st2": [4.0, 5.0, 6.0],
+            "st3": [7.0, 8.0, 9.0],
+        }
+    )
+    # Weights provided for 5 stations but data only exists for 3
+    weights = {
+        ("st1", "st2", "st3", "st4", "st5"): [0.1, 0.2, 0.3, 0.2, 0.2],
+    }
+    result = basin_mean_func(df, weights)
+    # Since no exact match for available stations (st1, st2, st3), should use arithmetic mean
+    # Row 1: (1+4+7)/3 = 4.0
+    # Row 2: (2+5+8)/3 = 5.0
+    # Row 3: (3+6+9)/3 = 6.0
+    expected = pd.Series([4.0, 5.0, 6.0])
+    pd.testing.assert_series_equal(
+        result.reset_index(drop=True), expected, check_names=False
+    )
