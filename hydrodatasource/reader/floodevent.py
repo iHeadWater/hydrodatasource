@@ -36,6 +36,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         dataset_name: str = "songliaorrevents",
         time_unit: Optional[List[str]] = None,
         rain_key: str = "rain",
+        pet_key: str = "ES",
         net_rain_key: str = "net_rain",
         obs_flow_key: str = "inflow",
         warmup_length: int = 0,
@@ -76,6 +77,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
 
         # Store constants as instance attributes
         self.rain_key = rain_key
+        self.pet_key = pet_key  # 假设数据集中蒸散发的列名为 'ES'
         self.net_rain_key = net_rain_key
         self.obs_flow_key = obs_flow_key
         self.warmup_length = warmup_length
@@ -192,16 +194,16 @@ class FloodEventDatasource(SelfMadeHydroDataset):
 
             # 提取各列数据
             rain = event_data[self.rain_key].values
-            net_rain = event_data[self.net_rain_key].values
+            ES = event_data[self.pet_key].values
             inflow = event_data[self.obs_flow_key].values
             flood_event_markers = event_data["flood_event"].values
 
             # 创建标准格式字典
             event_dict = self._create_event_dict(
                 rain=rain,
-                net_rain=net_rain,
                 inflow=inflow,
                 event_name=event["event_name"],
+                ES=ES,
                 include_peak_obs=include_peak_obs,
                 flood_event_markers=flood_event_markers,
             )
@@ -214,9 +216,9 @@ class FloodEventDatasource(SelfMadeHydroDataset):
     def _create_event_dict(
         self,
         rain: np.ndarray,
-        net_rain: np.ndarray,
         inflow: np.ndarray,
         event_name: str,
+        ES: np.ndarray,
         include_peak_obs: bool = True,
         flood_event_markers: Optional[np.ndarray] = None,
     ) -> Optional[Dict]:
@@ -227,12 +229,12 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         ----------
         rain: np.ndarray
             rain array
-        net_rain: np.ndarray
-            net_rain array
         inflow: np.ndarray
             inflow array
         event_name: str
             洪峰日期（8位数字格式）
+        ES: np.ndarray
+            蒸散发数组
         include_peak_obs: bool
             是否包含洪峰观测值
         flood_event_markers: np.ndarray, optional
@@ -246,7 +248,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         """
         try:
             # 计算有效降雨时段数
-            valid_rain_mask = ~np.isnan(net_rain) & (net_rain > 0)
+            valid_rain_mask = ~np.isnan(rain) & (rain > 0)
             m_eff = np.sum(valid_rain_mask)
 
             if m_eff == 0:
@@ -259,10 +261,10 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             # 创建标准格式字典（与uh_utils.py期望的key完全一致）
             event_dict = {
                 self.rain_key: rain,
-                self.net_rain_key: net_rain,  # 净雨
                 self.obs_flow_key: inflow,  # 观测径流
+                "ES": ES,
                 "m_eff": m_eff,  # 净雨时段数
-                "n_specific": len(net_rain),  # 单位线长度
+                "n_specific": len(rain),  # 单位线长度
                 "filepath": f"event_{event_name}.csv",  # 避免KeyError
             }
 
@@ -324,8 +326,8 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             xr_ds = self.read_ts_xrdataset(
                 gage_id_lst=[station_id],
                 t_range=["1960-01-01", "2024-12-31"],
-                var_lst=["rain", "inflow", "net_rain", "flood_event"],
-                # recache=True,
+                var_lst=["rain", "inflow", "flood_event", "ES"],
+                recache=True,  # 强制重新缓存，确保数据最新
             )[self.time_unit[0]]
 
             xr_ds["inflow"] = streamflow_unit_conv(
