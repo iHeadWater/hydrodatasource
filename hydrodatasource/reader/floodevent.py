@@ -20,7 +20,7 @@ from hydroutils import hydro_event
 from hydrodatasource.utils.utils import streamflow_unit_conv
 from hydrodatasource.reader.data_source import SelfMadeHydroDataset
 from hydrodatasource.configs.config import CACHE_DIR
-
+from datetime import datetime
 
 class FloodEventDatasource(SelfMadeHydroDataset):
     """
@@ -327,7 +327,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
                 gage_id_lst=[station_id],
                 t_range=["1960-01-01", "2024-12-31"],
                 var_lst=["rain", "inflow", "flood_event", "ES"],
-                recache=True,  # 强制重新缓存，确保数据最新
+                # recache=True,  # 强制重新缓存，确保数据最新
             )[self.time_unit[0]]
 
             xr_ds["inflow"] = streamflow_unit_conv(
@@ -434,22 +434,36 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         Returns
         -------
         Optional[pd.DataFrame]
-            预热期数据，包含time, rain, net_rain, gen_discharge, obs_discharge列
+            预热期数据，包含time, rain, gen_discharge, obs_discharge列
         """
         try:
-            # 解析时间
-            start_dt = datetime.strptime(original_start_time, "%Y%m%d%H")
-            warmup_start = start_dt - timedelta(hours=warmup_hours)
-            warmup_end = start_dt - timedelta(hours=self.delta_t_hours)
+            # 使用字符串操作处理时间
+            year = original_start_time[:4]
+            month = original_start_time[4:6]
+            day = original_start_time[6:8]
+            hour = original_start_time[8:10]
+            
+            # 构造时间字符串
+            start_time = f"{year}-{month}-{day} {hour}:00:00"
+            
+            # 由于时间超出pandas范围，我们暂时使用一个基准年份进行计算
+            base_year = "2000"
+            base_start = f"{base_year}-{month}-{day} {hour}:00:00"
+            base_start_dt = datetime.strptime(base_start, "%Y-%m-%d %H:%M:%S")
+            
+            # 计算预热期时间
+            base_warmup_start = base_start_dt - timedelta(hours=warmup_hours)
+            base_warmup_end = base_start_dt - timedelta(hours=self.delta_t_hours)
+            
+            # 替换回原始年份
+            warmup_start = base_warmup_start.strftime(f"{year}-%m-%d %H:%M:%S")
+            warmup_end = base_warmup_end.strftime(f"{year}-%m-%d %H:%M:%S")
 
             # 读取预热期数据
             xr_ds = self.read_ts_xrdataset(
                 gage_id_lst=[station_id],
-                t_range=[
-                    warmup_start.strftime("%Y-%m-%d %H"),
-                    warmup_end.strftime("%Y-%m-%d %H"),
-                ],
-                var_lst=["inflow", "net_rain", "rain"],
+                t_range=[warmup_start, warmup_end],
+                var_lst=["rain","inflow", "ES"],
             )["3h"]
 
             if xr_ds is None:
@@ -463,7 +477,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             df = df.rename(columns={"inflow": "obs_discharge"})
             df["gen_discharge"] = df["obs_discharge"]
 
-            return df[["time", "rain", "net_rain", "gen_discharge", "obs_discharge"]]
+            return df[["time", "rain", "gen_discharge", "obs_discharge"]]
         except Exception as e:
             print(f"获取预热期数据失败: {e}")
             return None
@@ -489,11 +503,11 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         df = warmup_df.copy()
 
         # 获取增强数据的年份
-        aug_year = int(augmented_start_time[:4])
+        aug_year = augmented_start_time
 
-        # 调整时间列的年份
-        df["time"] = pd.to_datetime(df["time"])
-        df["time"] = df["time"].apply(lambda x: x.replace(year=aug_year))
+        # 调整时间列的年份（字符串操作）
+        df["time"] = df["time"].astype(str)
+        df["time"] = df["time"].apply(lambda x: aug_year + x[4:])
 
         return df
 
@@ -517,11 +531,13 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         """
         # 读取增强数据
         aug_df = pd.read_csv(augmented_file_path, comment="#")
-        aug_df["time"] = pd.to_datetime(aug_df["time"])
+        # 将时间列保持为字符串格式，避免超出pandas时间戳范围限制
+        aug_df["time"] = aug_df["time"].astype(str)
 
         # 获取增强数据的起始时间，用于调整预热期数据的年份
         if not aug_df.empty:
-            aug_start_time = aug_df["time"].min().strftime("%Y%m%d%H")
+            # 从字符串格式的时间中提取年份
+            aug_start_time = aug_df["time"].min()[:4]
             # 调整预热期数据的年份到增强数据的年份
             adjusted_warmup_df = self.adjust_warmup_time_to_augmented_year(
                 warmup_df, aug_start_time
@@ -529,9 +545,13 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         else:
             adjusted_warmup_df = warmup_df
 
-        # 拼接数据
+        # 确保所有时间列都是字符串格式
+        adjusted_warmup_df["time"] = adjusted_warmup_df["time"].astype(str)
+        
+        # 拼接数据并按字符串格式的时间排序
         combined_df = pd.concat([adjusted_warmup_df, aug_df], ignore_index=True)
-        combined_df = combined_df.sort_values("time").reset_index(drop=True)
+        # 使用字符串比较进行排序
+        combined_df = combined_df.sort_values("time", key=lambda x: x.astype(str)).reset_index(drop=True)
 
         return combined_df
 
@@ -556,21 +576,33 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             xarray格式的数据集
         """
         # The gen_discharge is the generated discharge by the data augmentation method
+        # 创建数据集字典
+        data_vars = {}
+        
+        # 添加降雨数据
+        if "rain" in df.columns:
+            data_vars["rain"] = (
+                ["time", "basin"],
+                df[["rain"]].values.reshape(-1, 1),
+            )
+            
+        # 添加生成的流量数据
+        if "gen_discharge" in df.columns:
+            data_vars["gen_discharge"] = (
+                ["time", "basin"],
+                df[["gen_discharge"]].values.reshape(-1, 1),
+            )
+            
+        # 添加观测流量数据（如果存在）
+        if "obs_discharge" in df.columns:
+            data_vars["obs_discharge"] = (
+                ["time", "basin"],
+                df[["obs_discharge"]].values.reshape(-1, 1),
+            )
+            
+        # 创建数据集
         ds = xr.Dataset(
-            {
-                "inflow": (
-                    ["time", "basin"],
-                    df[["gen_discharge"]].values.reshape(-1, 1),
-                ),
-                "net_rain": (
-                    ["time", "basin"],
-                    df[["net_rain"]].values.reshape(-1, 1),
-                ),
-                "rain": (
-                    ["time", "basin"],
-                    df[["rain"]].values.reshape(-1, 1),
-                ),
-            },
+            data_vars,
             coords={"time": df["time"].values, "basin": [station_id]},
         )
 
@@ -582,17 +614,20 @@ class FloodEventDatasource(SelfMadeHydroDataset):
 
         # 为每个变量添加 units 属性
         for var_name in ds.data_vars:
-            if any(
-                keyword in var_name.lower()
-                for keyword in ["flow", "inflow", "streamflow"]
-            ):
-                ds[var_name].attrs["units"] = "m^3/s"  # 流量单位
-            elif "rain" in var_name.lower() or "precipitation" in var_name.lower():
+            if var_name == "rain":
                 ds[var_name].attrs["units"] = f"mm/{time_unit}"  # 降雨单位
-            elif "flood_event" in var_name.lower():
-                ds[var_name].attrs["units"] = "dimensionless"  # 无量纲
+            elif var_name in ["gen_discharge", "obs_discharge"]:
+                ds[var_name].attrs["units"] = "m^3/s"  # 流量单位（包括生成的和观测的）
             else:
                 ds[var_name].attrs["units"] = "unknown"  # 默认值
+            
+            # 添加变量描述
+            if var_name == "rain":
+                ds[var_name].attrs["description"] = "降雨量"
+            elif var_name == "gen_discharge":
+                ds[var_name].attrs["description"] = "生成的流量"
+            elif var_name == "obs_discharge":
+                ds[var_name].attrs["description"] = "观测流量"
 
         return ds
 
@@ -632,7 +667,6 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         # 保存数据
         ds.to_netcdf(cache_file_path)
 
-        print(f"增强时间序列数据已保存到: {cache_file_path}")
         return cache_file_path
 
     def read_ts_xrdataset_augmented(
@@ -693,9 +727,20 @@ class FloodEventDatasource(SelfMadeHydroDataset):
 
                 # 应用时间范围过滤
                 if t_range is not None and len(t_range) >= 2:
-                    start_time = pd.to_datetime(t_range[0])
-                    end_time = pd.to_datetime(t_range[1])
-                    ds = ds.sel(time=slice(start_time, end_time))
+                    # 获取数据集的时间范围
+                    ds_start_time = str(ds.time.values[0])
+                    ds_end_time = str(ds.time.values[-1])
+                    
+                    # 确定实际的切片范围
+                    actual_start = max(t_range[0], ds_start_time)
+                    actual_end = min(t_range[1], ds_end_time)
+                    
+                    # 使用调整后的时间范围进行切片
+                    ds = ds.sel(time=slice(actual_start, actual_end))
+                    
+                    # 如果切片后的数据集为空，返回警告
+                    if len(ds.time) == 0:
+                        print(f"警告：指定的时间范围 {t_range[0]} 到 {t_range[1]} 与数据集时间范围 {ds_start_time} 到 {ds_end_time} 没有重叠")
 
                 # 应用变量过滤
                 if var_lst is not None:
@@ -709,8 +754,8 @@ class FloodEventDatasource(SelfMadeHydroDataset):
                         # 根据变量类型添加合适的单位
                         if any(
                             keyword in var_name.lower()
-                            for keyword in ["flow", "inflow", "streamflow"]
-                        ):
+                            for keyword in ["flow", "inflow", "streamflow","gen_discharge","obs_discharge"]
+                        ):  # 如果 var_name 包含任意一个关键词，执行这里的代码
                             ds[var_name].attrs["units"] = "m^3/s"  # 流量单位
                         elif (
                             "rain" in var_name.lower()
