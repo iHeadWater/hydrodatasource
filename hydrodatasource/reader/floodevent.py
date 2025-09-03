@@ -20,7 +20,6 @@ from hydroutils import hydro_event
 from hydrodatasource.utils.utils import streamflow_unit_conv
 from hydrodatasource.reader.data_source import SelfMadeHydroDataset
 from hydrodatasource.configs.config import CACHE_DIR
-from datetime import datetime
 
 class FloodEventDatasource(SelfMadeHydroDataset):
     """
@@ -327,7 +326,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
                 gage_id_lst=[station_id],
                 t_range=["1960-01-01", "2024-12-31"],
                 var_lst=["rain", "inflow", "flood_event", "ES"],
-                # recache=True,  # 强制重新缓存，确保数据最新
+                recache=True,  # 强制重新缓存，确保数据最新
             )[self.time_unit[0]]
 
             xr_ds["inflow"] = streamflow_unit_conv(
@@ -463,7 +462,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             xr_ds = self.read_ts_xrdataset(
                 gage_id_lst=[station_id],
                 t_range=[warmup_start, warmup_end],
-                var_lst=["rain","inflow", "ES"],
+                var_lst=["rain","inflow","flood_event","ES"],
             )["3h"]
 
             if xr_ds is None:
@@ -548,12 +547,58 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         # 确保所有时间列都是字符串格式
         adjusted_warmup_df["time"] = adjusted_warmup_df["time"].astype(str)
         
+        # 为预热期数据和增强数据添加标记列
+        adjusted_warmup_df['flood_event'] = 0  # 预热期数据标记为0
+        aug_df['flood_event'] = 1  # 洪水期数据标记为1
+        
         # 拼接数据并按字符串格式的时间排序
         combined_df = pd.concat([adjusted_warmup_df, aug_df], ignore_index=True)
         # 使用字符串比较进行排序
         combined_df = combined_df.sort_values("time", key=lambda x: x.astype(str)).reset_index(drop=True)
 
         return combined_df
+
+    def rename_dataframe_columns(self, df: pd.DataFrame, custom_mapping: dict = None) -> pd.DataFrame:
+        """
+        重命名数据框的列名，包括默认的映射和自定义映射
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            需要重命名列的数据框
+        custom_mapping : dict, optional
+            自定义的列名映射字典，例如 {'old_name': 'new_name'}
+
+        Returns
+        -------
+        pd.DataFrame
+            列名重命名后的数据框
+        """
+        # 默认的列名映射
+        default_mapping = {
+            'gen_discharge': 'inflow',
+            # 在这里添加其他默认的列名映射
+        }
+
+        # 如果提供了自定义映射，则更新默认映射
+        if custom_mapping:
+            default_mapping.update(custom_mapping)
+
+        # 获取数据框中实际存在的列
+        existing_columns = set(df.columns)
+        
+        # 只重命名实际存在的列
+        mapping_to_apply = {
+            old: new for old, new in default_mapping.items() 
+            if old in existing_columns
+        }
+
+        # 如果有需要重命名的列，则进行重命名
+        if mapping_to_apply:
+            df = df.rename(columns=mapping_to_apply)
+            renamed_cols = ', '.join([f"{old}->{new}" for old, new in mapping_to_apply.items()])
+            
+        return df
 
     def create_xarray_dataset_from_augdf(
         self, df: pd.DataFrame, station_id: str, time_unit: str = "3h"
@@ -587,17 +632,37 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             )
             
         # 添加生成的流量数据
-        if "gen_discharge" in df.columns:
-            data_vars["gen_discharge"] = (
+        if "inflow"  in df.columns:
+            data_vars["inflow"] = (
+                ["time", "basin"],
+                df[["inflow"]].values.reshape(-1, 1),
+            )
+            
+        if "gen_discharge"  in df.columns:
+            data_vars["inflow"] = (
                 ["time", "basin"],
                 df[["gen_discharge"]].values.reshape(-1, 1),
             )
             
-        # 添加观测流量数据（如果存在）
-        if "obs_discharge" in df.columns:
-            data_vars["obs_discharge"] = (
+        # 添加观测流量数据
+        # if "obs_discharge" in df.columns:
+        #     data_vars["obs_discharge"] = (
+        #         ["time", "basin"],
+        #         df[["obs_discharge"]].values.reshape(-1, 1),
+        #     )
+        
+        # 洪水期标记
+        if "flood_event"  in df.columns:
+            data_vars["flood_event"] = (
                 ["time", "basin"],
-                df[["obs_discharge"]].values.reshape(-1, 1),
+                df[["flood_event"]].values.reshape(-1, 1),
+            )
+            
+        # 添加蒸散发数据
+        if "ES" in df.columns:
+            data_vars["ES"] = (
+                ["time", "basin"],
+                df[["ES"]].values.reshape(-1, 1),
             )
             
         # 创建数据集
@@ -616,18 +681,28 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         for var_name in ds.data_vars:
             if var_name == "rain":
                 ds[var_name].attrs["units"] = f"mm/{time_unit}"  # 降雨单位
-            elif var_name in ["gen_discharge", "obs_discharge"]:
+            elif var_name in ["inflow","gen_discharge", "obs_discharge"]:
                 ds[var_name].attrs["units"] = "m^3/s"  # 流量单位（包括生成的和观测的）
+            elif var_name == "flood_event":
+                ds[var_name].attrs["units"] = "dimensionless"  # 无量纲
+            elif var_name == "ES":
+                ds[var_name].attrs["units"] = f"mm/{time_unit}"  # 蒸散发单位
             else:
                 ds[var_name].attrs["units"] = "unknown"  # 默认值
             
             # 添加变量描述
             if var_name == "rain":
                 ds[var_name].attrs["description"] = "降雨量"
+            elif var_name == "inflow":
+                ds[var_name].attrs["description"] = "生成的流量"
             elif var_name == "gen_discharge":
                 ds[var_name].attrs["description"] = "生成的流量"
             elif var_name == "obs_discharge":
                 ds[var_name].attrs["description"] = "观测流量"
+            elif var_name == "flood_event":
+                ds[var_name].attrs["description"] = "洪水事件标记"
+            elif var_name == "ES":
+                ds[var_name].attrs["description"] = "蒸散发"
 
         return ds
 
@@ -984,9 +1059,9 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             print("❌ 未发现符合条件的增强数据文件")
             return None
         print(f"🔄 准备处理 {len(discovered_files)} 个增强数据文件:")
-        for file_info in discovered_files:
-            modified_by = file_info.get("modified_by", "unknown")
-            print(f"   - {file_info['filename']} (修改者: {modified_by})")
+        # for file_info in discovered_files:
+        #     modified_by = file_info.get("modified_by", "unknown")
+        #     print(f"   - {file_info['filename']} (修改者: {modified_by})")
         # 创建文件路径列表，用于现有的处理方法
         file_paths = [file_info["file_path"] for file_info in discovered_files]
         # 调用现有的处理方法，但使用文件路径而不是编号
@@ -1064,7 +1139,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
 
                     if timeseries_df is not None and len(timeseries_df) > 0:
                         station_timeseries.append(timeseries_df)
-                        print(f"      ✅ 成功处理: {len(timeseries_df)} 条记录")
+                        # print(f"      ✅ 成功处理: {len(timeseries_df)} 条记录")
                     else:
                         print(f"      ⚠️ 跳过文件 {file_path}: 处理后数据为空")
                 except Exception as e:
@@ -1076,6 +1151,8 @@ class FloodEventDatasource(SelfMadeHydroDataset):
                 print(f"   🔄 合并站点 {station_id} 的时间序列数据...")
                 combined_df = pd.concat(station_timeseries, ignore_index=True)
                 combined_df = combined_df.sort_values("time").reset_index(drop=True)
+                # 重命名列 gen_discharge -> inflow
+                combined_df = self.rename_dataframe_columns(combined_df)
 
                 # 转换为xarray Dataset
                 station_ds = self.create_xarray_dataset_from_augdf(
