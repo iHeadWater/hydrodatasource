@@ -420,6 +420,7 @@ class SelfMadeHydroDataset(HydroData):
                 self.data_source_description["UNIT_FILES"][0]
             )
         units_dict["shp_area"] = "km^2"  # add the unit of shp_area
+        units_dict["area"] = "km^2"  # add the unit of area
         # Convert string columns to categorical variables and record categorical mappings
         categorical_mappings = {}
         for column in df_attr.columns:
