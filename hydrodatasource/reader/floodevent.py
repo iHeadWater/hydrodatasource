@@ -474,8 +474,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
 
             # 重命名列以匹配增强文件格式
             df = df.rename(columns={"inflow": "obs_discharge"})
-            # 预热期的模拟量设置为0，因为这是历史观测数据，没有模型模拟值
-            df["gen_discharge"] = 0
+            df["gen_discharge"] = df["obs_discharge"]
 
             return df[["time", "rain", "gen_discharge", "obs_discharge"]]
         except Exception as e:
