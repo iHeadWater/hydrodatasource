@@ -165,3 +165,7 @@ cython_debug/
 tests/test.py
 results/
 const4scripts_private.py
+
+# Claude Code configuration
+CLAUDE.md
+.claude/

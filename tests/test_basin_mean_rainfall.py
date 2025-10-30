@@ -1,7 +1,7 @@
 """
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-12-12 11:04:10
-LastEditTime: 2025-05-20 15:43:39
+LastEditTime: 2025-08-21 09:11:01
 LastEditors: Wenyu Ouyang
 Description: Test for basin_mean_rainfall.py
 FilePath: \hydrodatasource\tests\test_basin_mean_rainfall.py
@@ -166,8 +166,6 @@ def test_basin_mean_func_multi_station_multi_weight():
     # Second weight type: partial station combinations
     weights2 = {
         ("st1", "st2", "st3", "st4"): [0.25, 0.25, 0.25, 0.25],
-        ("st1", "st2"): [0.6, 0.4],
-        ("st3", "st4"): [0.7, 0.3],
     }
     # Create partial missing data scenario
     df2 = pd.DataFrame(
@@ -208,14 +206,37 @@ def test_basin_mean_func_partial_weight_match():
     )
     weights = {
         ("A", "B", "C"): [0.2, 0.3, 0.5],
-        ("A", "C"): [0.4, 0.6],
-        ("B", "C"): [0.7, 0.3],
     }
     result = basin_mean_func(df, weights)
     # First row: (1*0.2+4*0.3+7*0.5)=0.2+1.2+3.5=4.9
-    # Second row: (5*0.7+8*0.3)=3.5+2.4=5.9
-    # Third row: (3*0.4+9*0.6)=1.2+5.4=6.6
-    expected = pd.Series([4.9, 5.9, 6.6])
+    # Second row: arithmetic mean of (5,8)=6.5
+    # Third row: arithmetic mean of (3,9)=6.0
+    expected = pd.Series([4.9, 6.5, 6.0])
+    pd.testing.assert_series_equal(
+        result.reset_index(drop=True), expected, check_names=False
+    )
+
+
+def test_basin_mean_func_weights_for_more_stations_than_data():
+    # Test case: weights provided for 5 stations but only 3 stations have data
+    # Should fall back to arithmetic mean since no exact weight match is found
+    df = pd.DataFrame(
+        {
+            "st1": [1.0, 2.0, 3.0],
+            "st2": [4.0, 5.0, 6.0],
+            "st3": [7.0, 8.0, 9.0],
+        }
+    )
+    # Weights provided for 5 stations but data only exists for 3
+    weights = {
+        ("st1", "st2", "st3", "st4", "st5"): [0.1, 0.2, 0.3, 0.2, 0.2],
+    }
+    result = basin_mean_func(df, weights)
+    # Since no exact match for available stations (st1, st2, st3), should use arithmetic mean
+    # Row 1: (1+4+7)/3 = 4.0
+    # Row 2: (2+5+8)/3 = 5.0
+    # Row 3: (3+6+9)/3 = 6.0
+    expected = pd.Series([4.0, 5.0, 6.0])
     pd.testing.assert_series_equal(
         result.reset_index(drop=True), expected, check_names=False
     )

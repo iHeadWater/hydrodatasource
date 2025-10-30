@@ -4,15 +4,11 @@ import geopandas as gpd
 from netCDF4 import Dataset, date2num, num2date
 import time
 from datetime import datetime, timedelta
-import pandas as pd
 import pint
 import xarray as xr
 import contextlib
 import tempfile
 from ..configs.config import FS
-
-# please don't remove the following line although it seems not used
-import pint_xarray  # noqa
 
 from hydroutils.hydro_time import calculate_utc_offset
 
@@ -180,116 +176,244 @@ def _convert_target_unit(target_unit):
     return None, None
 
 
-def streamflow_unit_conv(streamflow, area, target_unit="mm/d", inverse=False):
-    """Convert the unit of streamflow data to mm/xx(time) for a basin or inverse.
+def _process_custom_unit(streamflow_data, custom_unit):
+    """Process streamflow data with custom unit format like mm/3h."""
+    custom_unit_pattern = re.compile(r"mm/(\d+)(h|d)")
+    if custom_match := custom_unit_pattern.match(custom_unit):
+        num, unit = custom_match.groups()
+        if unit == "h":
+            standard_unit = "mm/h"
+            conversion_factor = int(num)
+        elif unit == "d":
+            standard_unit = "mm/d"
+            conversion_factor = int(num)
+        else:
+            raise ValueError(f"Unsupported unit: {unit}")
+
+        # Convert custom unit to standard unit
+        if isinstance(streamflow_data, xr.Dataset):
+            # For xarray, modify the data and attributes
+            result = streamflow_data / conversion_factor
+            result[list(result.keys())[0]].attrs["units"] = standard_unit
+            return result
+        else:
+            # For numpy/pandas, just return the converted values
+            return streamflow_data / conversion_factor, standard_unit
+    else:
+        # If it's not a custom unit format, return as is
+        if isinstance(streamflow_data, xr.Dataset):
+            result = streamflow_data.copy()
+            result[list(result.keys())[0]].attrs["units"] = custom_unit
+            return result
+        else:
+            return streamflow_data, custom_unit
+
+
+def _get_unit_conversion_info(unit_str):
+    """Get conversion information for a unit string.
+
+    Returns:
+        tuple: (standard_unit, conversion_factor) where conversion_factor
+               is used to convert from standard unit to custom unit.
+    """
+    if not (match := re.match(r"mm/(\d+)(h|d)", unit_str)):
+        # For standard units, no conversion needed
+        return unit_str, 1
+    num, unit = match.groups()
+    if unit == "h":
+        return "mm/h", int(num)
+    elif unit == "d":
+        return "mm/d", int(num)
+    else:
+        raise ValueError(f"Unsupported unit: {unit}")
+
+
+def _get_actual_source_unit(streamflow_data, source_unit=None):
+    """Determine the actual source unit from streamflow data.
 
     Parameters
     ----------
-    streamflow: xarray.Dataset, numpy.ndarray, pandas.DataFrame/Series
+    streamflow_data : xarray.Dataset, pint.Quantity, numpy.ndarray,
+                      pandas.DataFrame/Series
+        The streamflow data to extract units from
+    source_unit : str, optional
+        Explicitly provided source unit that overrides data units
+
+    Returns
+    -------
+    str or None
+        The actual source unit string, or None if no unit information found
+    """
+    if source_unit is not None:
+        return source_unit
+
+    if isinstance(streamflow_data, xr.Dataset):
+        streamflow_key = list(streamflow_data.keys())[0]
+        # First check attrs for units
+        if "units" in streamflow_data[streamflow_key].attrs:
+            return streamflow_data[streamflow_key].attrs["units"]
+        # Then check if it has pint units
+        try:
+            return str(streamflow_data[streamflow_key].pint.units)
+        except (AttributeError, ValueError):
+            return None
+    elif isinstance(streamflow_data, pint.Quantity):
+        return str(streamflow_data.units)
+    else:
+        # numpy array or pandas without units
+        return None
+
+
+def _normalize_unit(unit_str):
+    """Normalize unit string for comparison (handle m3/s vs m^3/s and pint format)."""
+    if not unit_str:
+        return unit_str
+
+    # Handle pint verbose format
+    normalized = unit_str.replace("meter ** 3 / second", "m^3/s")
+    normalized = normalized.replace("meter**3/second", "m^3/s")
+    normalized = normalized.replace("cubic_meter / second", "m^3/s")
+    normalized = normalized.replace("cubic_meter/second", "m^3/s")
+
+    # Handle short format variations
+    normalized = normalized.replace("m3/s", "m^3/s")
+    normalized = normalized.replace("ft3/s", "ft^3/s")
+    normalized = normalized.replace("ft**3/s", "ft^3/s")
+    normalized = normalized.replace("cubic_foot / second", "ft^3/s")
+    normalized = normalized.replace("cubic_foot/second", "ft^3/s")
+
+    # Handle pint format for depth units
+    normalized = normalized.replace("millimeter / day", "mm/d")
+    normalized = normalized.replace("millimeter/day", "mm/d")
+    normalized = normalized.replace("millimeter / hour", "mm/h")
+    normalized = normalized.replace("millimeter/hour", "mm/h")
+
+    return normalized
+
+
+def _is_inverse_conversion(source_unit, target_unit):
+    """Determine if this should be an inverse conversion based on units.
+
+    Returns True if converting from depth units (mm/time) to volume units
+    (m^3/s).
+    Returns False if converting from volume units to depth units.
+    """
+    source_norm = _normalize_unit(source_unit) if source_unit else ""
+    target_norm = _normalize_unit(target_unit)
+
+    # Define unit patterns
+    depth_pattern = re.compile(r"mm/(?:\d+)?[hd]?(?:ay|our)?$")
+    volume_pattern = re.compile(r"(?:m\^?3|ft\^?3)/s$")
+
+    source_is_depth = bool(depth_pattern.match(source_norm))
+    source_is_volume = bool(volume_pattern.match(source_norm))
+    target_is_depth = bool(depth_pattern.match(target_norm))
+    target_is_volume = bool(volume_pattern.match(target_norm))
+
+    if source_is_depth and target_is_volume:
+        return True
+    elif source_is_volume and target_is_depth:
+        return False
+    else:
+        # If we can't determine from units, return None to indicate ambiguity
+        return None
+
+
+def _validate_inverse_consistency(source_unit, target_unit, inverse_param):
+    """Validate that the inverse parameter is consistent with the units.
+
+    Parameters
+    ----------
+    source_unit : str
+        Source unit string
+    target_unit : str
+        Target unit string
+    inverse_param : bool
+        The inverse parameter provided by user
+
+    Raises
+    ------
+    ValueError
+        If inverse parameter is inconsistent with unit conversion direction
+    """
+    expected_inverse = _is_inverse_conversion(source_unit, target_unit)
+
+    if expected_inverse is not None and expected_inverse != inverse_param:
+        direction = "depth->volume" if expected_inverse else "volume->depth"
+        raise ValueError(
+            f"Inverse parameter ({inverse_param}) is inconsistent with unit "
+            f"conversion direction. Converting from '{source_unit}' to "
+            f"'{target_unit}' suggests {direction} conversion "
+            f"(inverse={expected_inverse})."
+        )
+
+
+def streamflow_unit_conv(
+    streamflow,
+    area,
+    target_unit="mm/d",
+    inverse=False,
+    source_unit=None,
+    area_unit="km^2",
+):
+    """Convert the unit of streamflow data from m^3/s or ft^3/s to mm/xx(time) for a basin or inverse.
+
+    This function is now a wrapper around the implementation in hydroutils for backward compatibility.
+
+    Parameters
+    ----------
+    streamflow: xarray.Dataset, numpy.ndarray, pandas.DataFrame/Series, or pint.Quantity
         Streamflow data of each basin.
-    area: xarray.Dataset or pint.Quantity wrapping numpy.ndarray, pandas.DataFrame/Series
-        Area of each basin.
+    area: xarray.Dataset, pint.Quantity, numpy.ndarray, pandas.DataFrame/Series
+        Area of each basin. Can be with or without units.
     target_unit: str
         The unit to convert to.
     inverse: bool
         If True, convert the unit to m^3/s.
         If False, convert the unit to mm/day or mm/h.
+    source_unit: str, optional
+        The source unit of streamflow data. Use this when streamflow doesn't have
+        unit information or when the unit is a custom format like 'mm/3h' that
+        pint cannot recognize directly. If None, the function will try to get
+        unit information from streamflow data attributes.
+    area_unit: str, optional
+        The unit of area data when area is provided without units (e.g., numpy array).
+        Default is "km^2". Only used when area doesn't have unit information.
 
     Returns
     -------
     Converted data in the same type as the input streamflow.
+    For numpy arrays, returns numpy array directly.
     """
-    # Convert the user input unit format
-    num, unit = _convert_target_unit(target_unit)
-    if unit:
-        if unit == "h":
-            standard_unit = "mm/h"
-            conversion_factor = num
-        elif unit == "d":
-            standard_unit = "mm/d"
-            conversion_factor = num
-        else:
-            raise ValueError(f"Unsupported unit: {unit}")
-    else:
-        standard_unit = target_unit
-        conversion_factor = 1
-    # Regular expression to match units with numbers
-    custom_unit_pattern = re.compile(r"mm/(\d+)(h|d)")
-
-    # Function to handle the conversion for numpy and pandas
-    def np_pd_conversion(streamflow, area, target_unit, inverse, conversion_factor):
-        if not inverse:
-            result = (streamflow / area).to(target_unit) * conversion_factor
-        else:
-            result = (streamflow * area).to(target_unit) / conversion_factor
-        return result.magnitude
-
-    # Handle xarray
-    if isinstance(streamflow, xr.Dataset) and isinstance(area, xr.Dataset):
-        streamflow_units = streamflow[list(streamflow.keys())[0]].attrs.get(
-            "units", None
-        )
-        if not inverse:
-            if not (
-                custom_unit_pattern.match(target_unit)
-                or re.match(r"mm/(?!\d)", target_unit)
-            ):
-                raise ValueError(
-                    "target_unit should be a valid unit like 'mm/d', 'mm/day', 'mm/h', 'mm/hour', 'mm/3h', 'mm/5d'"
-                )
-
-            q = streamflow.pint.quantify()
-            a = area.pint.quantify()
-            r = q[list(q.keys())[0]] / a[list(a.keys())[0]]
-            # result = r.pint.to(target_unit).to_dataset(name=list(q.keys())[0])
-            result = (r.pint.to(standard_unit) * conversion_factor).to_dataset(
-                name=list(q.keys())[0]
-            )
-            # Manually set the unit attribute to the custom unit
-            result_ = result.pint.dequantify()
-            result_[list(result_.keys())[0]].attrs["units"] = target_unit
-            return result_
-        else:
-            if streamflow_units:
-                if custom_match := custom_unit_pattern.match(streamflow_units):
-                    num, unit = custom_match.groups()
-                    if unit == "h":
-                        standard_unit = "mm/h"
-                        conversion_factor = int(num)
-                    elif unit == "d":
-                        standard_unit = "mm/d"
-                        conversion_factor = int(num)
-                    # Convert custom unit to standard unit
-                    r_ = streamflow / conversion_factor
-                    r_[list(r_.keys())[0]].attrs["units"] = standard_unit
-                    r = r_.pint.quantify()
-                else:
-                    r = streamflow.pint.quantify()
-            else:
-                r = streamflow.pint.quantify()
-            if target_unit not in ["m^3/s", "m3/s"]:
-                raise ValueError("target_unit should be 'm^3/s'")
-            a = area.pint.quantify()
-            q = r[list(r.keys())[0]] * a[list(a.keys())[0]]
-            result = q.pint.to(target_unit).to_dataset(name=list(r.keys())[0])
-            # dequantify to get normal xr_dataset
-            return result.pint.dequantify()
-
-    # Handle numpy and pandas
-    elif isinstance(streamflow, pint.Quantity) and isinstance(area, pint.Quantity):
-        if type(streamflow.magnitude) not in [np.ndarray, pd.DataFrame, pd.Series]:
-            raise TypeError(
-                "Input streamflow must be xarray.Dataset, or pint.Quantity wrapping numpy.ndarray, or pandas.DataFrame/Series"
-            )
-        if type(area.magnitude) != type(streamflow.magnitude):
-            raise TypeError("streamflow and area must be the same type")
-        return np_pd_conversion(
-            streamflow, area, standard_unit, inverse, conversion_factor
+    # Import the new implementation from hydroutils
+    try:
+        from hydroutils.hydro_units import (
+            streamflow_unit_conv as hydro_streamflow_unit_conv,
+            _detect_data_unit,
+            _validate_inverse_consistency,
         )
 
-    else:
-        raise TypeError(
-            "Input streamflow must be xarray.Dataset, or pint.Quantity wrapping numpy.ndarray, or pandas.DataFrame/Series"
+        # Detect source unit if not provided
+        if source_unit is None:
+            source_unit = _detect_data_unit(streamflow, source_unit)
+
+        # Validate that the inverse parameter is consistent with unit conversion direction
+        _validate_inverse_consistency(source_unit, target_unit, inverse)
+
+        # Call the new hydroutils version with simplified interface
+        return hydro_streamflow_unit_conv(
+            data=streamflow,
+            area=area,
+            target_unit=target_unit,
+            source_unit=source_unit,
+            area_unit=area_unit,
+        )
+    except ImportError as e:
+        # If hydroutils is not available, fall back to error message
+        # This ensures backward compatibility during transition
+        raise ImportError(
+            f"hydroutils is not available. Please install hydroutils to use streamflow_unit_conv. "
+            f"Original error: {e}"
         )
 
 
