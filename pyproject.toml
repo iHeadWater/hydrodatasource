@@ -42,8 +42,10 @@ dependencies = [
     "dataretrieval",
     "pygeohydro",
     "pykalman",
-    "hydrodataset",
+    "hydroutils>=0.1.0",
+    "hydrodataset>=0.2.0",
     "hydrotopo",
+    "aqua-fetch[all]",
 ]
 
 [project.optional-dependencies]
@@ -164,3 +166,16 @@ replace = 'version = "{new_version}"'
 filename = "hydrodatasource/__init__.py"
 search = '__version__ = "{current_version}"'
 replace = '__version__ = "{new_version}"'
+
+[tool.uv.sources]
+aqua-fetch = { git = "https://github.com/iHeadWater/AquaFetch.git", rev = "dev" }
+# ============================================================================
+# 本地开发模式配置
+# ============================================================================
+# 说明：
+# 1. 本配置仅在本地开发时生效，使用 uv 时会优先使用本地可编辑版本
+# 2. 当项目发布到 PyPI 后，其他用户安装时会忽略此配置，自动从 PyPI 安装
+# 3. 如需临时使用 PyPI 版本进行测试，可以注释掉对应的本地路径配置
+# ============================================================================
+hydrodataset = { path = "../hydrodataset", editable = true }
+hydroutils = { path = "../hydroutils", editable = true }
