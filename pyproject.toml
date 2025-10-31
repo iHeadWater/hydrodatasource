@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
 
 [project]
 name = "hydrodatasource"
-version = "0.1.1"
+dynamic = ["version"]
 description = "A python project to deal with hydrological datasources"
 authors = [{name = "Wenyu Ouyang", email = "hust2014owen@gmail.com"}]
 license = {text = "BSD License"}
@@ -61,8 +61,7 @@ dev = [
     "pytest-asyncio",
     "pytest-mock",
     
-    # Packaging and version management
-    "bump2version",
+    # Packaging
     "wheel",
     "twine",
     
@@ -104,11 +103,33 @@ Repository = "https://github.com/iHeadWater/hydrodatasource"
 Documentation = "https://github.com/iHeadWater/hydrodatasource"
 "Bug Tracker" = "https://github.com/iHeadWater/hydrodatasource/issues"
 
-[tool.setuptools.packages.find]
-include = ["hydrodatasource*"]
+# Hatch version management
+[tool.hatch.version]
+source = "vcs"
+fallback-version = "0.1.1"
 
-[tool.setuptools.package-data]
-"*" = ["*.yml", "*.yaml", "*.json", "*.txt", "*.md"]
+[tool.hatch.version.raw-options]
+local_scheme = "no-local-version"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "hydrodatasource/_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["hydrodatasource"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/hydrodatasource",
+    "/tests",
+    "/docs",
+    "/README.md",
+    "/LICENSE",
+    "/AUTHORS.rst",
+    "/MANIFEST.in",
+]
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -120,7 +141,7 @@ collect_ignore = ["setup.py"]
 [tool.black]
 line-length = 88
 target-version = ['py310', 'py311', 'py312']
-include = '\.pyi?$'
+include = '''\.pyi?$'''
 extend-exclude = '''
 /(
   # directories
@@ -152,23 +173,7 @@ exclude = [
     ".tox",
 ]
 
-[tool.bumpversion]
-current_version = "0.1.1"
-commit = true
-tag = true
-
-[[tool.bumpversion.files]]
-filename = "pyproject.toml"
-search = 'version = "{current_version}"'
-replace = 'version = "{new_version}"'
-
-[[tool.bumpversion.files]]
-filename = "hydrodatasource/__init__.py"
-search = '__version__ = "{current_version}"'
-replace = '__version__ = "{new_version}"'
-
 [tool.uv.sources]
-aqua-fetch = { git = "https://github.com/iHeadWater/AquaFetch.git", rev = "dev" }
 # ============================================================================
 # 本地开发模式配置
 # ============================================================================
