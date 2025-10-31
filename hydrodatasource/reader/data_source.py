@@ -39,8 +39,9 @@ class HydroData(ABC):
         _description_
     """
 
-    def __init__(self, data_path):
-        self.data_source_dir = data_path
+    def __init__(self, data_path, dataset_name):
+        self.data_source_dir = os.path.join(data_path, dataset_name)
+        self.dataset_name = dataset_name
 
     def get_name(self):
         raise NotImplementedError
@@ -62,21 +63,18 @@ class SelfMadeHydroDataset(HydroData):
     Only two directories are needed: attributes and timeseries
     """
 
-    def __init__(
-        self, data_path, download=False, time_unit=None, dataset_name=None, **kwargs
-    ):
+    def __init__(self, data_path, dataset_name, time_unit=None, **kwargs):
         """Initialize a self-made Caravan-style dataset.
 
         Parameters
         ----------
-        data_path : _type_
-            _description_
-        download : bool, optional
-            _description_, by default False
+        data_path : str
+            The path to the custom-made data sources' parent directory.
+        dataset_name : str
+            SelfMadeHydroDataset's name, for example, googleflood or fdsources,
+            different dataset may use this same datasource class, but they have different dataset_name.
         time_unit : list, optional
             we have different time units, by default None
-        dataset_name : str, optional
-            SelfMadeHydroDataset's name, for example, googleflood or fdsources, different dataset may use this same datasource class, by default None
         kwargs : dict, optional
             additional keyword arguments, by default None
         """
@@ -88,13 +86,10 @@ class SelfMadeHydroDataset(HydroData):
             )
         # TODO: maybe starting with "s3://" is a better idea?
         self.head = "minio" if "s3://" in data_path else "local"
-        super().__init__(data_path)
+        super().__init__(data_path, dataset_name)
         self.data_source_description = self.set_data_source_describe()
-        if download:
-            self.download_data_source()
         self.camels_sites = self.read_site_info()
         self.time_unit = time_unit
-        self.dataset_name = dataset_name
         # version is used for the version of the dataset, for example, camels_v2.0
         self.version = kwargs.get("version", None)
         # offset_to_utc is used for the offset to UTC, for example, for Chinese basins' data, we generally set it to True as we always use 08:00 with Beijing Time
@@ -144,12 +139,6 @@ class SelfMadeHydroDataset(HydroData):
                 if os.path.isdir(os.path.join(ts_dir, name))
             ]
         )
-
-    def download_data_source(self):
-        print(
-            "Please download it manually and put all files of a CAMELS dataset in the CAMELS_DIR directory."
-        )
-        print("We unzip all files now.")
 
     def read_site_info(self):
         camels_file = self.data_source_description["ATTR_FILE"]
@@ -487,7 +476,10 @@ class SelfMadeHydroDataset(HydroData):
                 if time_unit != "3h":
                     self.trange4cache = ["1960-01-01", "2024-12-31"]
                 else:
-                    self.trange4cache = ["1960-01-01 02", "2024-12-31 23"] #这个是实际的时间范围是这样的
+                    self.trange4cache = [
+                        "1960-01-01 02",
+                        "2024-12-31 23",
+                    ]  # 这个是实际的时间范围是这样的
 
             # Generate the time range specific to the time unit
             if start0101_freq:
@@ -1325,7 +1317,7 @@ class StationHydroDataset(SelfMadeHydroDataset):
                     if col in station_data.columns:
                         time_col = col
                         break
-                
+
                 if time_col is None:
                     print(f"Warning: No time column found in {station_file}")
                     continue
@@ -1430,7 +1422,7 @@ class StationHydroDataset(SelfMadeHydroDataset):
                 if col in sample_data.columns:
                     time_col = col
                     break
-            
+
             variables = [col for col in sample_data.columns if col != time_col]
 
             # Get units info if available
@@ -1609,9 +1601,9 @@ class StationHydroDataset(SelfMadeHydroDataset):
         # Get all basin IDs
         if self.basin_station_mapping is None:
             self.read_station_info()
-        
+
         basin_ids = self.basin_station_mapping["basin_id"].unique()
-        
+
         # Read all adjacency matrices
         adjacency_datasets = {}
         for basin_id in basin_ids:
@@ -1629,11 +1621,11 @@ class StationHydroDataset(SelfMadeHydroDataset):
             except FileNotFoundError:
                 # Skip basins without adjacency files
                 continue
-        
+
         # Save individual adjacency matrices for each basin
         dataset_name = self.dataset_name
         prefix_ = "" if dataset_name is None else dataset_name + "_"
-        
+
         for basin_id, adj_ds in adjacency_datasets.items():
             adj_ds.to_netcdf(
                 os.path.join(CACHE_DIR, f"{prefix_}adjacency_{basin_id}.nc")
@@ -1654,16 +1646,16 @@ class StationHydroDataset(SelfMadeHydroDataset):
         """
         dataset_name = self.dataset_name
         prefix_ = "" if dataset_name is None else dataset_name + "_"
-        
+
         adjacency_file = os.path.join(CACHE_DIR, f"{prefix_}adjacency_{basin_id}.nc")
-        
+
         try:
             adjacency_ds = xr.open_dataset(adjacency_file)
         except FileNotFoundError:
             # Cache the adjacency data if not found
             self.cache_adjacency_xrdataset()
             adjacency_ds = xr.open_dataset(adjacency_file)
-        
+
         return adjacency_ds
 
     def _get_station_file_prefix_(self, dataset_name, version):
@@ -1705,6 +1697,10 @@ class StationHydroDataset(SelfMadeHydroDataset):
         if self.basin_station_mapping is None:
             self.read_station_info()
 
-        return self.basin_station_mapping[
-            self.basin_station_mapping["basin_id"] == basin_id
-        ]["station_id"].unique().tolist()
+        return (
+            self.basin_station_mapping[
+                self.basin_station_mapping["basin_id"] == basin_id
+            ]["station_id"]
+            .unique()
+            .tolist()
+        )

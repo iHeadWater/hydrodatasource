@@ -1,7 +1,7 @@
 """
 Author: Wenyu Ouyang
 Date: 2024-07-06 19:20:59
-LastEditTime: 2025-06-14 16:06:35
+LastEditTime: 2025-10-31 11:13:45
 LastEditors: Wenyu Ouyang
 Description: Test funcs for data source
 FilePath: \hydrodatasource\tests\test_data_source.py
@@ -26,7 +26,9 @@ def one_hour_dataset():
     selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
     # minio
     # selfmadehydrodataset_path = "s3://basins-interim"
-    return SelfMadeHydroDataset(data_path=selfmadehydrodataset_path, time_unit=["1h"])
+    return SelfMadeHydroDataset(
+        data_path=selfmadehydrodataset_path, dataset_name="FDSources", time_unit=["1h"]
+    )
 
 
 @pytest.fixture
@@ -35,7 +37,9 @@ def three_hour_dataset():
     selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
     # minio
     # selfmadehydrodataset_path = "s3://basins-interim"
-    return SelfMadeHydroDataset(data_path=selfmadehydrodataset_path, time_unit=["3h"])
+    return SelfMadeHydroDataset(
+        data_path=selfmadehydrodataset_path, dataset_name="FDSources", time_unit=["3h"]
+    )
 
 
 @pytest.fixture
@@ -44,7 +48,9 @@ def one_day_dataset():
     selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
     # minio
     # selfmadehydrodataset_path = "s3://basins-interim"
-    return SelfMadeHydroDataset(data_path=selfmadehydrodataset_path)
+    return SelfMadeHydroDataset(
+        data_path=selfmadehydrodataset_path, dataset_name="FDSources"
+    )
 
 
 @pytest.fixture
@@ -53,7 +59,11 @@ def eight_day_dataset():
     selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
     # minio
     # selfmadehydrodataset_path = "s3://basins-interim"
-    return SelfMadeHydroDataset(data_path=selfmadehydrodataset_path, time_unit=["8D"])
+    return SelfMadeHydroDataset(
+        data_path=selfmadehydrodataset_path,
+        dataset_name="FDSources",
+        time_unit=["8D"],
+    )
 
 
 def test_selfmadehydrodataset_get_name(one_day_dataset):
