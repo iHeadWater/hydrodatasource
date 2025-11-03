@@ -148,6 +148,63 @@ class SelfMadeHydroDataset(HydroData):
     def read_object_ids(self, object_params=None) -> np.array:
         return self.camels_sites["basin_id"].values
 
+    def _validate_time_alignment(self, date, time_unit, start_hour_in_a_day, object_id):
+        """
+        Validate that data time alignment matches the expected start_hour_in_a_day.
+
+        Parameters
+        ----------
+        date : np.ndarray
+            Array of datetime values from the data
+        time_unit : str
+            Time unit string (e.g., "3h", "1D")
+        start_hour_in_a_day : int
+            Expected start hour in a day (0-23)
+        object_id : str
+            Basin/object ID for error reporting
+
+        Raises
+        ------
+        ValueError
+            If data alignment does not match the expected start_hour_in_a_day
+        """
+        if len(date) == 0:
+            return
+
+        # Check if this is a sub-daily interval (contains 'h' or 'H')
+        if "h" not in time_unit.lower() and "H" not in time_unit:
+            return
+
+        # Extract the numeric part to check if it's not 1h
+        numeric_part = "".join(filter(str.isdigit, time_unit))
+        if not numeric_part or int(numeric_part) == 1:
+            return
+
+        # For intervals like 3h, validate alignment
+        expected_hour = start_hour_in_a_day
+        # Get actual hours from the data
+        actual_hours = pd.to_datetime(date).hour
+        unique_hours = np.unique(actual_hours)
+
+        # Calculate expected hours based on the interval
+        interval_hours = int(numeric_part)
+        expected_hours_in_day = list(range(expected_hour, 24, interval_hours))
+
+        # Check if any actual hour is not in expected hours
+        misaligned_hours = [h for h in unique_hours if h not in expected_hours_in_day]
+
+        if misaligned_hours:
+            # Find what the correct start_hour should be
+            actual_start_hour = min(unique_hours)
+            raise ValueError(
+                f"Data time alignment error for basin '{object_id}': "
+                f"The actual data starts at hour {actual_start_hour:02d}, "
+                f"but start_hour_in_a_day is set to {expected_hour}. "
+                f"Expected hours in a day: {sorted(expected_hours_in_day)}, "
+                f"but found hours: {sorted(unique_hours.tolist())}. "
+                f"Please set start_hour_in_a_day to {actual_start_hour} to match your data."
+            )
+
     def read_timeseries(
         self, object_ids=None, t_range_list: list = None, relevant_cols=None, **kwargs
     ) -> dict:
@@ -164,6 +221,14 @@ class SelfMadeHydroDataset(HydroData):
             List of relevant columns. Defaults to None.
         **kwargs : dict, optional
             Additional keyword arguments.
+            time_units : list, optional
+                List of time units to process
+            start0101_freq : bool, optional
+                For freq setting, if the start date is 01-01, set True
+            offset_to_utc : bool, optional
+                Whether to offset the time to UTC
+            start_hour_in_a_day : int, optional
+                The start hour in a day for sub-daily intervals (0-23). Default is 2.
 
         Returns
         -------
@@ -173,6 +238,15 @@ class SelfMadeHydroDataset(HydroData):
         time_units = kwargs.get("time_units", ["1D"])
         start0101_freq = kwargs.get("start0101_freq", False)
         offset_to_utc = kwargs.get("offset_to_utc", self.offset_to_utc)
+        start_hour_in_a_day = kwargs.get("start_hour_in_a_day", 2)
+
+        # Validate start_hour_in_a_day range
+        if not isinstance(start_hour_in_a_day, int) or not (
+            0 <= start_hour_in_a_day <= 23
+        ):
+            raise ValueError(
+                f"start_hour_in_a_day must be an integer between 0 and 23, got {start_hour_in_a_day}"
+            )
 
         results = {}
 
@@ -203,6 +277,9 @@ class SelfMadeHydroDataset(HydroData):
             nt = len(t_range)
             x = np.full([len(object_ids), nt, len(relevant_cols)], np.nan)
 
+            # Flag to check data alignment only once
+            data_alignment_checked = False
+
             for k in tqdm(
                 range(len(object_ids)), desc=f"Reading timeseries data with {time_unit}"
             ):
@@ -218,6 +295,14 @@ class SelfMadeHydroDataset(HydroData):
                 date = pd.to_datetime(ts_data["time"]).values
                 if offset_to_utc:
                     date = date - np.timedelta64(offset_dict[object_ids[k]], "h")
+
+                # Validate data alignment with start_hour_in_a_day (only check once)
+                if not data_alignment_checked:
+                    self._validate_time_alignment(
+                        date, time_unit, start_hour_in_a_day, object_ids[k]
+                    )
+                    data_alignment_checked = True
+
                 [_, ind1, ind2] = np.intersect1d(date, t_range, return_indices=True)
 
                 for j in range(len(relevant_cols)):
@@ -456,6 +541,10 @@ class SelfMadeHydroDataset(HydroData):
             batchsize -- Number of basins to process per batch, by default 100
             time_units -- List of time units to process, by default None
             start0101_freq -- for freq setting, if the start date is 01-01, set True, by default False
+            offset_to_utc -- whether to offset the time to UTC, by default False
+            start_hour_in_a_day -- the start hour in a day (0-23), by default 2 which means 2-5-8-11-14-17-20-23 UTC.
+                                   Chinese basins data always use 08:00 with Beijing Time, so we set the default value to 2.
+                                   Only applicable for sub-daily intervals (currently only "3h" is supported)
         """
         batchsize = kwargs.get("batchsize", 100)
         time_units = kwargs.get("time_units", self.time_unit) or [
@@ -463,8 +552,31 @@ class SelfMadeHydroDataset(HydroData):
         ]  # Default to ["1D"] if not specified or if time_units is None
         start0101_freq = kwargs.get("start0101_freq", False)
         offset_to_utc = kwargs.get("offset_to_utc", self.offset_to_utc)
+        start_hour_in_a_day = kwargs.get("start_hour_in_a_day", 2)
+
+        # Validate start_hour_in_a_day
+        if not isinstance(start_hour_in_a_day, int) or not (
+            0 <= start_hour_in_a_day <= 23
+        ):
+            raise ValueError(
+                f"start_hour_in_a_day must be an integer between 0 and 23, got {start_hour_in_a_day}"
+            )
         variables = self.get_timeseries_cols()
         basins = self.camels_sites["basin_id"].values
+
+        # Validate time_units for sub-daily intervals
+        for time_unit in time_units:
+            # Check if this is an hourly interval (contains 'h' or 'H')
+            if "h" in time_unit.lower() or "H" in time_unit:
+                # Extract the numeric part
+                numeric_part = "".join(filter(str.isdigit, time_unit))
+                if numeric_part and int(numeric_part) != 1:
+                    # If it's not 1h, only allow 3h
+                    if time_unit.lower() not in ["3h"]:
+                        raise ValueError(
+                            f"Currently only '3h' sub-daily interval is supported for custom start_hour_in_a_day. "
+                            f"Got '{time_unit}'. Please use '1h', '3h', or daily/longer intervals."
+                        )
 
         # Define the generator function for batching
         def data_generator(basins, batch_size):
@@ -476,10 +588,22 @@ class SelfMadeHydroDataset(HydroData):
                 if time_unit != "3h":
                     self.trange4cache = ["1960-01-01", "2024-12-31"]
                 else:
+                    # Calculate the end hour based on 3-hour intervals
+                    # For 3h intervals, find the last timestamp within a day
+                    # Example: start_hour_in_a_day=2 -> 02, 05, 08, 11, 14, 17, 20, 23 (last is 23)
+                    # Example: start_hour_in_a_day=5 -> 05, 08, 11, 14, 17, 20, 23 (last is 23)
+                    start_hour = str(start_hour_in_a_day).zfill(2)
+                    # Find the last hour in the day for this interval
+                    hours_in_day = list(range(start_hour_in_a_day, 24, 3))
+                    if len(hours_in_day) > 0:
+                        end_hour = str(hours_in_day[-1]).zfill(2)
+                    else:
+                        # If start_hour >= 24, which shouldn't happen, default to 23
+                        end_hour = "23"
                     self.trange4cache = [
-                        "1960-01-01 02",
-                        "2024-12-31 23",
-                    ]  # 这个是实际的时间范围是这样的
+                        f"1960-01-01 {start_hour}",
+                        f"2024-12-31 {end_hour}",
+                    ]
 
             # Generate the time range specific to the time unit
             if start0101_freq:
@@ -526,6 +650,7 @@ class SelfMadeHydroDataset(HydroData):
                     ],  # Pass the time unit to ensure correct data retrieval
                     start0101_freq=start0101_freq,
                     offset_to_utc=offset_to_utc,
+                    start_hour_in_a_day=start_hour_in_a_day,
                 )
 
                 dataset = xr.Dataset(
@@ -711,21 +836,19 @@ class SelfMadeHydroDataset(HydroData):
 class SelfMadeForecastDataset(SelfMadeHydroDataset):
     """For selfmadehydrodataset, we design a new file format for forecast data from GFS et al."""
 
-    def __init__(self, data_path, download=False, time_unit=None, dataset_name=None):
+    def __init__(self, data_path, dataset_name, time_unit=None):
         """intialize a Class for reading forecast data
 
         Parameters
         ----------
         data_path : str
             the path of data source
-        download : bool, optional
-            if download, by default False
         time_unit : list, optional
             unit of one time period, by default None
         dataset_name: str
             name will be used for cache files
         """
-        super().__init__(data_path, download, time_unit, dataset_name=dataset_name)
+        super().__init__(data_path, dataset_name, time_unit)
 
     def set_data_source_describe(self):
         """set data source description
@@ -1122,25 +1245,21 @@ class StationHydroDataset(SelfMadeHydroDataset):
         - adjacency_xxx_True.csv
     """
 
-    def __init__(
-        self, data_path, download=False, time_unit=None, dataset_name=None, **kwargs
-    ):
+    def __init__(self, data_path, dataset_name, time_unit=None, **kwargs):
         """Initialize StationHydroDataset.
 
         Parameters
         ----------
         data_path : str
             Path to the dataset directory
-        download : bool, optional
-            Whether to download data, by default False
+        dataset_name : str
+            Name of the dataset
         time_unit : list, optional
             Time units for the data, by default None
-        dataset_name : str, optional
-            Name of the dataset, by default None
         **kwargs : dict
             Additional keyword arguments passed to parent class
         """
-        super().__init__(data_path, download, time_unit, dataset_name, **kwargs)
+        super().__init__(data_path, dataset_name, time_unit, **kwargs)
         self.station_info = None
         self.basin_station_mapping = None
 

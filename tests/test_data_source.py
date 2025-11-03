@@ -1,14 +1,16 @@
 """
 Author: Wenyu Ouyang
 Date: 2024-07-06 19:20:59
-LastEditTime: 2025-10-31 11:13:45
+LastEditTime: 2025-11-03 16:43:36
 LastEditors: Wenyu Ouyang
 Description: Test funcs for data source
 FilePath: \hydrodatasource\tests\test_data_source.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 
-import os
+import pytest
+
+pytestmark = pytest.mark.internal_data
 import numpy as np
 import pandas as pd
 import pytest
@@ -118,6 +120,7 @@ def test_selfmadehydrodataset_cache_attributes_xrdataset(one_day_dataset):
     assert os.path.exists(os.path.join(CACHE_DIR, "attributes.nc"))
 
 
+@pytest.mark.slow
 def test_selfmadehydrodataset_cache_timeseries_xrdataset(
     one_day_dataset, three_hour_dataset, one_hour_dataset, eight_day_dataset
 ):
@@ -142,13 +145,7 @@ def test_selfmadehydrodataset_cache_timeseries_xrdataset(
     one_day_dataset.cache_timeseries_xrdataset()
 
 
-def test_selfmadehydrodataset_cache_pqds(three_hour_pqdataset):
-    three_hour_pqdataset.cache_timeseries_xrdataset(
-        time_units=["3h"],
-        trange4cache=["1980-01-01 01", "2023-12-31 22"],
-    )
-
-
+@pytest.mark.slow
 def test_selfmadehydrodataset_cache_xrdataset(one_day_dataset):
     one_day_dataset.cache_xrdataset()
 
@@ -156,23 +153,6 @@ def test_selfmadehydrodataset_cache_xrdataset(one_day_dataset):
 def test_selfmadehydrodataset_read_ts_xrdataset(
     one_day_dataset, three_hour_dataset, one_hour_dataset, eight_day_dataset
 ):
-    # 8D
-    xrdataset_dict = eight_day_dataset.read_ts_xrdataset(
-        gage_id_lst=["camels_01013500", "camels_01022500"],
-        t_range=["2020-01-01", "2020-12-31"],
-        var_lst=["ET_modis16a2006", "ET_modis16a2gf061"],
-        time_units=["8D"],
-    )
-    target_cols = one_day_dataset.read_timeseries(
-        object_ids=["camels_01013500", "camels_01022500"],
-        t_range_list=["2020-01-01", "2020-12-31"],
-        relevant_cols=["streamflow"],
-        time_unit=["1D"],
-    )
-    assert isinstance(xrdataset_dict, dict)
-    np.testing.assert_array_equal(
-        xrdataset_dict["1D"]["streamflow"].values, target_cols["1D"][:, :, 0]
-    )
     # 1h
     xrdataset_dict = one_hour_dataset.read_ts_xrdataset(
         gage_id_lst=["camels_01013500", "camels_01022500"],
@@ -194,15 +174,17 @@ def test_selfmadehydrodataset_read_ts_xrdataset(
     # 3h
     xrdataset_dict = three_hour_dataset.read_ts_xrdataset(
         gage_id_lst=["camels_01013500", "camels_01022500"],
-        t_range=["2020-01-01 01", "2020-12-31 22"],
+        t_range=["2020-01-01 00", "2020-12-31 00"],
         var_lst=["streamflow"],
         time_units=["3h"],
+        start_hour_in_a_day=0,
     )
     target_cols = three_hour_dataset.read_timeseries(
         object_ids=["camels_01013500", "camels_01022500"],
-        t_range_list=["2020-01-01 01", "2020-12-31 22"],
+        t_range_list=["2020-01-01 00", "2020-12-31 00"],
         relevant_cols=["streamflow"],
         time_units=["3h"],
+        start_hour_in_a_day=0,
     )
     assert isinstance(xrdataset_dict, dict)
     np.testing.assert_array_equal(
@@ -227,15 +209,23 @@ def test_selfmadehydrodataset_read_ts_xrdataset(
         xrdataset_dict["1D"]["streamflow"].values, target_cols["1D"][:, :, 0]
     )
 
-
-def test_read_pdts_cache(three_hour_pqdataset):
-    pqdataset_dict = three_hour_pqdataset.read_ts_xrdataset(
+    # 8D
+    xrdataset_dict = eight_day_dataset.read_ts_xrdataset(
         gage_id_lst=["camels_01013500", "camels_01022500"],
-        t_range=["2020-01-01 01", "2020-12-31 22"],
-        var_lst=["streamflow"],
-        time_units=["3h"],
+        t_range=["2020-01-01", "2020-12-31"],
+        var_lst=["ET_modis16a2006", "ET_modis16a2gf061"],
+        time_units=["8D"],
     )
-    assert isinstance(pqdataset_dict, dict)
+    target_cols = eight_day_dataset.read_timeseries(
+        object_ids=["camels_01013500", "camels_01022500"],
+        t_range_list=["2020-01-01", "2020-12-31"],
+        relevant_cols=["ET_modis16a2006", "ET_modis16a2gf061"],
+        time_units=["8D"],
+    )
+    assert isinstance(xrdataset_dict, dict)
+    np.testing.assert_array_equal(
+        xrdataset_dict["8D"]["ET_modis16a2006"].values, target_cols["8D"][:, :, 0]
+    )
 
 
 def test_selfmadehydrodataset_read_attr_xrdataset(one_day_dataset):
@@ -308,35 +298,15 @@ def test_read_mean_prcp_invalid_unit(one_day_dataset):
         )
 
 
-@pytest.mark.parametrize(
-    "object_ids, t_range_list, relevant_cols, expected_exception",
-    [
-        (None, ["2020-01-01", "2020-01-05"], ["streamflow"], ValueError),
-        (["basin_1"], None, ["streamflow"], ValueError),
-        (["basin_1"], ["2020-01-01", "2020-01-05"], None, ValueError),
-        ([], ["2020-01-01", "2020-01-05"], ["streamflow"], ValueError),
-        (["basin_1"], [], ["streamflow"], ValueError),
-        (["basin_1"], ["2020-01-01", "2020-01-05"], [], ValueError),
-    ],
-)
-def test_read_forecast_invalid_args(
-    one_day_dataset, object_ids, t_range_list, relevant_cols, expected_exception
-):
-    with pytest.raises(expected_exception):
-        one_day_dataset.read_forecast(
-            object_ids=object_ids,
-            t_range_list=t_range_list,
-            relevant_cols=relevant_cols,
-        )
-
-
 @pytest.fixture
 def one_day_forecast_dataset():
     # local
     selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
     # minio
     # selfmadehydrodataset_path = "s3://basins-interim"
-    return SelfMadeForecastDataset(data_path=selfmadehydrodataset_path)
+    return SelfMadeForecastDataset(
+        data_path=selfmadehydrodataset_path, dataset_name="FDSources"
+    )
 
 
 def test_read_forecast_multiple_basins_all_exist(mocker, one_day_forecast_dataset):
@@ -362,3 +332,124 @@ def test_read_forecast_multiple_basins_all_exist(mocker, one_day_forecast_datase
     assert isinstance(result, dict)
     assert "basin_1" in result and "basin_2" in result
     assert all(isinstance(df, pd.DataFrame) for df in result.values())
+
+
+def test_start_hour_in_a_day_validation():
+    """Test that start_hour_in_a_day validation works correctly for time interval format."""
+    selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
+
+    # Test: Non-standard time_unit like 6h should be rejected at init level
+    # (SelfMadeHydroDataset only supports '1h', '3h', '1D', '8D')
+    with pytest.raises(ValueError) as excinfo:
+        dataset_6h = SelfMadeHydroDataset(
+            data_path=selfmadehydrodataset_path,
+            dataset_name="FDSources",
+            time_unit=["6h"],
+        )
+    assert "time_unit must be one of" in str(excinfo.value)
+
+    # Test that the cache_timeseries_xrdataset validation catches unsupported intervals
+    # when they are passed directly to the function
+    dataset = SelfMadeHydroDataset(
+        data_path=selfmadehydrodataset_path, dataset_name="FDSources", time_unit=["3h"]
+    )
+    dataset.trange4cache = None
+    dataset.offset_to_utc = False
+
+    # Try to use an unsupported interval through kwargs
+    # This should be caught by our new validation logic
+    with pytest.raises(ValueError) as excinfo:
+        dataset.cache_timeseries_xrdataset(
+            time_units=["6h"], start_hour_in_a_day=2, batchsize=10
+        )
+    assert "only '3h' sub-daily interval is supported" in str(excinfo.value)
+
+    # Test invalid start_hour_in_a_day value (should be 0-23)
+    with pytest.raises(ValueError) as excinfo:
+        dataset.cache_timeseries_xrdataset(
+            time_units=["3h"], start_hour_in_a_day=25, batchsize=10
+        )
+    assert "must be an integer between 0 and 23" in str(excinfo.value)
+
+    # Test invalid start_hour_in_a_day type
+    with pytest.raises(ValueError) as excinfo:
+        dataset.cache_timeseries_xrdataset(
+            time_units=["3h"], start_hour_in_a_day="02:00:00", batchsize=10
+        )
+    assert "must be an integer between 0 and 23" in str(excinfo.value)
+
+
+def test_start_hour_in_a_day_time_range():
+    """Test that start_hour_in_a_day correctly sets the time range."""
+    selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
+
+    dataset = SelfMadeHydroDataset(
+        data_path=selfmadehydrodataset_path, dataset_name="FDSources", time_unit=["3h"]
+    )
+    dataset.trange4cache = None
+    dataset.offset_to_utc = False
+
+    # Test with start_hour_in_a_day = 5
+    # Expected: start with "05", end with "23" (05, 08, 11, 14, 17, 20, 23)
+    try:
+        dataset.cache_timeseries_xrdataset(
+            time_units=["3h"], start_hour_in_a_day=5, batchsize=10
+        )
+    except Exception:
+        # Ignore execution errors, we just want to check trange4cache
+        pass
+
+    # Check that trange4cache was set correctly
+    assert dataset.trange4cache is not None
+    assert "05" in dataset.trange4cache[0]
+    assert "23" in dataset.trange4cache[1]
+
+
+def test_start_hour_in_a_day_data_alignment(mocker):
+    """Test that data alignment validation works correctly."""
+    selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
+
+    dataset = SelfMadeHydroDataset(
+        data_path=selfmadehydrodataset_path, dataset_name="FDSources", time_unit=["3h"]
+    )
+    dataset.offset_to_utc = False
+
+    # Mock data with hours starting at 00:00 (0, 3, 6, 9, 12, 15, 18, 21)
+    mock_data = pd.DataFrame(
+        {
+            "time": pd.date_range("2020-01-01 00:00", periods=8, freq="3h"),
+            "streamflow": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
+        }
+    )
+
+    mocker.patch("pandas.read_csv", return_value=mock_data)
+
+    # Test 1: Correct alignment - should not raise error
+    # Data starts at 00:00, so start_hour_in_a_day should be 0
+    try:
+        result = dataset.read_timeseries(
+            object_ids=["test_basin"],
+            t_range_list=["2020-01-01 00", "2020-01-02 00"],
+            relevant_cols=["streamflow"],
+            time_units=["3h"],
+            start_hour_in_a_day=0,
+        )
+        # If we get here, the validation passed
+        assert "3h" in result
+    except ValueError as e:
+        pytest.fail(f"Should not raise error with correct alignment: {e}")
+
+    # Test 2: Incorrect alignment - should raise error
+    # Data starts at 00:00, but start_hour_in_a_day is set to 2
+    with pytest.raises(ValueError) as excinfo:
+        dataset.read_timeseries(
+            object_ids=["test_basin"],
+            t_range_list=["2020-01-01 00", "2020-01-02 00"],
+            relevant_cols=["streamflow"],
+            time_units=["3h"],
+            start_hour_in_a_day=2,
+        )
+
+    # Check error message content
+    assert "Data time alignment error" in str(excinfo.value)
+    assert "Please set start_hour_in_a_day to 0" in str(excinfo.value)

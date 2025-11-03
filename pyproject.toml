@@ -42,6 +42,7 @@ dependencies = [
     "dataretrieval",
     "pygeohydro",
     "pykalman",
+    "xarray",
     "hydroutils>=0.1.0",
     "hydrodataset>=0.2.0",
     "hydrotopo",
@@ -171,6 +172,13 @@ exclude = [
     "*.egg-info",
     ".venv",
     ".tox",
+]
+
+[tool.uv]
+# Override aqua-fetch's outdated dependency constraints
+# aqua-fetch 限制了 pandas<=2.1.4，但实际上新版本的 pandas 和 xarray 已经修复了兼容性问题
+override-dependencies = [
+    "pandas>=2.2.0",
 ]
 
 [tool.uv.sources]
