@@ -1,7 +1,7 @@
 """
 Author: Wenyu Ouyang
 Date: 2021-12-05 11:21:58
-LastEditTime: 2025-06-14 16:30:38
+LastEditTime: 2025-11-03 17:29:39
 LastEditors: Wenyu Ouyang
 Description: Data source class for Gages
 FilePath: \hydrodatasource\hydrodatasource\reader\gages.py
@@ -25,11 +25,9 @@ from hydrodatasource.reader.data_source import HydroData
 
 
 class Gages(HydroData):
-    def __init__(self, data_path, download=False):
-        super().__init__(data_path)
+    def __init__(self, data_path, dataset_name):
+        super().__init__(data_path, dataset_name)
         self.data_source_description = self.set_data_source_describe()
-        if download:
-            self.download_data_source()
         self.gages_sites = self.read_site_info()
 
     def get_name(self):
@@ -653,68 +651,63 @@ class Gages(HydroData):
         """
         # NOTICE: although it seems that we don't use pint_xarray, we have to import this package
         import pint_xarray  # noqa: F401
+        from hydrodatasource.configs import config as conf
 
-        shape_dir = os.path.join(
-            self.data_source_description["SHAPE_DIR"], "basins.shp"
+        # 1. Get all site IDs
+        object_ids = self.read_object_ids()
+
+        # 2. Read all attributes
+        attr_data, var_lst, _, f_dict = self.read_attr_all(object_ids)
+
+        # Handle duplicate columns
+        unique_vars = []
+        unique_indices = []
+        seen_vars = set()
+        for i, var in enumerate(var_lst):
+            if var not in seen_vars:
+                unique_vars.append(var)
+                unique_indices.append(i)
+                seen_vars.add(var)
+
+        attr_data_unique = attr_data[:, unique_indices]
+        var_lst_unique = unique_vars
+
+        # 3. Create a pandas DataFrame
+        df_attr = pd.DataFrame(
+            attr_data_unique, index=object_ids, columns=var_lst_unique
         )
-        if "s3://" in shape_dir:
-            with conf.FS.open(shape_dir, mode="rb") as f:
-                shape = gpd.read_file(f)
-        else:
-            shape = gpd.read_file(shape_dir)
-        df_area = cal_area_from_shp(shape)  # calculate the area from shape file
-        df_area.set_index("basin_id", inplace=True)
 
-        df_attr = self.read_attributes()
-        df_attr.set_index("basin_id", inplace=True)
-        df_attr = df_attr.join(df_area)
-        # Mapping provided units to the variables in the datasets
-        # For attributes, all the variables' units are same in all unit_info files
-        # hence, we just chose the first one
-        if "s3://" in self.data_source_description["UNIT_FILES"][0]:
-            with conf.FS.open(
-                self.data_source_description["UNIT_FILES"][0], mode="rb"
-            ) as fp:
-                units_dict = json.load(fp)
-        else:
-            units_dict = hydro_file.unserialize_json(
-                self.data_source_description["UNIT_FILES"][0]
-            )
-        units_dict["shp_area"] = "km^2"  # add the unit of shp_area
-        # Convert string columns to categorical variables and record categorical mappings
-        categorical_mappings = {}
-        for column in df_attr.columns:
-            if df_attr[column].dtype == "object":
-                df_attr[column] = df_attr[column].astype("category")
-                categorical_mappings[column] = dict(
-                    enumerate(df_attr[column].cat.categories)
-                )
-                df_attr[column] = df_attr[column].cat.codes
+        # Get units from variable_descriptions.txt
+        dir_gage_attr = self.data_source_description["GAGES_ATTR_DIR"]
+        var_desc_file = os.path.join(dir_gage_attr, "variable_descriptions.txt")
+        try:
+            var_desc = pd.read_csv(var_desc_file)
+            units_dict = pd.Series(
+                var_desc["UNITS (numeric values)"].values, index=var_desc.VARIABLE_NAME
+            ).to_dict()
+        except (FileNotFoundError, KeyError):
+            units_dict = {}
 
+        # 4. Create an xarray.Dataset
         ds = xr.Dataset()
         for column in df_attr.columns:
             attrs = {"units": units_dict.get(column, "unknown")}
-            if column in categorical_mappings:
-                attrs["category_mapping"] = categorical_mappings[column]
+            if column in f_dict:
+                attrs["category_mapping"] = str(dict(enumerate(f_dict[column])))
 
             data_array = xr.DataArray(
                 data=df_attr[column].values,
                 dims=["basin"],
-                # we have set gage_id as index so that it won't be saved as numeric values
                 coords={"basin": df_attr.index.values.astype(str)},
                 attrs=attrs,
+                name=column,
             )
             ds[column] = data_array
 
-        # Convert categorical mappings to strings
-        for column in ds.data_vars:
-            if "category_mapping" in ds[column].attrs:
-                # Convert the dictionary to a string
-                mapping_str = str(ds[column].attrs["category_mapping"])
-                ds[column].attrs["category_mapping"] = mapping_str
+        # 5. Save the Dataset
         dataset_name = self.dataset_name
         prefix_ = "" if dataset_name is None else dataset_name + "_"
-        ds.to_netcdf(os.path.join(CACHE_DIR, f"{prefix_}attributes.nc"))
+        ds.to_netcdf(os.path.join(conf.CACHE_DIR, f"{prefix_}attributes.nc"))
 
     def cache_timeseries_xrdataset(self, trange4cache=None, **kwargs):
         """Save all timeseries data in separate NetCDF files for each time unit.
