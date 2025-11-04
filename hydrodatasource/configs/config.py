@@ -78,13 +78,51 @@ try:
     SETTING = read_setting(SETTING_FILE)
     LOCAL_DATA_PATH = SETTING["local_data_path"]["root"]
     CACHE_DIR = SETTING["local_data_path"]["cache"]
-except ValueError as e:
+except (ValueError, FileNotFoundError) as e:
     LOCAL_DATA_PATH = Path.home().joinpath("hydrodatasource_data")
     CACHE_DIR = Path.home().joinpath("hydrodatasource_data", ".cache")
+    SETTING = {
+        "minio": {
+            "server_url": "",
+            "client_endpoint": "",
+            "access_key": "",
+            "secret": "",
+        },
+        "postgres": {
+            "server_url": "",
+            "port": 5432,
+            "username": "",
+            "password": "",
+            "database": "",
+        },
+        "local_data_path": {
+            "root": LOCAL_DATA_PATH,
+            "cache": CACHE_DIR,
+        }
+    }
     print(e)
 except Exception as e:
     LOCAL_DATA_PATH = Path.home().joinpath("hydrodatasource_data")
     CACHE_DIR = Path.home().joinpath("hydrodatasource_data", ".cache")
+    SETTING = {
+        "minio": {
+            "server_url": "",
+            "client_endpoint": "",
+            "access_key": "",
+            "secret": "",
+        },
+        "postgres": {
+            "server_url": "",
+            "port": 5432,
+            "username": "",
+            "password": "",
+            "database": "",
+        },
+        "local_data_path": {
+            "root": LOCAL_DATA_PATH,
+            "cache": CACHE_DIR,
+        }
+    }
     print(f"Unexpected error: {e}")
 
 # Initialize remote service settings
