@@ -1,9 +1,8 @@
 name: Upload Python Package to PyPI
 
 on:
-  push:
-    tags:
-      - 'v*'
+  release:
+    types: [published]
 
 jobs:
   deploy:
@@ -25,10 +24,10 @@ jobs:
         run: uv sync --all-extras # Install all dependencies including dev
 
       - name: Build package
-        run: hatch build
+        run: uv build
 
-      - name: Publish to PyPI
+        - name: Publish to PyPI
         env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+            TWINE_USERNAME: ${{ secrets.PYPI_USERS }}
+            TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
         run: uv run twine upload dist/*
