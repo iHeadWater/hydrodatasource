@@ -26,7 +26,7 @@ jobs:
       - name: Build package
         run: uv build
 
-        - name: Publish to PyPI
+      - name: Publish to PyPI
         env:
             TWINE_USERNAME: ${{ secrets.PYPI_USERS }}
             TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
