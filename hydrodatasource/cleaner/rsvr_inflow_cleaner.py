@@ -850,11 +850,25 @@ def fit_zw_curve(df, x_col, y_col, method="quadratic", threshold=3.0):
         std_threshold = threshold * np.std(residuals)
         return df[np.abs(residuals) < std_threshold]
 
+    # Check if input dataframe is empty or has insufficient data
+    if df.empty or len(df) < 3:
+        raise ValueError(
+            f"Insufficient data for curve fitting. Need at least 3 points, got {len(df)}"
+        )
+
     if method == "quadratic":
         coefficients = np.polyfit(df[x_col], df[y_col], 2)
         residuals = calculate_residuals(df, x_col, y_col, coefficients)
         df_ = filter_outliers(df, residuals, threshold=threshold)
-        coefficients = np.polyfit(df_[x_col], df_[y_col], 2)
+
+        # Check if filtered data is empty or has insufficient points
+        if df_.empty or len(df_) < 3:
+            # If filtering removed too many points, use original data
+            df_ = df
+            coefficients = np.polyfit(df[x_col], df[y_col], 2)
+        else:
+            coefficients = np.polyfit(df_[x_col], df_[y_col], 2)
+
         return df_, coefficients
 
     elif method == "power":
@@ -862,9 +876,19 @@ def fit_zw_curve(df, x_col, y_col, method="quadratic", threshold=3.0):
         popt, _ = curve_fit(_func_abcd_power, df[x_col], df[y_col], bounds=param_bounds)
         residuals = calculate_residuals(df, x_col, y_col, popt, _func_abcd_power)
         df_ = filter_outliers(df, residuals, threshold=threshold)
-        popt, _ = curve_fit(
-            _func_abcd_power, df_[x_col], df_[y_col], bounds=param_bounds
-        )
+
+        # Check if filtered data is empty or has insufficient points
+        if df_.empty or len(df_) < 4:
+            # If filtering removed too many points, use original data
+            df_ = df
+            popt, _ = curve_fit(
+                _func_abcd_power, df[x_col], df[y_col], bounds=param_bounds
+            )
+        else:
+            popt, _ = curve_fit(
+                _func_abcd_power, df_[x_col], df_[y_col], bounds=param_bounds
+            )
+
         return df_, popt
 
     else:

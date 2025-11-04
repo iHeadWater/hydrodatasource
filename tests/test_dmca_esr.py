@@ -2,10 +2,14 @@
 Author: liutiaxqabs 1498093445@qq.com
 Date: 2024-05-15 10:26:29
 LastEditors: Wenyu Ouyang
-LastEditTime: 2025-10-31 11:03:18
+LastEditTime: 2025-11-04 10:16:03
 FilePath: \hydrodatasource\tests\test_dmca_esr.py
-Description: TODO: This test file need to be refactored
+Description: Test for dmca_esr.py
 """
+
+import pytest
+
+pytestmark = pytest.mark.internal_data
 
 import os
 import numpy as np

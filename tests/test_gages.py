@@ -1,7 +1,7 @@
 """
 Author: Wenyu Ouyang
 Date: 2024-11-04 19:50:06
-LastEditTime: 2025-11-03 17:14:00
+LastEditTime: 2025-11-04 10:16:31
 LastEditors: Wenyu Ouyang
 Description: test for gages
 FilePath: \hydrodatasource\tests\test_gages.py
@@ -13,6 +13,8 @@ import pytest
 import pandas as pd
 from hydrodatasource.reader.gages import Gages
 from hydrodatasource.configs.config import CACHE_DIR, SETTING
+
+pytestmark = pytest.mark.internal_data
 
 
 @pytest.fixture

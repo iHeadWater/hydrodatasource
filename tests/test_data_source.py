@@ -1,13 +1,14 @@
 """
 Author: Wenyu Ouyang
 Date: 2024-07-06 19:20:59
-LastEditTime: 2025-11-03 16:43:36
+LastEditTime: 2025-11-04 10:17:39
 LastEditors: Wenyu Ouyang
 Description: Test funcs for data source
 FilePath: \hydrodatasource\tests\test_data_source.py
 Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 """
 
+import os
 import pytest
 
 pytestmark = pytest.mark.internal_data
@@ -117,7 +118,9 @@ def test_selfmadehydrodataset_get_timeseries_cols(one_day_dataset):
 
 def test_selfmadehydrodataset_cache_attributes_xrdataset(one_day_dataset):
     one_day_dataset.cache_attributes_xrdataset()
-    assert os.path.exists(os.path.join(CACHE_DIR, "attributes.nc"))
+    assert os.path.exists(
+        os.path.join(CACHE_DIR, f"{one_day_dataset.dataset_name}_attributes.nc")
+    )
 
 
 @pytest.mark.slow
@@ -299,9 +302,28 @@ def test_read_mean_prcp_invalid_unit(one_day_dataset):
 
 
 @pytest.fixture
-def one_day_forecast_dataset():
+def one_day_forecast_dataset(tmpdir, mocker):
+    # Create temporary directory structure for testing
+    fdsources_dir = tmpdir.mkdir("FDSources")
+
+    # Create timeseries directory with a subdirectory (e.g., for time unit)
+    ts_dir = fdsources_dir.mkdir("timeseries")
+    ts_1d_dir = ts_dir.mkdir("1D")  # Create a time unit subdirectory
+
+    # Create forecast directory with subdirectories
+    forecast_dir = fdsources_dir.mkdir("forecasts")
+    basin_dir = forecast_dir.mkdir("basin_1")
+
+    # Create other required directories
+    attr_dir = fdsources_dir.mkdir("attributes")
+    shape_dir = fdsources_dir.mkdir("shapes")
+
+    # Create a dummy attributes.csv file
+    attr_file = attr_dir.join("attributes.csv")
+    attr_file.write("basin_id,area\nbasin_1,100\nbasin_2,200\n")
+
     # local
-    selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
+    selfmadehydrodataset_path = str(tmpdir)
     # minio
     # selfmadehydrodataset_path = "s3://basins-interim"
     return SelfMadeForecastDataset(
