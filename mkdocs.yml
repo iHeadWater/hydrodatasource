@@ -1,16 +1,14 @@
 site_name: hydrodatasource
 site_description: A python project to deal with internal datasources
-site_author: WenyuOuyang
-site_url: https://WenyuOuyang.github.io/hydrodatasource
-repo_url: https://github.com/WenyuOuyang/hydrodatasource
+site_author: iHeadWater
+site_url: https://iHeadWater.github.io/hydrodatasource
+repo_url: https://github.com/iHeadWater/hydrodatasource
 
-copyright: "Copyright &copy; 2023 - 2023 Wenyu Ouyang"
+copyright: "Copyright &copy; 2023 - 2025 iHeadWater"
 
 theme:
     palette:
         - scheme: default
-          #   primary: blue
-          #   accent: indigo
           toggle:
               icon: material/toggle-switch-off-outline
               name: Switch to dark mode
@@ -23,15 +21,12 @@ theme:
     name: material
     icon:
         repo: fontawesome/brands/github
-    # logo: assets/logo.png
-    # favicon: assets/favicon.png
     features:
         - navigation.instant
         - navigation.tracking
         - navigation.top
         - search.highlight
         - search.share
-    custom_dir: "docs/overrides"
     font:
         text: Google Sans
         code: Regular
@@ -40,17 +35,8 @@ plugins:
     - search
     - mkdocstrings
     - git-revision-date
-    # - git-revision-date-localized:
-    #       enable_creation_date: true
-    #       type: timeago
-    # - pdf-export
     - mkdocs-jupyter:
           include_source: True
-          # ignore_h1_titles: True
-          # execute: True
-          # allow_errors: false
-          # ignore: ["conf.py"]
-          # execute_ignore: ["*ignore.ipynb"]
           
 markdown_extensions:
     - admonition
@@ -66,32 +52,12 @@ markdown_extensions:
     - toc:
           permalink: true
 
-# extra:
-#     analytics:
-#         provider: google
-#         property: UA-XXXXXXXXX-X
-
 nav:
     - Home: index.md
-    - Installation: installation.md
-    - Modules:
-        - Processor: processor.md
-        - Catalog: catalog.md
+    - Guide:
+        - Configuration: configs.md
         - Reader: reader.md
-        - GISTools: gistools.md
-    - Usage: usage.md
-    - Contributing: contributing.md
-    - FAQ: faq.md
-    - Changelog: changelog.md
+        - Processor: processor.md
+        - Cleaner: cleaner.md
+    - API Reference: api.md
     - Report Issues: https://github.com/iHeadWater/hydrodatasource/issues
-    - Examples:
-        - modules/catalog.ipynb
-        - modules/reader.ipynb
-        - modules/minio.ipynb
-    - API Reference:
-        - Catalog module:
-            - minio: api/catalog_minio.md
-        - Reader module:
-            - minio: api/reader_minio.md
-    - Resources:
-          - hydroGIS: hydrogis.md

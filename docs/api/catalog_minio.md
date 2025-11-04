@@ -1,3 +1,0 @@
-# MinIO
-
-::: hydrodatasource.catalog.minio
