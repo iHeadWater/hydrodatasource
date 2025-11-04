@@ -34,6 +34,7 @@ theme:
 plugins:
     - search
     - mkdocstrings
+    - include-markdown
     - git-revision-date
     - mkdocs-jupyter:
           include_source: True

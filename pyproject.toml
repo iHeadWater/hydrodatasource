@@ -96,6 +96,7 @@ docs = [
     "livereload",
     "pygments",
     "pymdown-extensions",
+    "mkdocs-include-markdown-plugin",
 ]
 
 [project.urls]
