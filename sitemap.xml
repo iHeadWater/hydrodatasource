@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+         <loc>https://iHeadWater.github.io/hydrodatasource/</loc>
+         <lastmod>2025-11-12</lastmod>
+    </url>
+    <url>
+         <loc>https://iHeadWater.github.io/hydrodatasource/api/</loc>
+         <lastmod>2025-11-12</lastmod>
+    </url>
+    <url>
+         <loc>https://iHeadWater.github.io/hydrodatasource/cleaner/</loc>
+         <lastmod>2025-11-12</lastmod>
+    </url>
+    <url>
+         <loc>https://iHeadWater.github.io/hydrodatasource/configs/</loc>
+         <lastmod>2025-11-12</lastmod>
+    </url>
+    <url>
+         <loc>https://iHeadWater.github.io/hydrodatasource/processor/</loc>
+         <lastmod>2025-11-12</lastmod>
+    </url>
+    <url>
+         <loc>https://iHeadWater.github.io/hydrodatasource/reader/</loc>
+         <lastmod>2025-11-12</lastmod>
+    </url>
+</urlset>

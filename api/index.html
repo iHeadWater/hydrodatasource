@@ -1,0 +1,3410 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A python project to deal with internal datasources">
+      
+      
+        <meta name="author" content="iHeadWater">
+      
+      
+        <link rel="canonical" href="https://iHeadWater.github.io/hydrodatasource/api/">
+      
+      
+        <link rel="prev" href="../cleaner/">
+      
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.23">
+    
+    
+      
+        <title>API Reference - hydrodatasource</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.84d31ad4.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Google+Sans:300,300i,400,400i,700,700i%7CRegular:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Google Sans";--md-code-font:"Regular"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#api-reference" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="hydrodatasource" class="md-header__button md-logo" aria-label="hydrodatasource" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            hydrodatasource
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              API Reference
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 6H7c-3.31 0-6 2.69-6 6s2.69 6 6 6h10c3.31 0 6-2.69 6-6s-2.69-6-6-6m0 10H7c-2.21 0-4-1.79-4-4s1.79-4 4-4h10c2.21 0 4 1.79 4 4s-1.79 4-4 4M7 9c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 7H7a5 5 0 0 0-5 5 5 5 0 0 0 5 5h10a5 5 0 0 0 5-5 5 5 0 0 0-5-5m0 8a3 3 0 0 1-3-3 3 3 0 0 1 3-3 3 3 0 0 1 3 3 3 3 0 0 1-3 3"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/iHeadWater/hydrodatasource" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="hydrodatasource" class="md-nav__button md-logo" aria-label="hydrodatasource" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    hydrodatasource
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/iHeadWater/hydrodatasource" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Guide
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Guide
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Configuration
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reader/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Reader
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../processor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Processor
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cleaner/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Cleaner
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    API Reference
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    API Reference
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#reader" class="md-nav__link">
+    <span class="md-ellipsis">
+      Reader
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset" class="md-nav__link">
+    <span class="md-ellipsis">
+      SelfMadeHydroDataset
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="SelfMadeHydroDataset">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.__init__" class="md-nav__link">
+    <span class="md-ellipsis">
+      __init__
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="__init__">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.__init__--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.cache_attributes_xrdataset" class="md-nav__link">
+    <span class="md-ellipsis">
+      cache_attributes_xrdataset
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="cache_attributes_xrdataset">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.cache_attributes_xrdataset--returns" class="md-nav__link">
+    <span class="md-ellipsis">
+      Returns
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.cache_timeseries_xrdataset" class="md-nav__link">
+    <span class="md-ellipsis">
+      cache_timeseries_xrdataset
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="cache_timeseries_xrdataset">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.cache_timeseries_xrdataset--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.cache_xrdataset" class="md-nav__link">
+    <span class="md-ellipsis">
+      cache_xrdataset
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.get_attributes_cols" class="md-nav__link">
+    <span class="md-ellipsis">
+      get_attributes_cols
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.get_timeseries_cols" class="md-nav__link">
+    <span class="md-ellipsis">
+      get_timeseries_cols
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_area" class="md-nav__link">
+    <span class="md-ellipsis">
+      read_area
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_attributes" class="md-nav__link">
+    <span class="md-ellipsis">
+      read_attributes
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_mean_prcp" class="md-nav__link">
+    <span class="md-ellipsis">
+      read_mean_prcp
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="read_mean_prcp">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_mean_prcp--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_mean_prcp--returns" class="md-nav__link">
+    <span class="md-ellipsis">
+      Returns
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_timeseries" class="md-nav__link">
+    <span class="md-ellipsis">
+      read_timeseries
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="read_timeseries">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_timeseries--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_timeseries--returns" class="md-nav__link">
+    <span class="md-ellipsis">
+      Returns
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_ts_xrdataset" class="md-nav__link">
+    <span class="md-ellipsis">
+      read_ts_xrdataset
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="read_ts_xrdataset">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_ts_xrdataset--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters:
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_ts_xrdataset--returns" class="md-nav__link">
+    <span class="md-ellipsis">
+      Returns:
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#processor" class="md-nav__link">
+    <span class="md-ellipsis">
+      Processor
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Processor">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#basin-mean-rainfall" class="md-nav__link">
+    <span class="md-ellipsis">
+      Basin Mean Rainfall
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hydrodatasource.processor.basin_mean_rainfall.basin_mean_func" class="md-nav__link">
+    <span class="md-ellipsis">
+      basin_mean_func
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="basin_mean_func">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.processor.basin_mean_rainfall.basin_mean_func--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.processor.basin_mean_rainfall.basin_mean_func--returns" class="md-nav__link">
+    <span class="md-ellipsis">
+      Returns
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rainfall-runoff-event-identification" class="md-nav__link">
+    <span class="md-ellipsis">
+      Rainfall-Runoff Event Identification
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hydrodatasource.processor.dmca_esr.get_rr_events" class="md-nav__link">
+    <span class="md-ellipsis">
+      get_rr_events
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="get_rr_events">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.processor.dmca_esr.get_rr_events--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.processor.dmca_esr.get_rr_events--raises" class="md-nav__link">
+    <span class="md-ellipsis">
+      Raises
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cleaner" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cleaner
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Cleaner">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rainfallcleaner" class="md-nav__link">
+    <span class="md-ellipsis">
+      RainfallCleaner
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner" class="md-nav__link">
+    <span class="md-ellipsis">
+      RainfallCleaner
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="RainfallCleaner">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.__init__" class="md-nav__link">
+    <span class="md-ellipsis">
+      __init__
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="__init__">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.__init__--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_hourly_extreme" class="md-nav__link">
+    <span class="md-ellipsis">
+      data_check_hourly_extreme
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="data_check_hourly_extreme">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_hourly_extreme--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_hourly_extreme--returns" class="md-nav__link">
+    <span class="md-ellipsis">
+      Returns
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_time_series" class="md-nav__link">
+    <span class="md-ellipsis">
+      data_check_time_series
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="data_check_time_series">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_time_series--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_time_series--returns" class="md-nav__link">
+    <span class="md-ellipsis">
+      Returns
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_yearly" class="md-nav__link">
+    <span class="md-ellipsis">
+      data_check_yearly
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="data_check_yearly">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_yearly--_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      参数:
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_yearly--_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      返回:
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.rainfall_clean" class="md-nav__link">
+    <span class="md-ellipsis">
+      rainfall_clean
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.read_and_concat_csv" class="md-nav__link">
+    <span class="md-ellipsis">
+      read_and_concat_csv
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#reservoirinflowbacktrack" class="md-nav__link">
+    <span class="md-ellipsis">
+      ReservoirInflowBacktrack
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack" class="md-nav__link">
+    <span class="md-ellipsis">
+      ReservoirInflowBacktrack
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ReservoirInflowBacktrack">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.__init__" class="md-nav__link">
+    <span class="md-ellipsis">
+      __init__
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="__init__">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.__init__--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.back_calculation" class="md-nav__link">
+    <span class="md-ellipsis">
+      back_calculation
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="back_calculation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.back_calculation--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.back_calculation--returns" class="md-nav__link">
+    <span class="md-ellipsis">
+      Returns
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.clean_w" class="md-nav__link">
+    <span class="md-ellipsis">
+      clean_w
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="clean_w">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.clean_w--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.clean_w--returns" class="md-nav__link">
+    <span class="md-ellipsis">
+      Returns
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.delete_negative_inq" class="md-nav__link">
+    <span class="md-ellipsis">
+      delete_negative_inq
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="delete_negative_inq">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.delete_negative_inq--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.delete_negative_inq--returns" class="md-nav__link">
+    <span class="md-ellipsis">
+      Returns
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.insert_inq" class="md-nav__link">
+    <span class="md-ellipsis">
+      insert_inq
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="insert_inq">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.insert_inq--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.insert_inq--returns" class="md-nav__link">
+    <span class="md-ellipsis">
+      Returns
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.rsvr_inflow_clean" class="md-nav__link">
+    <span class="md-ellipsis">
+      rsvr_inflow_clean
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="rsvr_inflow_clean">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.rsvr_inflow_clean--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#streamflowcleaner" class="md-nav__link">
+    <span class="md-ellipsis">
+      StreamflowCleaner
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner" class="md-nav__link">
+    <span class="md-ellipsis">
+      StreamflowCleaner
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="StreamflowCleaner">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.FFT" class="md-nav__link">
+    <span class="md-ellipsis">
+      FFT
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.data_balanced" class="md-nav__link">
+    <span class="md-ellipsis">
+      data_balanced
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.kalman_filter" class="md-nav__link">
+    <span class="md-ellipsis">
+      kalman_filter
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.lowpass_filter" class="md-nav__link">
+    <span class="md-ellipsis">
+      lowpass_filter
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.moving_average" class="md-nav__link">
+    <span class="md-ellipsis">
+      moving_average
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.moving_average_difference" class="md-nav__link">
+    <span class="md-ellipsis">
+      moving_average_difference
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.robust_fitting" class="md-nav__link">
+    <span class="md-ellipsis">
+      robust_fitting
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.wavelet" class="md-nav__link">
+    <span class="md-ellipsis">
+      wavelet
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#waterlevelcleaner" class="md-nav__link">
+    <span class="md-ellipsis">
+      WaterlevelCleaner
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.waterlevel_cleaner.WaterlevelCleaner" class="md-nav__link">
+    <span class="md-ellipsis">
+      WaterlevelCleaner
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://github.com/iHeadWater/hydrodatasource/issues" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Report Issues
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#reader" class="md-nav__link">
+    <span class="md-ellipsis">
+      Reader
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset" class="md-nav__link">
+    <span class="md-ellipsis">
+      SelfMadeHydroDataset
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="SelfMadeHydroDataset">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.__init__" class="md-nav__link">
+    <span class="md-ellipsis">
+      __init__
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="__init__">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.__init__--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.cache_attributes_xrdataset" class="md-nav__link">
+    <span class="md-ellipsis">
+      cache_attributes_xrdataset
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="cache_attributes_xrdataset">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.cache_attributes_xrdataset--returns" class="md-nav__link">
+    <span class="md-ellipsis">
+      Returns
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.cache_timeseries_xrdataset" class="md-nav__link">
+    <span class="md-ellipsis">
+      cache_timeseries_xrdataset
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="cache_timeseries_xrdataset">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.cache_timeseries_xrdataset--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.cache_xrdataset" class="md-nav__link">
+    <span class="md-ellipsis">
+      cache_xrdataset
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.get_attributes_cols" class="md-nav__link">
+    <span class="md-ellipsis">
+      get_attributes_cols
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.get_timeseries_cols" class="md-nav__link">
+    <span class="md-ellipsis">
+      get_timeseries_cols
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_area" class="md-nav__link">
+    <span class="md-ellipsis">
+      read_area
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_attributes" class="md-nav__link">
+    <span class="md-ellipsis">
+      read_attributes
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_mean_prcp" class="md-nav__link">
+    <span class="md-ellipsis">
+      read_mean_prcp
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="read_mean_prcp">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_mean_prcp--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_mean_prcp--returns" class="md-nav__link">
+    <span class="md-ellipsis">
+      Returns
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_timeseries" class="md-nav__link">
+    <span class="md-ellipsis">
+      read_timeseries
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="read_timeseries">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_timeseries--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_timeseries--returns" class="md-nav__link">
+    <span class="md-ellipsis">
+      Returns
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_ts_xrdataset" class="md-nav__link">
+    <span class="md-ellipsis">
+      read_ts_xrdataset
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="read_ts_xrdataset">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_ts_xrdataset--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters:
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_ts_xrdataset--returns" class="md-nav__link">
+    <span class="md-ellipsis">
+      Returns:
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#processor" class="md-nav__link">
+    <span class="md-ellipsis">
+      Processor
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Processor">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#basin-mean-rainfall" class="md-nav__link">
+    <span class="md-ellipsis">
+      Basin Mean Rainfall
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hydrodatasource.processor.basin_mean_rainfall.basin_mean_func" class="md-nav__link">
+    <span class="md-ellipsis">
+      basin_mean_func
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="basin_mean_func">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.processor.basin_mean_rainfall.basin_mean_func--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.processor.basin_mean_rainfall.basin_mean_func--returns" class="md-nav__link">
+    <span class="md-ellipsis">
+      Returns
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rainfall-runoff-event-identification" class="md-nav__link">
+    <span class="md-ellipsis">
+      Rainfall-Runoff Event Identification
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hydrodatasource.processor.dmca_esr.get_rr_events" class="md-nav__link">
+    <span class="md-ellipsis">
+      get_rr_events
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="get_rr_events">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.processor.dmca_esr.get_rr_events--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.processor.dmca_esr.get_rr_events--raises" class="md-nav__link">
+    <span class="md-ellipsis">
+      Raises
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cleaner" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cleaner
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Cleaner">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rainfallcleaner" class="md-nav__link">
+    <span class="md-ellipsis">
+      RainfallCleaner
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner" class="md-nav__link">
+    <span class="md-ellipsis">
+      RainfallCleaner
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="RainfallCleaner">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.__init__" class="md-nav__link">
+    <span class="md-ellipsis">
+      __init__
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="__init__">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.__init__--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_hourly_extreme" class="md-nav__link">
+    <span class="md-ellipsis">
+      data_check_hourly_extreme
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="data_check_hourly_extreme">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_hourly_extreme--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_hourly_extreme--returns" class="md-nav__link">
+    <span class="md-ellipsis">
+      Returns
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_time_series" class="md-nav__link">
+    <span class="md-ellipsis">
+      data_check_time_series
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="data_check_time_series">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_time_series--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_time_series--returns" class="md-nav__link">
+    <span class="md-ellipsis">
+      Returns
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_yearly" class="md-nav__link">
+    <span class="md-ellipsis">
+      data_check_yearly
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="data_check_yearly">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_yearly--_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      参数:
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_yearly--_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      返回:
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.rainfall_clean" class="md-nav__link">
+    <span class="md-ellipsis">
+      rainfall_clean
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.read_and_concat_csv" class="md-nav__link">
+    <span class="md-ellipsis">
+      read_and_concat_csv
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#reservoirinflowbacktrack" class="md-nav__link">
+    <span class="md-ellipsis">
+      ReservoirInflowBacktrack
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack" class="md-nav__link">
+    <span class="md-ellipsis">
+      ReservoirInflowBacktrack
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ReservoirInflowBacktrack">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.__init__" class="md-nav__link">
+    <span class="md-ellipsis">
+      __init__
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="__init__">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.__init__--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.back_calculation" class="md-nav__link">
+    <span class="md-ellipsis">
+      back_calculation
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="back_calculation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.back_calculation--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.back_calculation--returns" class="md-nav__link">
+    <span class="md-ellipsis">
+      Returns
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.clean_w" class="md-nav__link">
+    <span class="md-ellipsis">
+      clean_w
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="clean_w">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.clean_w--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.clean_w--returns" class="md-nav__link">
+    <span class="md-ellipsis">
+      Returns
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.delete_negative_inq" class="md-nav__link">
+    <span class="md-ellipsis">
+      delete_negative_inq
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="delete_negative_inq">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.delete_negative_inq--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.delete_negative_inq--returns" class="md-nav__link">
+    <span class="md-ellipsis">
+      Returns
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.insert_inq" class="md-nav__link">
+    <span class="md-ellipsis">
+      insert_inq
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="insert_inq">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.insert_inq--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.insert_inq--returns" class="md-nav__link">
+    <span class="md-ellipsis">
+      Returns
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.rsvr_inflow_clean" class="md-nav__link">
+    <span class="md-ellipsis">
+      rsvr_inflow_clean
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="rsvr_inflow_clean">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.rsvr_inflow_clean--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#streamflowcleaner" class="md-nav__link">
+    <span class="md-ellipsis">
+      StreamflowCleaner
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner" class="md-nav__link">
+    <span class="md-ellipsis">
+      StreamflowCleaner
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="StreamflowCleaner">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.FFT" class="md-nav__link">
+    <span class="md-ellipsis">
+      FFT
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.data_balanced" class="md-nav__link">
+    <span class="md-ellipsis">
+      data_balanced
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.kalman_filter" class="md-nav__link">
+    <span class="md-ellipsis">
+      kalman_filter
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.lowpass_filter" class="md-nav__link">
+    <span class="md-ellipsis">
+      lowpass_filter
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.moving_average" class="md-nav__link">
+    <span class="md-ellipsis">
+      moving_average
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.moving_average_difference" class="md-nav__link">
+    <span class="md-ellipsis">
+      moving_average_difference
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.robust_fitting" class="md-nav__link">
+    <span class="md-ellipsis">
+      robust_fitting
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.wavelet" class="md-nav__link">
+    <span class="md-ellipsis">
+      wavelet
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#waterlevelcleaner" class="md-nav__link">
+    <span class="md-ellipsis">
+      WaterlevelCleaner
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hydrodatasource.cleaner.waterlevel_cleaner.WaterlevelCleaner" class="md-nav__link">
+    <span class="md-ellipsis">
+      WaterlevelCleaner
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="api-reference">API Reference<a class="headerlink" href="#api-reference" title="Permanent link">&para;</a></h1>
+<p>This page provides an auto-generated API reference for the key components of the <code>hydrodatasource</code> library.</p>
+<h2 id="reader">Reader<a class="headerlink" href="#reader" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="hydrodatasource.reader.data_source.SelfMadeHydroDataset" class="doc doc-heading">
+            <code>hydrodatasource.reader.data_source.SelfMadeHydroDataset</code>
+
+
+<a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="hydrodatasource.reader.data_source.HydroData">HydroData</span></code></p>
+
+
+        <p>A class for reading hydrodataset, but not really ready-datasets,
+just some data directorys organized like a HydroDataset.</p>
+<p>NOTE:
+We compile forcing data and attr data into a directory,
+organized like a ready dataset -- like Caravan.
+Only two directories are needed: attributes and timeseries</p>
+
+
+
+
+
+
+
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hydrodatasource.reader.data_source.SelfMadeHydroDataset.__init__" class="doc doc-heading">
+            <code class="highlight language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">data_path</span><span class="p">,</span> <span class="n">dataset_name</span><span class="p">,</span> <span class="n">time_unit</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></code>
+
+<a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.__init__" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Initialize a self-made Caravan-style dataset.</p>
+<h5 id="hydrodatasource.reader.data_source.SelfMadeHydroDataset.__init__--parameters">Parameters<a class="headerlink" href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.__init__--parameters" title="Permanent link">&para;</a></h5>
+<p>data_path : str
+    The path to the custom-made data sources' parent directory.
+dataset_name : str
+    SelfMadeHydroDataset's name, for example, googleflood or fdsources,
+    different dataset may use this same datasource class, but they have different dataset_name.
+time_unit : list, optional
+    we have different time units, by default None
+kwargs : dict, optional
+    additional keyword arguments, by default None</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hydrodatasource.reader.data_source.SelfMadeHydroDataset.cache_attributes_xrdataset" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">cache_attributes_xrdataset</span><span class="p">()</span></code>
+
+<a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.cache_attributes_xrdataset" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Convert all the attributes to a single dataset</p>
+<h5 id="hydrodatasource.reader.data_source.SelfMadeHydroDataset.cache_attributes_xrdataset--returns">Returns<a class="headerlink" href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.cache_attributes_xrdataset--returns" title="Permanent link">&para;</a></h5>
+<p>None</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hydrodatasource.reader.data_source.SelfMadeHydroDataset.cache_timeseries_xrdataset" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">cache_timeseries_xrdataset</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></code>
+
+<a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.cache_timeseries_xrdataset" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Save all timeseries data in separate NetCDF files for each time unit.</p>
+<h5 id="hydrodatasource.reader.data_source.SelfMadeHydroDataset.cache_timeseries_xrdataset--parameters">Parameters<a class="headerlink" href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.cache_timeseries_xrdataset--parameters" title="Permanent link">&para;</a></h5>
+<p>t_range : list, optional
+    Time range for the data, by default ["1980-01-01", "2023-12-31"]
+kwargs : dict, optional
+    batchsize -- Number of basins to process per batch, by default 100
+    time_units -- List of time units to process, by default None
+    start0101_freq -- for freq setting, if the start date is 01-01, set True, by default False
+    offset_to_utc -- whether to offset the time to UTC, by default False
+    start_hour_in_a_day -- the start hour in a day (0-23), by default 2 which means 2-5-8-11-14-17-20-23 UTC.
+                           Chinese basins data always use 08:00 with Beijing Time, so we set the default value to 2.
+                           Only applicable for sub-daily intervals (currently only "3h" is supported)</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hydrodatasource.reader.data_source.SelfMadeHydroDataset.cache_xrdataset" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">cache_xrdataset</span><span class="p">(</span><span class="n">t_range</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">time_units</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.cache_xrdataset" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Save all data in a netcdf file in the cache directory</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hydrodatasource.reader.data_source.SelfMadeHydroDataset.get_attributes_cols" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">get_attributes_cols</span><span class="p">()</span></code>
+
+<a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.get_attributes_cols" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>the constant cols in this data_source</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hydrodatasource.reader.data_source.SelfMadeHydroDataset.get_timeseries_cols" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">get_timeseries_cols</span><span class="p">()</span></code>
+
+<a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.get_timeseries_cols" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>the relevant cols in this data_source</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_area" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">read_area</span><span class="p">(</span><span class="n">gage_id_lst</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_area" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>read area of each basin/unit</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_attributes" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">read_attributes</span><span class="p">(</span><span class="n">object_ids</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">constant_cols</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></code>
+
+<a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_attributes" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>2d data (site_num * var_num), non-time-series data</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_mean_prcp" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">read_mean_prcp</span><span class="p">(</span><span class="n">gage_id_lst</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;mm/d&#39;</span><span class="p">)</span></code>
+
+<a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_mean_prcp" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>read mean precipitation of each basin
+default unit is mm/d, but one can chose other units and we will convert the unit to the specified unit</p>
+<h5 id="hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_mean_prcp--parameters">Parameters<a class="headerlink" href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_mean_prcp--parameters" title="Permanent link">&para;</a></h5>
+<p>gage_id_lst : list, optional
+    the list of gage ids, by default None
+unit : str, optional
+    the unit of precipitation, by default "mm/d"</p>
+<h5 id="hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_mean_prcp--returns">Returns<a class="headerlink" href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_mean_prcp--returns" title="Permanent link">&para;</a></h5>
+<p>xr.Dataset
+    the mean precipitation of each basin</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_timeseries" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">read_timeseries</span><span class="p">(</span><span class="n">object_ids</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">t_range_list</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">relevant_cols</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></code>
+
+<a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_timeseries" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Returns a dictionary containing data with different time scales.</p>
+<h5 id="hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_timeseries--parameters">Parameters<a class="headerlink" href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_timeseries--parameters" title="Permanent link">&para;</a></h5>
+<p>object_ids : list, optional
+    List of object IDs. Defaults to None.
+t_range_list : list, optional
+    List of time ranges. Defaults to None.
+relevant_cols : list, optional
+    List of relevant columns. Defaults to None.
+**kwargs : dict, optional
+    Additional keyword arguments.
+    time_units : list, optional
+        List of time units to process
+    start0101_freq : bool, optional
+        For freq setting, if the start date is 01-01, set True
+    offset_to_utc : bool, optional
+        Whether to offset the time to UTC
+    start_hour_in_a_day : int, optional
+        The start hour in a day for sub-daily intervals (0-23). Default is 2.</p>
+<h5 id="hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_timeseries--returns">Returns<a class="headerlink" href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_timeseries--returns" title="Permanent link">&para;</a></h5>
+<p>dict
+    A dictionary containing data with different time scales.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_ts_xrdataset" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">read_ts_xrdataset</span><span class="p">(</span><span class="n">gage_id_lst</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">t_range</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">var_lst</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></code>
+
+<a href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_ts_xrdataset" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Read time-series xarray dataset from multiple NetCDF files and organize them by time units.</p>
+<h5 id="hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_ts_xrdataset--parameters">Parameters:<a class="headerlink" href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_ts_xrdataset--parameters" title="Permanent link">&para;</a></h5>
+<p>gage_id_lst: list
+    List of gage IDs to select.
+t_range: list
+    List of two elements [start_time, end_time] to select time range.
+var_lst: list
+    List of variables to select.
+**kwargs
+    Additional arguments.</p>
+<h5 id="hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_ts_xrdataset--returns">Returns:<a class="headerlink" href="#hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_ts_xrdataset--returns" title="Permanent link">&para;</a></h5>
+<p>dict: A dictionary where each key is a time unit and each value is an xarray.Dataset containing the selected gage IDs, time range, and variables.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="processor">Processor<a class="headerlink" href="#processor" title="Permanent link">&para;</a></h2>
+<h3 id="basin-mean-rainfall">Basin Mean Rainfall<a class="headerlink" href="#basin-mean-rainfall" title="Permanent link">&para;</a></h3>
+
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="hydrodatasource.processor.basin_mean_rainfall.basin_mean_func" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">hydrodatasource</span><span class="o">.</span><span class="n">processor</span><span class="o">.</span><span class="n">basin_mean_rainfall</span><span class="o">.</span><span class="n">basin_mean_func</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">weights_dict</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#hydrodatasource.processor.basin_mean_rainfall.basin_mean_func" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents first">
+
+        <p>Generic basin averaging method that supports both arithmetic mean and weighted mean (e.g. Thiessen polygon weights)</p>
+<p>When some columns have missing values in a row, the function automatically switches to arithmetic mean
+for that row instead of using weights. This ensures robustness when dealing with incomplete data.</p>
+<h4 id="hydrodatasource.processor.basin_mean_rainfall.basin_mean_func--parameters">Parameters<a class="headerlink" href="#hydrodatasource.processor.basin_mean_rainfall.basin_mean_func--parameters" title="Permanent link">&para;</a></h4>
+<p>df : DataFrame
+    Time series DataFrame for multiple stations, with station names as column names;
+    each column should be a time series of rainfall data for a specific station
+weights_dict : dict, optional
+    Dictionary with tuple of station names as keys and list of weights as values.
+    If None, arithmetic mean is used.</p>
+
+
+<details class="note" open>
+  <summary>the keys of list must be in the same order as the columns of df.</summary>
+  <p>hence, an easy way is you give your df with a sorted column names and then
+use the same order to create the keys of weights_dict.
+for example:
+weights_dict = {
+    ("st1", "st2", "st3", "st4"): [0.25, 0.5, 0.1, 0.15],
+}
+df = df[["st1", "st2", "st3", "st4"]]
+then the keys of weights_dict must be in the same order as the columns of df.</p>
+</details>
+
+<details class="note" open>
+  <summary>NOTE</summary>
+  <p>we set the format of weights_dict like this because we want to extend it to match the weights_dict key based on the missing data situation and the key in weights_dict.
+This is a TODO item.
+if the key in weights_dict matches the columns of df, we use the weights in weights_dict;
+if the key in weights_dict does not match the columns of df, we use the arithmetic mean.
+For example, if the columns of df are ["st1", "st2", "st3", "st4"], and the weights_dict is:
+weights_dict = {
+    ("st1", "st2", "st3", "st4"): [0.25, 0.5, 0.1, 0.15],
+    ("st1", "st2", "st3"): [0.25, 0.5, 0.1],
+    ("st3", "st4"): [0.1, 0.15],
+}
+then when st4 has missing data, we use the weights in ("st1", "st2", "st3") to calculate the weighted mean;
+and when st1 and st2 have missing data, we use the weights in ("st3", "st4") to calculate the weighted mean.
+Otherwise, we use the arithmetic mean.</p>
+<p>But this function is not finished yet, and the weights_dict now only supports the case that the keys of weights_dict has all the columns of df;
+if any column in df is missing, the function will use the arithmetic mean.</p>
+</details>        <h4 id="hydrodatasource.processor.basin_mean_rainfall.basin_mean_func--returns">Returns<a class="headerlink" href="#hydrodatasource.processor.basin_mean_rainfall.basin_mean_func--returns" title="Permanent link">&para;</a></h4>
+<p>Series
+    Basin-averaged time series</p>
+
+
+    </div>
+
+</div><h3 id="rainfall-runoff-event-identification">Rainfall-Runoff Event Identification<a class="headerlink" href="#rainfall-runoff-event-identification" title="Permanent link">&para;</a></h3>
+
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="hydrodatasource.processor.dmca_esr.get_rr_events" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">hydrodatasource</span><span class="o">.</span><span class="n">processor</span><span class="o">.</span><span class="n">dmca_esr</span><span class="o">.</span><span class="n">get_rr_events</span><span class="p">(</span><span class="n">rain</span><span class="p">,</span> <span class="n">flow</span><span class="p">,</span> <span class="n">basin_area</span><span class="p">,</span> <span class="n">max_window</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">max_flow_min</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#hydrodatasource.processor.dmca_esr.get_rr_events" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents first">
+
+        <p>use DMCA-ESR method to identify rainfall-runoff events</p>
+<h4 id="hydrodatasource.processor.dmca_esr.get_rr_events--parameters">Parameters<a class="headerlink" href="#hydrodatasource.processor.dmca_esr.get_rr_events--parameters" title="Permanent link">&para;</a></h4>
+<p>rain : xr.DataArray
+    the rainfall data
+flow : xr.DataArray
+    the streamflow data
+basin_area : xr.Dataset
+    a dataset with a variable named area and for each basin
+max_window: int
+    number of time intervals for find events; default 100 (for hourly)
+max_flow_min: list
+    the minimum of max flow for each basin
+    value below this will not be considered to look for an event;
+    default 100 m^3/s
+Returns</p>
+<hr />
+<p>dict
+    the rainfall-runoff events for each basin</p>
+<h4 id="hydrodatasource.processor.dmca_esr.get_rr_events--raises">Raises<a class="headerlink" href="#hydrodatasource.processor.dmca_esr.get_rr_events--raises" title="Permanent link">&para;</a></h4>
+<p>ValueError
+    Invalid unit format
+ValueError
+    Unsupported unit</p>
+
+
+    </div>
+
+</div><h2 id="cleaner">Cleaner<a class="headerlink" href="#cleaner" title="Permanent link">&para;</a></h2>
+<h3 id="rainfallcleaner">RainfallCleaner<a class="headerlink" href="#rainfallcleaner" title="Permanent link">&para;</a></h3>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner" class="doc doc-heading">
+            <code>hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner</code>
+
+
+<a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="hydrodatasource.cleaner.cleaner.Cleaner">Cleaner</span></code></p>
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.__init__" class="doc doc-heading">
+            <code class="highlight language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">data_folder</span><span class="p">,</span> <span class="n">output_folder</span><span class="p">)</span></code>
+
+<a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.__init__" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>All files to be cleaned are in the data_dir</p>
+<h5 id="hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.__init__--parameters">Parameters<a class="headerlink" href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.__init__--parameters" title="Permanent link">&para;</a></h5>
+<p>data_dir : <em>type</em>
+    <em>description</em></p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_hourly_extreme" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">data_check_hourly_extreme</span><span class="p">(</span><span class="n">basin_id</span><span class="p">,</span> <span class="n">climate_extreme_value</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">modify</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></code>
+
+<a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_hourly_extreme" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Check if the daily precipitation values at chosen stations are within a reasonable range.
+Values larger than the climate extreme value are treated as anomalies.
+If no climate_extreme_value is provided, the maximum value in the data is used.</p>
+<h5 id="hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_hourly_extreme--parameters">Parameters<a class="headerlink" href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_hourly_extreme--parameters" title="Permanent link">&para;</a></h5>
+<p>climate_extreme_value : float, optional
+    Climate extreme threshold for the region, calculated as 95% of the maximum observed DRP.
+    If not provided, will be calculated as 95% of the maximum DRP value in the data.</p>
+<h5 id="hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_hourly_extreme--returns">Returns<a class="headerlink" href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_hourly_extreme--returns" title="Permanent link">&para;</a></h5>
+<p>df_anomaly_stations_periods : pd.DataFrame
+    DataFrame of anomalies with columns: 'STCD', 'TM', 'DRP'.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_time_series" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">data_check_time_series</span><span class="p">(</span><span class="n">basin_id</span><span class="p">,</span> <span class="n">check_type</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">gradient_limit</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">window_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">consistent_value</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">modify</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></code>
+
+<a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_time_series" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Check daily precipitation values at chosen stations for gradient or time consistency anomalies.</p>
+<h5 id="hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_time_series--parameters">Parameters<a class="headerlink" href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_time_series--parameters" title="Permanent link">&para;</a></h5>
+<p>basin_id: str
+    Basin ID.
+check_type : str
+    Type of check to perform: "gradient" for gradient check, "consistency" for time consistency check.
+gradient_limit : float, optional
+    Maximum allowable gradient change in precipitation between consecutive days. Used in "gradient" check. Default is 10 mm.
+window_size : int, optional
+    Size of the window (in hours) to check for time consistency (used in "consistency" check). Default is 24 hours.
+consistent_value : float, optional
+    The specific precipitation value to check for consistency (used in "consistency" check). Default is 0.1 mm.</p>
+<h5 id="hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_time_series--returns">Returns<a class="headerlink" href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_time_series--returns" title="Permanent link">&para;</a></h5>
+<p>pd.DataFrame
+    DataFrame of detected anomalies with columns: 'STCD', 'TM', 'DRP', 'Issue' (where applicable).</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_yearly" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">data_check_yearly</span><span class="p">(</span><span class="n">basin_id</span><span class="p">,</span> <span class="n">year_range</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">diff_range</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">min_true_percentage</span><span class="o">=</span><span class="mf">0.75</span><span class="p">,</span> <span class="n">min_consecutive_years</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">modify</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></code>
+
+<a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_yearly" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>计算遥感数据与站点数据之间的降水差异，评估站点可靠性，并返回可信任的站点列表。</p>
+<h5 id="hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_yearly--_1">参数:<a class="headerlink" href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_yearly--_1" title="Permanent link">&para;</a></h5>
+<p>basin_id : str
+    Basin ID
+year_range : list, 可选
+    要筛选的年份范围，默认是 [2010, 2024]。
+diff_range : list, 可选
+    站点数据和遥感数据之间的ratio差异范围
+    0.5 means station data is 0.5 times of reanalysis data
+    2.0 means station data is 2 times of reanalysis data
+min_true_percentage : float, 可选
+    要求可信年份的最小比例，默认 0.75。
+min_consecutive_years : int, 可选
+    最小连续可信年份数，默认 3。</p>
+<h5 id="hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_yearly--_2">返回:<a class="headerlink" href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.data_check_yearly--_2" title="Permanent link">&para;</a></h5>
+<p>result_df : pd.DataFrame
+    可信站点的 DataFrame，包含 'STCD'、'Latitude'、'Longitude' 和 'Reason' 列。</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.rainfall_clean" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">rainfall_clean</span><span class="p">(</span><span class="n">basin_id</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></code>
+
+<a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.rainfall_clean" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>the station gauged rainfall data cleaning pipeline</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.read_and_concat_csv" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">read_and_concat_csv</span><span class="p">(</span><span class="n">basin_id</span><span class="p">)</span></code>
+
+<a href="#hydrodatasource.cleaner.rainfall_cleaner.RainfallCleaner.read_and_concat_csv" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>读取并合并文件夹下的所有 CSV 文件</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h3 id="reservoirinflowbacktrack">ReservoirInflowBacktrack<a class="headerlink" href="#reservoirinflowbacktrack" title="Permanent link">&para;</a></h3>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack" class="doc doc-heading">
+            <code>hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack</code>
+
+
+<a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="hydrodatasource.cleaner.cleaner.Cleaner">Cleaner</span></code></p>
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.__init__" class="doc doc-heading">
+            <code class="highlight language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">data_folder</span><span class="p">,</span> <span class="n">output_folder</span><span class="p">)</span></code>
+
+<a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.__init__" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Back-calculating inflow of reservior</p>
+<h5 id="hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.__init__--parameters">Parameters<a class="headerlink" href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.__init__--parameters" title="Permanent link">&para;</a></h5>
+<p>data_folder : str
+    the folder of reservoir data
+output_folder : <em>type</em>
+    where we put inflow data</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.back_calculation" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">back_calculation</span><span class="p">(</span><span class="n">rsvr_id</span><span class="p">,</span> <span class="n">clean_w_path</span><span class="p">,</span> <span class="n">original_file</span><span class="p">,</span> <span class="n">output_folder</span><span class="p">)</span></code>
+
+<a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.back_calculation" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Back-calculate inflow from reservoir storage data
+NOTE: each time has three columns: I Q W -- I is the inflow, Q is the outflow, W is the reservoir storage
+Generally, in sql database, a time means the end of previous time period
+For example, a hourly database, 13:00 means 12:00-13:00 period because the data is GOT at 13:00 (we cannot observe future)
+Hence, for this function, W means the storage at the end of the time period, I and Q means the inflow and outflow of the time period
+So we need to use W of the previous time as the initial water storage of the time period.
+Hence, I1 = Q1 + (W1 - W0)</p>
+<h5 id="hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.back_calculation--parameters">Parameters<a class="headerlink" href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.back_calculation--parameters" title="Permanent link">&para;</a></h5>
+<p>rsvr_id : str
+    The ID of the reservoir
+data_path : str
+    the path to the cleaned_w_data file
+original_file: str
+    the path to the original file
+output_folder : str
+    where to save the back calculated data</p>
+<h5 id="hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.back_calculation--returns">Returns<a class="headerlink" href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.back_calculation--returns" title="Permanent link">&para;</a></h5>
+<p>str
+    the path to the result file</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.clean_w" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">clean_w</span><span class="p">(</span><span class="n">rsvr_id</span><span class="p">,</span> <span class="n">file_path</span><span class="p">,</span> <span class="n">output_folder</span><span class="p">,</span> <span class="n">fit_method</span><span class="o">=</span><span class="s1">&#39;quadratic&#39;</span><span class="p">,</span> <span class="n">zw_curve_std_times</span><span class="o">=</span><span class="mf">3.0</span><span class="p">,</span> <span class="n">remove_zw_outliers</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></code>
+
+<a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.clean_w" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Remove abnormal reservoir capacity data</p>
+<h5 id="hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.clean_w--parameters">Parameters<a class="headerlink" href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.clean_w--parameters" title="Permanent link">&para;</a></h5>
+<p>rsvr_id : str
+    The ID of the reservoir
+file_path : str
+    Path to the input file
+output_folder : str
+    Path to the output folder
+fit_method : str, optional
+    z-w curve fitting method, by default "quadratic"
+    TODO: MORE METHODS need to be supported; power is also need to be debugged
+zw_curve_std_times: float, optional
+    the times of standard deviation to remove outliers, by default 3
+remove_zw_outliers: bool, optional
+    whether to remove outliers for z-w curve fitting, by default False</p>
+<h5 id="hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.clean_w--returns">Returns<a class="headerlink" href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.clean_w--returns" title="Permanent link">&para;</a></h5>
+<p>str
+    Path to the cleaned data file</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.delete_negative_inq" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">delete_negative_inq</span><span class="p">(</span><span class="n">rsvr_id</span><span class="p">,</span> <span class="n">inflow_data_path</span><span class="p">,</span> <span class="n">original_file</span><span class="p">,</span> <span class="n">output_folder</span><span class="p">,</span> <span class="n">negative_deal_window</span><span class="o">=</span><span class="mi">7</span><span class="p">,</span> <span class="n">negative_deal_stride</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span></code>
+
+<a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.delete_negative_inq" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>remove negative inflow values with a rolling window
+the negative value will be adjusted to positvie ones to make the total inflow consistent
+for example,  1, -1, 1, -1 will be adjusted to 0, 0, 0, 0 so that wate balance is kept
+but note that as the window has stride, maybe the final few values will not be adjusted</p>
+<h5 id="hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.delete_negative_inq--parameters">Parameters<a class="headerlink" href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.delete_negative_inq--parameters" title="Permanent link">&para;</a></h5>
+<p>rsvr_id : str
+    the id of the reservoir
+inflow_data_path : str
+    the data file after back_calculation
+original_file : str
+    the original file
+output_folder : str
+    where to save the data
+negative_deal_window : int, optional
+    the window to deal with negative values, by default 7
+negative_deal_stride : int, optional
+    the stride of window, by default 4</p>
+<h5 id="hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.delete_negative_inq--returns">Returns<a class="headerlink" href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.delete_negative_inq--returns" title="Permanent link">&para;</a></h5>
+<p>str
+    the path to the result file</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.insert_inq" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">insert_inq</span><span class="p">(</span><span class="n">rsvr_id</span><span class="p">,</span> <span class="n">inflow_data_path</span><span class="p">,</span> <span class="n">original_file</span><span class="p">,</span> <span class="n">output_folder</span><span class="p">)</span></code>
+
+<a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.insert_inq" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>make inflow data as hourly data as original data is not strictly hourly data
+and insert inq with linear interpolation</p>
+<h5 id="hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.insert_inq--parameters">Parameters<a class="headerlink" href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.insert_inq--parameters" title="Permanent link">&para;</a></h5>
+<p>rsvr_id : str
+    the id of the reservoir
+inflow_data_path : str
+    the data file after delete negative inflow values
+original_file : str
+    the original file
+output_folder : str
+    where to save the data</p>
+<h5 id="hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.insert_inq--returns">Returns<a class="headerlink" href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.insert_inq--returns" title="Permanent link">&para;</a></h5>
+<p>str
+    the path to the result file</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.rsvr_inflow_clean" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">rsvr_inflow_clean</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></code>
+
+<a href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.rsvr_inflow_clean" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>The reservoir inflow data cleaning pipeline</p>
+<h5 id="hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.rsvr_inflow_clean--parameters">Parameters<a class="headerlink" href="#hydrodatasource.cleaner.rsvr_inflow_cleaner.ReservoirInflowBacktrack.rsvr_inflow_clean--parameters" title="Permanent link">&para;</a></h5>
+<p>zw_curve_std_times : float
+    the times of standard deviation to remove outliers, by default 3.0
+remove_zw_outliers : bool
+    whether to remove outliers for z-w curve fitting, by default False</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h3 id="streamflowcleaner">StreamflowCleaner<a class="headerlink" href="#streamflowcleaner" title="Permanent link">&para;</a></h3>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner" class="doc doc-heading">
+            <code>hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner</code>
+
+
+<a href="#hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="hydrodatasource.cleaner.cleaner.Cleaner">Cleaner</span></code></p>
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.FFT" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">FFT</span><span class="p">(</span><span class="n">streamflow_data</span><span class="p">)</span></code>
+
+<a href="#hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.FFT" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>对流量数据进行迭代的傅里叶滤波处理，包括非负值调整和流量总量调整。
+:cutoff_frequency: 傅里叶滤波的截止频率。
+:time_step: 数据采样间隔。
+:iterations: 迭代次数。</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.data_balanced" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">data_balanced</span><span class="p">(</span><span class="n">origin_data</span><span class="p">,</span> <span class="n">transform_data</span><span class="p">)</span></code>
+
+<a href="#hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.data_balanced" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>对一维流量数据进行总量平衡变换。
+:origin_data: 原始一维流量数据。
+:transform_data: 平滑转换后的一维流量数据。</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.kalman_filter" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">kalman_filter</span><span class="p">(</span><span class="n">streamflow_data</span><span class="p">)</span></code>
+
+<a href="#hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.kalman_filter" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>对流量数据应用卡尔曼滤波进行平滑处理，并保持流量总量平衡。
+:param streamflow_data: 原始流量数据</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.lowpass_filter" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">lowpass_filter</span><span class="p">(</span><span class="n">streamflow_data</span><span class="p">)</span></code>
+
+<a href="#hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.lowpass_filter" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>对一维流量数据应用调整后的低通滤波器。
+:cutoff_frequency: 低通滤波器的截止频率。
+:sampling_rate: 数据的采样率。
+:order: 滤波器的阶数，默认为5。</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.moving_average" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">moving_average</span><span class="p">(</span><span class="n">streamflow_data</span><span class="p">)</span></code>
+
+<a href="#hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.moving_average" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>对流量数据应用滑动平均进行平滑处理，并保持流量总量平衡。
+:param streamflow_data: 输入的流量数据数组
+:return: 平滑处理后的流量数据</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.moving_average_difference" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">moving_average_difference</span><span class="p">(</span><span class="n">streamflow_data</span><span class="p">)</span></code>
+
+<a href="#hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.moving_average_difference" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>对流量数据应用滑动平均差算法进行平滑处理，并保持流量总量平衡。
+:window_size: 滑动窗口的大小</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.robust_fitting" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">robust_fitting</span><span class="p">(</span><span class="n">streamflow_data</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mf">1.5</span><span class="p">)</span></code>
+
+<a href="#hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.robust_fitting" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>对流量数据应用抗差修正算法进行平滑处理，并保持流量总量平衡。
+默认采用二次曲线进行拟合优化，该算法处理性能较差</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.wavelet" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">wavelet</span><span class="p">(</span><span class="n">streamflow_data</span><span class="p">)</span></code>
+
+<a href="#hydrodatasource.cleaner.streamflow_cleaner.StreamflowCleaner.wavelet" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>对一维流量数据进行小波变换分析前后拓展数据以减少边缘失真，然后调整总流量。
+:cwt_row: 小波变换中使用的特定宽度。</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h3 id="waterlevelcleaner">WaterlevelCleaner<a class="headerlink" href="#waterlevelcleaner" title="Permanent link">&para;</a></h3>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="hydrodatasource.cleaner.waterlevel_cleaner.WaterlevelCleaner" class="doc doc-heading">
+            <code>hydrodatasource.cleaner.waterlevel_cleaner.WaterlevelCleaner</code>
+
+
+<a href="#hydrodatasource.cleaner.waterlevel_cleaner.WaterlevelCleaner" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="hydrodatasource.cleaner.cleaner.Cleaner">Cleaner</span></code></p>
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+
+  
+    
+  
+  
+
+
+  <aside class="md-source-file">
+    
+      
+  <span class="md-source-file__fact">
+    <span class="md-icon" title="Last update">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
+    </span>
+    2025-11-07
+  </span>
+
+    
+    
+    
+    
+  </aside>
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2023 - 2025 iHeadWater
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.top", "search.highlight", "search.share"], "search": "../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.f55a23d4.min.js"></script>
+      
+    
+  </body>
+</html>
