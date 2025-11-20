@@ -1,123 +1,117 @@
-<!--
- * @Author: Wenyu Ouyang
- * @Date: 2023-10-24 21:30:40
- * @LastEditTime: 2025-06-09 17:01:10
- * @LastEditors: Wenyu Ouyang
- * @Description: Readme for hydrodatasource
- * @FilePath: \hydrodatasource\README.md
- * Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
--->
 # hydrodatasource
 
-[![image](https://img.shields.io/pypi/v/hydrodatasource.svg)](https://pypi.python.org/pypi/hydrodatasource)
-[![image](https://img.shields.io/conda/vn/conda-forge/hydrodatasource.svg)](https://anaconda.org/conda-forge/hydrodatasource)
-
-[![image](https://pyup.io/repos/github/iHeadWater/hydrodatasource/shield.svg)](https://pyup.io/repos/github/iHeadWater/hydrodatasource)
+[![image](https://img.shields.io/pypi/v/hydrodatasource.svg)](https://pypi.python.org/pypi/hydrodatasource) [![image](https://img.shields.io/conda/vn/conda-forge/hydrodatasource.svg)](https://anaconda.org/conda-forge/hydrodatasource) 
 
 -   Free software: BSD license
--   Documentation: https://WenyuOuyang.github.io/hydrodatasource
-
-📜 [中文文档](README.zh.md)
+-   Documentation: https://iHeadWater.github.io/hydrodatasource
 
 ## Overview
 
-Although numerous public watershed hydrological datasets are available, there are still challenges in this field:
+While libraries like [hydrodataset](https://github.com/OuyangWenyu/hydrodataset) exist for accessing standardized, public hydrological datasets (e.g., CAMELS), a common challenge is working with data that isn't in a ready-to-use format. This includes non-public industry data, data from local authorities, or custom datasets compiled for specific research projects.
 
-- Many datasets are not updated or included in subsequent versions after initial organization.
-- Some datasets remain uncovered by existing collections.
-- Non-public datasets cannot be directly shared.
+**`hydrodatasource`** is designed to solve this problem. It provides a flexible framework to read, process, and clean these custom datasets, preparing them for hydrological modeling and analysis.
 
-To address these issues, **hydrodatasource** provides a framework to organize and manage these datasets, making them more efficient for use in watershed-based research and production scenarios.
+The core of this framework is the `SelfMadeHydroDataset` class, which allows you to easily access your own data by organizing it into a simple, predefined directory structure.
 
-This repository works in conjunction with [hydrodataset](https://github.com/OuyangWenyu/hydrodataset), which focuses on public datasets for hydrological modeling. In contrast, **hydrodatasource** integrates a broader range of data resources, including non-public and custom datasets.
+## Reading Custom Datasets with `SelfMadeHydroDataset`
 
-## Data Classification and Sources
+This is the primary use case for `hydrodatasource`. If you have your own basin-level time series and attribute data, you can use this class to load it seamlessly.
 
-**hydrodatasource** processes data that primarily falls into three categories:
+### 1. Prepare Your Data Directory
 
-### Category A Data (Public Data)
+First, organize your data into the following folder structure:
 
-These are typically publicly available hydrological datasets from academic papers, currently including:
+```
+/path/to/your_data_root/
+    └── my_custom_dataset/              # Your dataset's name
+        ├── attributes/
+        │   └── attributes.csv
+        ├── shapes/
+        │   └── basins.shp
+        └── timeseries/
+            ├── 1D/                     # Sub-folder for each time resolution (e.g., daily)
+            │   ├── basin_01.csv
+            │   ├── basin_02.csv
+            │   └── ...
+            └── 1D_units_info.json      # JSON file with unit information
+```
 
-- GAGES dataset
-- GRDC dataset  
-- CRD and other reservoir datasets
+-   **`attributes/attributes.csv`**: A CSV file containing static basin attributes (e.g., area, mean elevation). Must include a `basin_id` column that matches the filenames in the `timeseries` folder.
+-   **`shapes/basins.shp`**: A shapefile with the polygon geometry for each basin.
+-   **`timeseries/1D/`**: A folder for each time resolution (e.g., `1D` for daily, `3h` for 3-hourly). Inside, each CSV file should contain the time series data for a single basin and be named after its `basin_id`.
+-   **`timeseries/1D_units_info.json`**: A JSON file defining the units for each variable in your time series CSVs (e.g., `{"precipitation": "mm/d", "streamflow": "m3/s"}`).
 
-### Category B Data (Non-Public Data)
+### 2. Read the Data in Python
 
-These datasets are often proprietary or confidential and require specific tools for formatting and integration, including:
+Once your data is organized, you can use `SelfMadeHydroDataset` to read it with just a few lines of code.
 
-**Custom Station Data**: User-prepared station data formatted according to standard specifications and converted to NetCDF format.
+```python
+from hydrodatasource.reader.data_source import SelfMadeHydroDataset
 
-### Category C Custom Datasets
+# 1. Define the path to your data's parent directory and the dataset name
+data_path = "/path/to/your_data_root/"
+dataset_name = "my_custom_dataset"
 
-Based on these two categories of data, we also organize a category of **custom hydrological datasets**, which are datasets constructed for specific research needs based on agreed standard formats.
+# 2. Initialize the reader
+# Specify the time units you want to work with
+reader = SelfMadeHydroDataset(data_path=data_path, dataset_name=dataset_name, time_unit=["1D"])
 
-## Features and Highlights
+# 3. Get a list of all available basin IDs
+basin_ids = reader.read_object_ids()
 
-### Unified Data Management
+# 4. Define the time range and variables you want to load
+t_range = ["2000-01-01", "2010-12-31"]
+variables_to_read = ["precipitation", "streamflow", "temperature"]
 
-**hydrodatasource** provides standardized methods for:
+# 5. Read the time series data
+# The result is a dictionary of xarray.Datasets, keyed by time unit
+timeseries_data = reader.read_ts_xrdataset(
+    gage_id_lst=basin_ids,
+    t_range=t_range,
+    var_lst=variables_to_read,
+    time_units=["1D"]
+)
 
-- Structuring datasets according to predefined conventions.
-- Integrating various data sources into a unified framework.
-- Supporting data access and processing for hydrological modeling.
+daily_data = timeseries_data["1D"]
 
-### Compatibility with Local and Cloud Resources
+print("Successfully loaded data:")
+print(daily_data)
 
-- **Public Data**: Supports data format conversion and local file operations.
-- **Non-Public Data**: Provides tools to format and integrate user-prepared data.
+# You can also read the static attributes
+attributes_data = reader.read_attr_xrdataset(gage_id_lst=basin_ids, var_lst=["area", "mean_elevation"])
+print("\nAttributes:")
+print(attributes_data)
+```
 
-### Modular Design
+## Other Features
 
-The repository structure supports diverse workflows, including:
+Beyond reading data, `hydrodatasource` also includes modules for:
 
-1. **Category A Datasets**: Tools to organize and access public hydrological datasets.
-2. **Category B Data**: Custom tools to clean and process station, reservoir, and basin time-series data.
-3. **Category C Custom Datasets**: Support for reading data in defined standard dataset formats.
+-   **`processor`**: Perform advanced calculations like identifying rainfall-runoff events (`dmca_esr.py`) and calculating basin-wide mean rainfall from station data (`basin_mean_rainfall.py`).
+-   **`cleaner`**: Clean raw time series data. This includes tools for smoothing noisy streamflow data, correcting anomalies in rainfall and water level records, and back-calculating reservoir inflow.
 
-### Other Interactions
-
-**hydrodatasource** interacts with the following components:
-
-- [**hydrodataset**](https://github.com/OuyangWenyu/hydrodataset): Provides necessary support for accessing public watershed hydrological modeling datasets for hydrodatasource.
-- [**HydroDataCompiler**](https://github.com/iHeadWater/HydroDataCompiler): Supports semi-automated processing of non-public and custom data (currently not public).
+The usage of these modules is described in the [API Reference](https://iHeadWater.github.io/hydrodatasource/api). We will add more examples in the future.
 
 ## Installation
 
-Install the package via pip:
+For standard use, install the package from PyPI:
 
 ```bash
 pip install hydrodatasource
 ```
 
-Note: The project is still in the early stages of development, so development mode is recommended.
+### Development Setup
 
-## Usage
+For developers, it is recommended to use `uv` to manage the environment, as this project has local dependencies (e.g., `hydroutils`, `hydrodataset`).
 
-### Data Organization
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/iHeadWater/hydrodatasource.git
+    cd hydrodatasource
+    ```
 
-The repository adopts the following directory structure for organizing data:
-
-```
-├── ClassA
-  ├── 1st_origin
-  ├── 2nd_process
-├── ClassB
-  ├── 1st_origin
-  ├── 2nd_process
-├── ClassC
-```
-
-- **`1st_origin`**: Raw data, often from proprietary sources, in unified formats.
-- **`2nd_process`**: Intermediate results after initial processing and data ready for analysis or modeling.
-
-### Data Reading
-
-The data reading code is mainly located in the reader folder. Currently, the main interface functions provided are:
-
-- Reading GRDC, GAGES, CRD and other datasets
-- Reading custom station data
-- Reading custom datasets for hydrological modeling
-
-We will provide more detailed documentation in the future.
+2.  **Sync the environment with `uv`:**
+    This command will install all dependencies, including the local editable packages.
+    ```bash
+    uv sync --all-extras
+    ```

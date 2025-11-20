@@ -1,39 +1,67 @@
-# Processor模块
+# Processor
 
-进行写chunk等预处理操作。
+The `processor` module contains functions for advanced processing of hydrological data. This includes spatial analysis, like calculating basin-average rainfall, and time series analysis, like identifying distinct rainfall-runoff events.
 
-## 原理
+## Basin Mean Rainfall
 
-目前，数据下载后上传到[MinIO](http://minio.waterism.com:9090/)服务器中。
+When working with multiple rainfall gauges in a basin, you often need to calculate a single, representative rainfall value for the entire basin. The `basin_mean_rainfall.py` module provides tools for this.
 
+- **`calculate_thiesen_polygons`**: This function generates Thiessen polygons from station locations. Each polygon represents the area that is closest to a particular station, and the area of these polygons can be used to weight the station's rainfall data.
+- **`basin_mean_func`**: This is the main function for calculating the basin's mean rainfall. It can perform either a simple arithmetic average or a weighted average using the weights derived from the Thiessen polygons.
+
+### Example Usage
+
+```python
+import geopandas as gpd
+import pandas as pd
+from hydrodatasource.processor.basin_mean_rainfall import calculate_thiesen_polygons, basin_mean_func
+
+# Load station locations and basin boundary
+stations_gdf = gpd.read_file("path/to/stations.shp")
+basin_gdf = gpd.read_file("path/to/basin.shp")
+
+# Load rainfall data (as a DataFrame with station IDs as columns)
+# Make sure the columns are sorted alphabetically
+rainfall_df = pd.read_csv("path/to/rainfall.csv", index_col="time")
+rainfall_df = rainfall_df.sort_index(axis=1)
+
+# Calculate Thiessen polygons to get station weights
+weights_gdf = calculate_thiesen_polygons(stations_gdf, basin_gdf)
+
+# Create a weights dictionary
+weights_dict = {
+    tuple(weights_gdf["STCD"]): weights_gdf["area_ratio"].tolist()
+}
+
+# Calculate the basin mean rainfall
+mean_rainfall = basin_mean_func(rainfall_df, weights_dict=weights_dict)
+
+print(mean_rainfall)
 ```
-MinIO提供高性能、与S3兼容的对象存储系统。
-可以使用Minio SDK，Minio Client，AWS SDK和 AWS CLI访问Minio服务器。
+
+## Rainfall-Runoff Event Identification (场次划分)
+
+The `dmca_esr.py` module implements the DMCA-ESR method for identifying and separating individual rainfall-runoff events from continuous time series data. This is crucial for event-based hydrological modeling and analysis.
+
+- **`get_rr_events`**: This is the primary function to use. It takes rainfall and streamflow data (as xarray DataArrays) and returns a dictionary where each key is a basin ID and the value is a pandas DataFrame listing the identified events.
+
+### Example Usage
+
+```python
+import xarray as xr
+from hydrodatasource.processor.dmca_esr import get_rr_events
+
+# Assume 'rain_da' and 'flow_da' are xarray DataArrays with dimensions ('time', 'basin')
+# and 'basin_area' is an xarray Dataset with the area for each basin.
+rain_da = xr.open_dataset("path/to/rain.nc")["precipitation"]
+flow_da = xr.open_dataset("path/to/flow.nc")["streamflow"]
+basin_area = xr.open_dataset("path/to/attributes.nc")["area"]
+
+# Identify rainfall-runoff events
+rr_events = get_rr_events(rain_da, flow_da, basin_area)
+
+# Print the events for a specific basin
+for basin_id, events_df in rr_events.items():
+    print(f"Events for basin {basin_id}:")
+    print(events_df)
 ```
-
-此阶段，数据在[MinIO](http://minio.waterism.com:9090/)仍然以文件的形式存储。
-
-- **存在问题：**
-1. 如果文件很大读取效率低。
-2. 跨文件读取不方便；
-
-- **解决思路：**
-写块（chunk）
-
-- **实现目标：**
-将数据转化为[zarr](https://zarr.readthedocs.io/en/stable/)格式
-
-- **实现方法：**
-使用[kerchunk](https://fsspec.github.io/kerchunk/)
-
-```
-简单说，kerchunk能够更高效地读取本地或s3（如minio）上的数据，
-支持如NetCDF/HDF5, GRIB2, TIFF等部分格式的高效读取（解决问题1），
-并且能够跨文件创建虚拟数据集（解决问题2）。
-```
-- [kerchunk](https://fsspec.github.io/kerchunk/)是通过[写JSON文件](./docs/examples/era5/step3%3A%20kerchunk.ipynb)的形式完成上述功能的。
-
-## 使用
-
-代码尚未整理……
-

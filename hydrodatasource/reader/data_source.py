@@ -40,8 +40,9 @@ class HydroData(ABC):
         _description_
     """
 
-    def __init__(self, data_path):
-        self.data_source_dir = data_path
+    def __init__(self, data_path, dataset_name):
+        self.data_source_dir = os.path.join(data_path, dataset_name)
+        self.dataset_name = dataset_name
 
     def get_name(self):
         raise NotImplementedError
@@ -63,21 +64,18 @@ class SelfMadeHydroDataset(HydroData):
     Only two directories are needed: attributes and timeseries
     """
 
-    def __init__(
-        self, data_path, download=False, time_unit=None, dataset_name=None, **kwargs
-    ):
+    def __init__(self, data_path, dataset_name, time_unit=None, **kwargs):
         """Initialize a self-made Caravan-style dataset.
 
         Parameters
         ----------
-        data_path : _type_
-            _description_
-        download : bool, optional
-            _description_, by default False
+        data_path : str
+            The path to the custom-made data sources' parent directory.
+        dataset_name : str
+            SelfMadeHydroDataset's name, for example, googleflood or fdsources,
+            different dataset may use this same datasource class, but they have different dataset_name.
         time_unit : list, optional
             we have different time units, by default None
-        dataset_name : str, optional
-            SelfMadeHydroDataset's name, for example, googleflood or fdsources, different dataset may use this same datasource class, by default None
         kwargs : dict, optional
             additional keyword arguments, by default None
         """
@@ -89,13 +87,10 @@ class SelfMadeHydroDataset(HydroData):
             )
         # TODO: maybe starting with "s3://" is a better idea?
         self.head = "minio" if "s3://" in data_path else "local"
-        super().__init__(data_path)
+        super().__init__(data_path, dataset_name)
         self.data_source_description = self.set_data_source_describe()
-        if download:
-            self.download_data_source()
         self.camels_sites = self.read_site_info()
         self.time_unit = time_unit
-        self.dataset_name = dataset_name
         # version is used for the version of the dataset, for example, camels_v2.0
         self.version = kwargs.get("version", None)
         # offset_to_utc is used for the offset to UTC, for example, for Chinese basins' data, we generally set it to True as we always use 08:00 with Beijing Time
@@ -146,12 +141,6 @@ class SelfMadeHydroDataset(HydroData):
             ]
         )
 
-    def download_data_source(self):
-        print(
-            "Please download it manually and put all files of a CAMELS dataset in the CAMELS_DIR directory."
-        )
-        print("We unzip all files now.")
-
     def read_site_info(self):
         camels_file = self.data_source_description["ATTR_FILE"]
         attrs = access_fs.spec_path(camels_file, head=self.head)
@@ -159,6 +148,63 @@ class SelfMadeHydroDataset(HydroData):
 
     def read_object_ids(self, object_params=None) -> np.array:
         return self.camels_sites["basin_id"].values
+
+    def _validate_time_alignment(self, date, time_unit, start_hour_in_a_day, object_id):
+        """
+        Validate that data time alignment matches the expected start_hour_in_a_day.
+
+        Parameters
+        ----------
+        date : np.ndarray
+            Array of datetime values from the data
+        time_unit : str
+            Time unit string (e.g., "3h", "1D")
+        start_hour_in_a_day : int
+            Expected start hour in a day (0-23)
+        object_id : str
+            Basin/object ID for error reporting
+
+        Raises
+        ------
+        ValueError
+            If data alignment does not match the expected start_hour_in_a_day
+        """
+        if len(date) == 0:
+            return
+
+        # Check if this is a sub-daily interval (contains 'h' or 'H')
+        if "h" not in time_unit.lower() and "H" not in time_unit:
+            return
+
+        # Extract the numeric part to check if it's not 1h
+        numeric_part = "".join(filter(str.isdigit, time_unit))
+        if not numeric_part or int(numeric_part) == 1:
+            return
+
+        # For intervals like 3h, validate alignment
+        expected_hour = start_hour_in_a_day
+        # Get actual hours from the data
+        actual_hours = pd.to_datetime(date).hour
+        unique_hours = np.unique(actual_hours)
+
+        # Calculate expected hours based on the interval
+        interval_hours = int(numeric_part)
+        expected_hours_in_day = list(range(expected_hour, 24, interval_hours))
+
+        # Check if any actual hour is not in expected hours
+        misaligned_hours = [h for h in unique_hours if h not in expected_hours_in_day]
+
+        if misaligned_hours:
+            # Find what the correct start_hour should be
+            actual_start_hour = min(unique_hours)
+            raise ValueError(
+                f"Data time alignment error for basin '{object_id}': "
+                f"The actual data starts at hour {actual_start_hour:02d}, "
+                f"but start_hour_in_a_day is set to {expected_hour}. "
+                f"Expected hours in a day: {sorted(expected_hours_in_day)}, "
+                f"but found hours: {sorted(unique_hours.tolist())}. "
+                f"Please set start_hour_in_a_day to {actual_start_hour} to match your data."
+            )
 
     def read_timeseries(
         self, object_ids=None, t_range_list: list = None, relevant_cols=None, **kwargs
@@ -176,6 +222,14 @@ class SelfMadeHydroDataset(HydroData):
             List of relevant columns. Defaults to None.
         **kwargs : dict, optional
             Additional keyword arguments.
+            time_units : list, optional
+                List of time units to process
+            start0101_freq : bool, optional
+                For freq setting, if the start date is 01-01, set True
+            offset_to_utc : bool, optional
+                Whether to offset the time to UTC
+            start_hour_in_a_day : int, optional
+                The start hour in a day for sub-daily intervals (0-23). Default is 2.
 
         Returns
         -------
@@ -185,6 +239,15 @@ class SelfMadeHydroDataset(HydroData):
         time_units = kwargs.get("time_units", ["1D"])
         start0101_freq = kwargs.get("start0101_freq", False)
         offset_to_utc = kwargs.get("offset_to_utc", self.offset_to_utc)
+        start_hour_in_a_day = kwargs.get("start_hour_in_a_day", 2)
+
+        # Validate start_hour_in_a_day range
+        if not isinstance(start_hour_in_a_day, int) or not (
+            0 <= start_hour_in_a_day <= 23
+        ):
+            raise ValueError(
+                f"start_hour_in_a_day must be an integer between 0 and 23, got {start_hour_in_a_day}"
+            )
 
         results = {}
 
@@ -215,6 +278,9 @@ class SelfMadeHydroDataset(HydroData):
             nt = len(t_range)
             x = np.full([len(object_ids), nt, len(relevant_cols)], np.nan)
 
+            # Flag to check data alignment only once
+            data_alignment_checked = False
+
             for k in tqdm(
                 range(len(object_ids)), desc=f"Reading timeseries data with {time_unit}"
             ):
@@ -230,6 +296,14 @@ class SelfMadeHydroDataset(HydroData):
                 date = pd.to_datetime(ts_data["time"]).values
                 if offset_to_utc:
                     date = date - np.timedelta64(offset_dict[object_ids[k]], "h")
+
+                # Validate data alignment with start_hour_in_a_day (only check once)
+                if not data_alignment_checked:
+                    self._validate_time_alignment(
+                        date, time_unit, start_hour_in_a_day, object_ids[k]
+                    )
+                    data_alignment_checked = True
+
                 [_, ind1, ind2] = np.intersect1d(date, t_range, return_indices=True)
 
                 for j in range(len(relevant_cols)):
@@ -468,6 +542,10 @@ class SelfMadeHydroDataset(HydroData):
             batchsize -- Number of basins to process per batch, by default 100
             time_units -- List of time units to process, by default None
             start0101_freq -- for freq setting, if the start date is 01-01, set True, by default False
+            offset_to_utc -- whether to offset the time to UTC, by default False
+            start_hour_in_a_day -- the start hour in a day (0-23), by default 2 which means 2-5-8-11-14-17-20-23 UTC.
+                                   Chinese basins data always use 08:00 with Beijing Time, so we set the default value to 2.
+                                   Only applicable for sub-daily intervals (currently only "3h" is supported)
         """
         batchsize = kwargs.get("batchsize", 100)
         time_units = kwargs.get("time_units", self.time_unit) or [
@@ -475,8 +553,31 @@ class SelfMadeHydroDataset(HydroData):
         ]  # Default to ["1D"] if not specified or if time_units is None
         start0101_freq = kwargs.get("start0101_freq", False)
         offset_to_utc = kwargs.get("offset_to_utc", self.offset_to_utc)
+        start_hour_in_a_day = kwargs.get("start_hour_in_a_day", 2)
+
+        # Validate start_hour_in_a_day
+        if not isinstance(start_hour_in_a_day, int) or not (
+            0 <= start_hour_in_a_day <= 23
+        ):
+            raise ValueError(
+                f"start_hour_in_a_day must be an integer between 0 and 23, got {start_hour_in_a_day}"
+            )
         variables = self.get_timeseries_cols()
         basins = self.camels_sites["basin_id"].values
+
+        # Validate time_units for sub-daily intervals
+        for time_unit in time_units:
+            # Check if this is an hourly interval (contains 'h' or 'H')
+            if "h" in time_unit.lower() or "H" in time_unit:
+                # Extract the numeric part
+                numeric_part = "".join(filter(str.isdigit, time_unit))
+                if numeric_part and int(numeric_part) != 1:
+                    # If it's not 1h, only allow 3h
+                    if time_unit.lower() not in ["3h"]:
+                        raise ValueError(
+                            f"Currently only '3h' sub-daily interval is supported for custom start_hour_in_a_day. "
+                            f"Got '{time_unit}'. Please use '1h', '3h', or daily/longer intervals."
+                        )
 
         # Define the generator function for batching
         def data_generator(basins, batch_size):
@@ -488,7 +589,22 @@ class SelfMadeHydroDataset(HydroData):
                 if time_unit != "3h":
                     self.trange4cache = ["1960-01-01", "2024-12-31"]
                 else:
-                    self.trange4cache = ["1960-01-01 02", "2024-12-31 23"] #这个是实际的时间范围是这样的
+                    # Calculate the end hour based on 3-hour intervals
+                    # For 3h intervals, find the last timestamp within a day
+                    # Example: start_hour_in_a_day=2 -> 02, 05, 08, 11, 14, 17, 20, 23 (last is 23)
+                    # Example: start_hour_in_a_day=5 -> 05, 08, 11, 14, 17, 20, 23 (last is 23)
+                    start_hour = str(start_hour_in_a_day).zfill(2)
+                    # Find the last hour in the day for this interval
+                    hours_in_day = list(range(start_hour_in_a_day, 24, 3))
+                    if len(hours_in_day) > 0:
+                        end_hour = str(hours_in_day[-1]).zfill(2)
+                    else:
+                        # If start_hour >= 24, which shouldn't happen, default to 23
+                        end_hour = "23"
+                    self.trange4cache = [
+                        f"1960-01-01 {start_hour}",
+                        f"2024-12-31 {end_hour}",
+                    ]
 
             # Generate the time range specific to the time unit
             if start0101_freq:
@@ -535,6 +651,7 @@ class SelfMadeHydroDataset(HydroData):
                     ],  # Pass the time unit to ensure correct data retrieval
                     start0101_freq=start0101_freq,
                     offset_to_utc=offset_to_utc,
+                    start_hour_in_a_day=start_hour_in_a_day,
                 )
 
                 dataset = xr.Dataset(
@@ -720,21 +837,19 @@ class SelfMadeHydroDataset(HydroData):
 class SelfMadeForecastDataset(SelfMadeHydroDataset):
     """For selfmadehydrodataset, we design a new file format for forecast data from GFS et al."""
 
-    def __init__(self, data_path, download=False, time_unit=None, dataset_name=None):
+    def __init__(self, data_path, dataset_name, time_unit=None):
         """intialize a Class for reading forecast data
 
         Parameters
         ----------
         data_path : str
             the path of data source
-        download : bool, optional
-            if download, by default False
         time_unit : list, optional
             unit of one time period, by default None
         dataset_name: str
             name will be used for cache files
         """
-        super().__init__(data_path, download, time_unit, dataset_name=dataset_name)
+        super().__init__(data_path, dataset_name, time_unit)
 
     def set_data_source_describe(self):
         """set data source description
@@ -1131,25 +1246,21 @@ class StationHydroDataset(SelfMadeHydroDataset):
         - adjacency_xxx_True.csv
     """
 
-    def __init__(
-        self, data_path, download=False, time_unit=None, dataset_name=None, **kwargs
-    ):
+    def __init__(self, data_path, dataset_name, time_unit=None, **kwargs):
         """Initialize StationHydroDataset.
 
         Parameters
         ----------
         data_path : str
             Path to the dataset directory
-        download : bool, optional
-            Whether to download data, by default False
+        dataset_name : str
+            Name of the dataset
         time_unit : list, optional
             Time units for the data, by default None
-        dataset_name : str, optional
-            Name of the dataset, by default None
         **kwargs : dict
             Additional keyword arguments passed to parent class
         """
-        super().__init__(data_path, download, time_unit, dataset_name, **kwargs)
+        super().__init__(data_path, dataset_name, time_unit, **kwargs)
         self.station_info = None
         self.basin_station_mapping = None
 
@@ -1326,7 +1437,7 @@ class StationHydroDataset(SelfMadeHydroDataset):
                     if col in station_data.columns:
                         time_col = col
                         break
-                
+
                 if time_col is None:
                     print(f"Warning: No time column found in {station_file}")
                     continue
@@ -1431,7 +1542,7 @@ class StationHydroDataset(SelfMadeHydroDataset):
                 if col in sample_data.columns:
                     time_col = col
                     break
-            
+
             variables = [col for col in sample_data.columns if col != time_col]
 
             # Get units info if available
@@ -1610,9 +1721,9 @@ class StationHydroDataset(SelfMadeHydroDataset):
         # Get all basin IDs
         if self.basin_station_mapping is None:
             self.read_station_info()
-        
+
         basin_ids = self.basin_station_mapping["basin_id"].unique()
-        
+
         # Read all adjacency matrices
         adjacency_datasets = {}
         for basin_id in basin_ids:
@@ -1630,11 +1741,11 @@ class StationHydroDataset(SelfMadeHydroDataset):
             except FileNotFoundError:
                 # Skip basins without adjacency files
                 continue
-        
+
         # Save individual adjacency matrices for each basin
         dataset_name = self.dataset_name
         prefix_ = "" if dataset_name is None else dataset_name + "_"
-        
+
         for basin_id, adj_ds in adjacency_datasets.items():
             adj_ds.to_netcdf(
                 os.path.join(CACHE_DIR, f"{prefix_}adjacency_{basin_id}.nc")
@@ -1655,16 +1766,16 @@ class StationHydroDataset(SelfMadeHydroDataset):
         """
         dataset_name = self.dataset_name
         prefix_ = "" if dataset_name is None else dataset_name + "_"
-        
+
         adjacency_file = os.path.join(CACHE_DIR, f"{prefix_}adjacency_{basin_id}.nc")
-        
+
         try:
             adjacency_ds = xr.open_dataset(adjacency_file)
         except FileNotFoundError:
             # Cache the adjacency data if not found
             self.cache_adjacency_xrdataset()
             adjacency_ds = xr.open_dataset(adjacency_file)
-        
+
         return adjacency_ds
 
     def _get_station_file_prefix_(self, dataset_name, version):
@@ -1706,30 +1817,37 @@ class StationHydroDataset(SelfMadeHydroDataset):
         if self.basin_station_mapping is None:
             self.read_station_info()
 
-        return self.basin_station_mapping[
-            self.basin_station_mapping["basin_id"] == basin_id
-        ]["station_id"].unique().tolist()
+        return (
+            self.basin_station_mapping[
+                self.basin_station_mapping["basin_id"] == basin_id
+            ]["station_id"]
+            .unique()
+            .tolist()
+        )
+
 
 class TgHydroDatasource(SelfMadeHydroDataset):
     """
     TG流域数据集 - 继承自SelfMadeHydroDataset，添加LSTM预测数据和图网络结构支持
-    
+
     该类在标准的水文数据集基础上，增加了对LSTM预测数据和图网络结构的支持，
     主要用于图神经网络相关的水文建模任务。
-    
+
     数据目录结构:
     - attributes/           # 流域属性数据
-    - timeseries/          # 时间序列数据  
+    - timeseries/          # 时间序列数据
     - shapes/              # 流域形状文件
     - tggnn/               # TG-GNN专用数据
       ├── lstmpred.nc      # LSTM预测数据
       └── graph_dict.json  # 图网络结构
     """
-    
-    def __init__(self, data_path, download=False, time_unit=None, dataset_name=None, **kwargs):
+
+    def __init__(
+        self, data_path, download=False, time_unit=None, dataset_name=None, **kwargs
+    ):
         """
         初始化TG流域数据集
-        
+
         Parameters
         ----------
         data_path : str
@@ -1745,18 +1863,18 @@ class TgHydroDatasource(SelfMadeHydroDataset):
         """
         # 调用父类初始化
         super().__init__(data_path, download, time_unit, dataset_name, **kwargs)
-        
+
         # 加载图网络结构
         self.graph_dict = self._load_graph_dict()
-        
+
     def get_name(self):
         """返回数据源名称"""
         return "TgHydroDatasource"
-    
+
     def set_data_source_describe(self):
         """
         设置数据源描述，在父类基础上添加TGGNN相关路径
-        
+
         Returns
         -------
         collections.OrderedDict
@@ -1764,39 +1882,41 @@ class TgHydroDatasource(SelfMadeHydroDataset):
         """
         # 获取父类的数据源描述
         data_source_desc = super().set_data_source_describe()
-        
+
         # 添加TGGNN相关路径
         data_root_dir = self.data_source_dir
         tggnn_dir = os.path.join(data_root_dir, "tggnn")
         lstm_pred_file = os.path.join(tggnn_dir, "lstmpred.nc")
         graph_dict_file = os.path.join(tggnn_dir, "graph_dict.json")
-        
+
         # 更新数据源描述
-        data_source_desc.update({
-            "TGGNN_DIR": tggnn_dir,
-            "LSTM_PRED_FILE": lstm_pred_file,
-            "GRAPH_DICT_FILE": graph_dict_file,
-        })
-        
+        data_source_desc.update(
+            {
+                "TGGNN_DIR": tggnn_dir,
+                "LSTM_PRED_FILE": lstm_pred_file,
+                "GRAPH_DICT_FILE": graph_dict_file,
+            }
+        )
+
         return data_source_desc
-    
+
     def _load_graph_dict(self):
         """
         从JSON文件加载图网络结构
-        
+
         Returns
         -------
         dict
             图网络结构字典
         """
         graph_dict_file = self.data_source_description["GRAPH_DICT_FILE"]
-        
+
         try:
             if "s3://" in graph_dict_file:
                 with conf.FS.open(graph_dict_file, mode="rb") as f:
                     graph_dict = json.load(f)
             else:
-                with open(graph_dict_file, 'r', encoding='utf-8') as f:
+                with open(graph_dict_file, "r", encoding="utf-8") as f:
                     graph_dict = json.load(f)
         except FileNotFoundError:
             # 如果文件不存在，返回默认的图网络结构
@@ -1804,65 +1924,164 @@ class TgHydroDatasource(SelfMadeHydroDataset):
             graph_dict = self._get_default_graph_dict()
             # 保存默认结构到文件
             self._save_graph_dict(graph_dict)
-        
+
         return graph_dict
-    
+
     def _get_default_graph_dict(self):
         """
         获取默认的图网络结构
-        
+
         Returns
         -------
         dict
             默认图网络结构
         """
         return {
-            'sanxia_60703800': [
-                ['sanxia_60718300', 'sanxia_60703780', 'sanxia_60703800'],
-                ['sanxia_60716700', 'sanxia_60715400', 'sanxia_60715955', 'sanxia_60703780', 'sanxia_60703800'],
-                ['sanxia_60716250', 'sanxia_60715000', 'sanxia_60715400', 'sanxia_60715955', 'sanxia_60703780', 'sanxia_60703800'],
-                ['sanxia_60701001', 'sanxia_60715000', 'sanxia_60715400', 'sanxia_60715955', 'sanxia_60703780', 'sanxia_60703800'],
-                ['sanxia_60717050', 'sanxia_60715400', 'sanxia_60715955', 'sanxia_60703780', 'sanxia_60703800'],
-                ['sanxia_60710650', 'sanxia_60703700', 'sanxia_60703780', 'sanxia_60703800'],
-                ['sanxia_60706825', 'sanxia_60700001', 'sanxia_60700002', 'sanxia_60703700', 'sanxia_60703780', 'sanxia_60703800'],
-                ['sanxia_60701750', 'sanxia_60700002', 'sanxia_60703700', 'sanxia_60703780', 'sanxia_60703800'],
-                ['sanxia_60709859', 'sanxia_60703700', 'sanxia_60703780', 'sanxia_60703800'],
-                ['sanxia_60713800', 'sanxia_60712000', 'sanxia_60703780', 'sanxia_60703800'],
-                ['sanxia_60713730', 'sanxia_60711800', 'sanxia_60712000', 'sanxia_60703780', 'sanxia_60703800'],
-                ['sanxia_60713630', 'sanxia_60711800', 'sanxia_60712000', 'sanxia_60703780', 'sanxia_60703800'],
-                ['sanxia_60713400', 'sanxia_60706011', 'sanxia_60713170', 'sanxia_60711800', 'sanxia_60712000', 'sanxia_60703780', 'sanxia_60703800'],
-                ['sanxia_60713270', 'sanxia_60713170', 'sanxia_60711800', 'sanxia_60712000', 'sanxia_60703780', 'sanxia_60703800'],
-                ['sanxia_60712900', 'sanxia_60711800', 'sanxia_60712000', 'sanxia_60703780', 'sanxia_60703800'],
-                ['sanxia_60701101', 'sanxia_60711800', 'sanxia_60712000', 'sanxia_60703780', 'sanxia_60703800'],
-                ['sanxia_60711600', 'sanxia_60711800', 'sanxia_60712000', 'sanxia_60703780', 'sanxia_60703800']
+            "sanxia_60703800": [
+                ["sanxia_60718300", "sanxia_60703780", "sanxia_60703800"],
+                [
+                    "sanxia_60716700",
+                    "sanxia_60715400",
+                    "sanxia_60715955",
+                    "sanxia_60703780",
+                    "sanxia_60703800",
+                ],
+                [
+                    "sanxia_60716250",
+                    "sanxia_60715000",
+                    "sanxia_60715400",
+                    "sanxia_60715955",
+                    "sanxia_60703780",
+                    "sanxia_60703800",
+                ],
+                [
+                    "sanxia_60701001",
+                    "sanxia_60715000",
+                    "sanxia_60715400",
+                    "sanxia_60715955",
+                    "sanxia_60703780",
+                    "sanxia_60703800",
+                ],
+                [
+                    "sanxia_60717050",
+                    "sanxia_60715400",
+                    "sanxia_60715955",
+                    "sanxia_60703780",
+                    "sanxia_60703800",
+                ],
+                [
+                    "sanxia_60710650",
+                    "sanxia_60703700",
+                    "sanxia_60703780",
+                    "sanxia_60703800",
+                ],
+                [
+                    "sanxia_60706825",
+                    "sanxia_60700001",
+                    "sanxia_60700002",
+                    "sanxia_60703700",
+                    "sanxia_60703780",
+                    "sanxia_60703800",
+                ],
+                [
+                    "sanxia_60701750",
+                    "sanxia_60700002",
+                    "sanxia_60703700",
+                    "sanxia_60703780",
+                    "sanxia_60703800",
+                ],
+                [
+                    "sanxia_60709859",
+                    "sanxia_60703700",
+                    "sanxia_60703780",
+                    "sanxia_60703800",
+                ],
+                [
+                    "sanxia_60713800",
+                    "sanxia_60712000",
+                    "sanxia_60703780",
+                    "sanxia_60703800",
+                ],
+                [
+                    "sanxia_60713730",
+                    "sanxia_60711800",
+                    "sanxia_60712000",
+                    "sanxia_60703780",
+                    "sanxia_60703800",
+                ],
+                [
+                    "sanxia_60713630",
+                    "sanxia_60711800",
+                    "sanxia_60712000",
+                    "sanxia_60703780",
+                    "sanxia_60703800",
+                ],
+                [
+                    "sanxia_60713400",
+                    "sanxia_60706011",
+                    "sanxia_60713170",
+                    "sanxia_60711800",
+                    "sanxia_60712000",
+                    "sanxia_60703780",
+                    "sanxia_60703800",
+                ],
+                [
+                    "sanxia_60713270",
+                    "sanxia_60713170",
+                    "sanxia_60711800",
+                    "sanxia_60712000",
+                    "sanxia_60703780",
+                    "sanxia_60703800",
+                ],
+                [
+                    "sanxia_60712900",
+                    "sanxia_60711800",
+                    "sanxia_60712000",
+                    "sanxia_60703780",
+                    "sanxia_60703800",
+                ],
+                [
+                    "sanxia_60701101",
+                    "sanxia_60711800",
+                    "sanxia_60712000",
+                    "sanxia_60703780",
+                    "sanxia_60703800",
+                ],
+                [
+                    "sanxia_60711600",
+                    "sanxia_60711800",
+                    "sanxia_60712000",
+                    "sanxia_60703780",
+                    "sanxia_60703800",
+                ],
             ]
         }
-    
+
     def _save_graph_dict(self, graph_dict):
         """
         保存图网络结构到JSON文件
-        
+
         Parameters
         ----------
         graph_dict : dict
             图网络结构字典
         """
         graph_dict_file = self.data_source_description["GRAPH_DICT_FILE"]
-        
+
         # 确保目录存在
         os.makedirs(os.path.dirname(graph_dict_file), exist_ok=True)
-        
+
         if "s3://" in graph_dict_file:
             with conf.FS.open(graph_dict_file, mode="w") as f:
                 json.dump(graph_dict, f, ensure_ascii=False, indent=2)
         else:
-            with open(graph_dict_file, 'w', encoding='utf-8') as f:
+            with open(graph_dict_file, "w", encoding="utf-8") as f:
                 json.dump(graph_dict, f, ensure_ascii=False, indent=2)
-    
+
     def read_lstm_predictions(self, object_ids=None, t_range_list=None, **kwargs):
         """
         读取LSTM预测数据
-        
+
         Parameters
         ----------
         object_ids : list, optional
@@ -1871,35 +2090,37 @@ class TgHydroDatasource(SelfMadeHydroDataset):
             时间范围列表, by default None
         **kwargs : dict
             其他参数
-            
+
         Returns
         -------
         xr.Dataset
             LSTM预测数据集
         """
         lstm_pred_file = self.data_source_description["LSTM_PRED_FILE"]
-        
+
         if "s3://" in lstm_pred_file:
             with conf.FS.open(lstm_pred_file, mode="rb") as f:
                 lstm_data = xr.open_dataset(f)
         else:
             lstm_data = xr.open_dataset(lstm_pred_file)
-        
+
         # 根据参数筛选数据
         if object_ids is not None:
             lstm_data = lstm_data.sel(basin=object_ids)
-        
+
         if t_range_list is not None:
             start_time = pd.to_datetime(t_range_list[0])
             end_time = pd.to_datetime(t_range_list[1])
             lstm_data = lstm_data.sel(time=slice(start_time, end_time))
-        
+
         return lstm_data
-    
-    def read_timeseries_with_lstm(self, object_ids=None, t_range=None, var_lst=None, time_units=None):
+
+    def read_timeseries_with_lstm(
+        self, object_ids=None, t_range=None, var_lst=None, time_units=None
+    ):
         """
         读取时间序列数据和LSTM预测数据
-        
+
         Parameters
         ----------
         object_ids : list, optional
@@ -1910,7 +2131,7 @@ class TgHydroDatasource(SelfMadeHydroDataset):
             变量列表, by default None
         time_units : list, optional
             时间单位，默认使用类的time_unit属性, by default None
-            
+
         Returns
         -------
         tuple
@@ -1919,71 +2140,72 @@ class TgHydroDatasource(SelfMadeHydroDataset):
         if time_units is None:
             time_units = self.time_unit
 
-        var_lst_tggnn = ['total_precipitation_hourly', 'discharge', 'streamflow']
-            
+        var_lst_tggnn = ["total_precipitation_hourly", "discharge", "streamflow"]
+
         # 使用父类方法读取时间序列数据
         timeseries_data = self.read_ts_xrdataset(
             gage_id_lst=object_ids,
             t_range=t_range,
             var_lst=var_lst_tggnn,
-            time_units=time_units
+            time_units=time_units,
         )
-        
+
         # 读取LSTM预测数据
         lstm_data = self.read_lstm_predictions(
-            object_ids=object_ids,
-            t_range_list=t_range
+            object_ids=object_ids, t_range_list=t_range
         )
-        
+
         return timeseries_data, lstm_data
-    
+
     def read_node_attributes(self, object_ids=None, selected_attrs=None):
         """
         读取节点静态属性数据
-        
+
         Parameters
         ----------
         object_ids : array-like, optional
             流域ID列表, by default None
         selected_attrs : list, optional
             选择的属性列表, by default None
-            
+
         Returns
         -------
         xr.Dataset
             属性数据集
         """
         if selected_attrs is None:
-            selected_attrs = ['ele_mt_sav', 'area', 'p_mean']
-        
+            selected_attrs = ["ele_mt_sav", "area", "p_mean"]
+
         # 使用父类方法读取属性数据
         attr_data = self.read_attr_xrdataset(var_lst=selected_attrs)
-        
+
         # 如果指定了object_ids，则筛选数据
         if object_ids is not None:
             # 确保object_ids中的所有ID都存在于数据中
-            available_basins = attr_data.coords['basin'].values
-            valid_ids = [basin_id for basin_id in object_ids if basin_id in available_basins]
+            available_basins = attr_data.coords["basin"].values
+            valid_ids = [
+                basin_id for basin_id in object_ids if basin_id in available_basins
+            ]
             if len(valid_ids) != len(object_ids):
                 missing_ids = set(object_ids) - set(valid_ids)
                 print(f"警告：以下流域ID在属性数据中不存在: {missing_ids}")
-            
+
             if valid_ids:
                 attr_data = attr_data.sel(basin=valid_ids)
-        
+
         return attr_data
-    
+
     def gen_nx_graph(self, basin_id, object_ids=None):
         """
         生成网络图，确保节点索引与数据中basin顺序一致
-        
+
         Parameters
         ----------
         basin_id : str
             流域ID
         object_ids : array-like, optional
             对象ID列表，如果为None则使用所有可用的流域ID, by default None
-            
+
         Returns
         -------
         tuple
@@ -1992,50 +2214,54 @@ class TgHydroDatasource(SelfMadeHydroDataset):
         basin_path_lists = self.graph_dict.get(basin_id)
         if basin_path_lists is None:
             raise ValueError(f"未找到流域 {basin_id} 的图网络结构")
-        
+
         # 构建有向图
         dg = nx.DiGraph()
         for path in basin_path_lists:
             nx.add_path(dg, path)
-        
+
         # 获取图中所有节点
         graph_nodes = set(dg.nodes)
-        
+
         # 如果没有指定object_ids，使用图中所有节点
         if object_ids is None:
             # 从数据中获取可用的流域ID
             available_basins = self.read_object_ids()
             # 取图中节点与可用数据的交集
-            valid_object_ids = [basin_id for basin_id in available_basins if basin_id in graph_nodes]
+            valid_object_ids = [
+                basin_id for basin_id in available_basins if basin_id in graph_nodes
+            ]
         else:
             # 检查指定的object_ids是否在图中存在
             object_ids_list = list(object_ids)
-            valid_object_ids = [basin_id for basin_id in object_ids_list if basin_id in graph_nodes]
-            
+            valid_object_ids = [
+                basin_id for basin_id in object_ids_list if basin_id in graph_nodes
+            ]
+
             # 报告不在图中的节点
             missing_in_graph = set(object_ids_list) - graph_nodes
             if missing_in_graph:
                 print(f"警告：以下流域ID在图网络结构中不存在: {missing_in_graph}")
-        
+
         # 创建节点映射（节点名称到索引的映射）
         node_mapping = {node_id: idx for idx, node_id in enumerate(valid_object_ids)}
-        
+
         # 生成边列表（使用索引）
         edges = []
         for u, v in dg.edges:
             if u in node_mapping and v in node_mapping:
                 edges.append((node_mapping[u], node_mapping[v]))
-        
+
         return dg, edges, node_mapping, valid_object_ids
-    
+
     def classify_nodes(dg, basin_names):
         """
         分类节点为源头节点和汇流节点
-        
+
         Args:
             dg: NetworkX有向图
             basin_names: 节点名称列表
-        
+
         Returns:
             source_nodes: 源头节点列表（没有入度的节点）
             confluence_nodes: 汇流节点列表（有入度的节点）
@@ -2043,7 +2269,7 @@ class TgHydroDatasource(SelfMadeHydroDataset):
         """
         source_nodes = []
         confluence_nodes = []
-        
+
         for node in basin_names:
             # 检查节点的入度
             in_degree = dg.in_degree(node)
@@ -2051,13 +2277,13 @@ class TgHydroDatasource(SelfMadeHydroDataset):
                 source_nodes.append(node)
             else:
                 confluence_nodes.append(node)
-        
+
         # 创建节点掩码：True表示汇流节点（需要训练），False表示源头节点（不训练）
         node_mask = []
         for node in basin_names:
             node_mask.append(node in confluence_nodes)
-        
+
         print(f"源头节点 ({len(source_nodes)}个): {source_nodes}")
         print(f"汇流节点 ({len(confluence_nodes)}个): {confluence_nodes}")
-        
+
         return source_nodes, confluence_nodes, node_mask
