@@ -9,6 +9,7 @@ import xarray as xr
 from abc import ABC
 from tqdm import tqdm
 import polars as pl
+import networkx as nx
 
 from hydroutils import hydro_file
 from hydroutils.hydro_time import generate_start0101_time_range
@@ -1708,3 +1709,355 @@ class StationHydroDataset(SelfMadeHydroDataset):
         return self.basin_station_mapping[
             self.basin_station_mapping["basin_id"] == basin_id
         ]["station_id"].unique().tolist()
+
+class TgHydroDatasource(SelfMadeHydroDataset):
+    """
+    TG流域数据集 - 继承自SelfMadeHydroDataset，添加LSTM预测数据和图网络结构支持
+    
+    该类在标准的水文数据集基础上，增加了对LSTM预测数据和图网络结构的支持，
+    主要用于图神经网络相关的水文建模任务。
+    
+    数据目录结构:
+    - attributes/           # 流域属性数据
+    - timeseries/          # 时间序列数据  
+    - shapes/              # 流域形状文件
+    - tggnn/               # TG-GNN专用数据
+      ├── lstmpred.nc      # LSTM预测数据
+      └── graph_dict.json  # 图网络结构
+    """
+    
+    def __init__(self, data_path, download=False, time_unit=None, dataset_name=None, **kwargs):
+        """
+        初始化TG流域数据集
+        
+        Parameters
+        ----------
+        data_path : str
+            数据根目录路径
+        download : bool, optional
+            是否下载数据, by default False
+        time_unit : list, optional
+            时间单位列表, by default None
+        dataset_name : str, optional
+            数据集名称, by default None
+        **kwargs : dict
+            其他参数
+        """
+        # 调用父类初始化
+        super().__init__(data_path, download, time_unit, dataset_name, **kwargs)
+        
+        # 加载图网络结构
+        self.graph_dict = self._load_graph_dict()
+        
+    def get_name(self):
+        """返回数据源名称"""
+        return "TgHydroDatasource"
+    
+    def set_data_source_describe(self):
+        """
+        设置数据源描述，在父类基础上添加TGGNN相关路径
+        
+        Returns
+        -------
+        collections.OrderedDict
+            包含所有数据路径的有序字典
+        """
+        # 获取父类的数据源描述
+        data_source_desc = super().set_data_source_describe()
+        
+        # 添加TGGNN相关路径
+        data_root_dir = self.data_source_dir
+        tggnn_dir = os.path.join(data_root_dir, "tggnn")
+        lstm_pred_file = os.path.join(tggnn_dir, "lstmpred.nc")
+        graph_dict_file = os.path.join(tggnn_dir, "graph_dict.json")
+        
+        # 更新数据源描述
+        data_source_desc.update({
+            "TGGNN_DIR": tggnn_dir,
+            "LSTM_PRED_FILE": lstm_pred_file,
+            "GRAPH_DICT_FILE": graph_dict_file,
+        })
+        
+        return data_source_desc
+    
+    def _load_graph_dict(self):
+        """
+        从JSON文件加载图网络结构
+        
+        Returns
+        -------
+        dict
+            图网络结构字典
+        """
+        graph_dict_file = self.data_source_description["GRAPH_DICT_FILE"]
+        
+        try:
+            if "s3://" in graph_dict_file:
+                with conf.FS.open(graph_dict_file, mode="rb") as f:
+                    graph_dict = json.load(f)
+            else:
+                with open(graph_dict_file, 'r', encoding='utf-8') as f:
+                    graph_dict = json.load(f)
+        except FileNotFoundError:
+            # 如果文件不存在，返回默认的图网络结构
+            print(f"警告：图网络结构文件 {graph_dict_file} 不存在，使用默认结构")
+            graph_dict = self._get_default_graph_dict()
+            # 保存默认结构到文件
+            self._save_graph_dict(graph_dict)
+        
+        return graph_dict
+    
+    def _get_default_graph_dict(self):
+        """
+        获取默认的图网络结构
+        
+        Returns
+        -------
+        dict
+            默认图网络结构
+        """
+        return {
+            'sanxia_60703800': [
+                ['sanxia_60718300', 'sanxia_60703780', 'sanxia_60703800'],
+                ['sanxia_60716700', 'sanxia_60715400', 'sanxia_60715955', 'sanxia_60703780', 'sanxia_60703800'],
+                ['sanxia_60716250', 'sanxia_60715000', 'sanxia_60715400', 'sanxia_60715955', 'sanxia_60703780', 'sanxia_60703800'],
+                ['sanxia_60701001', 'sanxia_60715000', 'sanxia_60715400', 'sanxia_60715955', 'sanxia_60703780', 'sanxia_60703800'],
+                ['sanxia_60717050', 'sanxia_60715400', 'sanxia_60715955', 'sanxia_60703780', 'sanxia_60703800'],
+                ['sanxia_60710650', 'sanxia_60703700', 'sanxia_60703780', 'sanxia_60703800'],
+                ['sanxia_60706825', 'sanxia_60700001', 'sanxia_60700002', 'sanxia_60703700', 'sanxia_60703780', 'sanxia_60703800'],
+                ['sanxia_60701750', 'sanxia_60700002', 'sanxia_60703700', 'sanxia_60703780', 'sanxia_60703800'],
+                ['sanxia_60709859', 'sanxia_60703700', 'sanxia_60703780', 'sanxia_60703800'],
+                ['sanxia_60713800', 'sanxia_60712000', 'sanxia_60703780', 'sanxia_60703800'],
+                ['sanxia_60713730', 'sanxia_60711800', 'sanxia_60712000', 'sanxia_60703780', 'sanxia_60703800'],
+                ['sanxia_60713630', 'sanxia_60711800', 'sanxia_60712000', 'sanxia_60703780', 'sanxia_60703800'],
+                ['sanxia_60713400', 'sanxia_60706011', 'sanxia_60713170', 'sanxia_60711800', 'sanxia_60712000', 'sanxia_60703780', 'sanxia_60703800'],
+                ['sanxia_60713270', 'sanxia_60713170', 'sanxia_60711800', 'sanxia_60712000', 'sanxia_60703780', 'sanxia_60703800'],
+                ['sanxia_60712900', 'sanxia_60711800', 'sanxia_60712000', 'sanxia_60703780', 'sanxia_60703800'],
+                ['sanxia_60701101', 'sanxia_60711800', 'sanxia_60712000', 'sanxia_60703780', 'sanxia_60703800'],
+                ['sanxia_60711600', 'sanxia_60711800', 'sanxia_60712000', 'sanxia_60703780', 'sanxia_60703800']
+            ]
+        }
+    
+    def _save_graph_dict(self, graph_dict):
+        """
+        保存图网络结构到JSON文件
+        
+        Parameters
+        ----------
+        graph_dict : dict
+            图网络结构字典
+        """
+        graph_dict_file = self.data_source_description["GRAPH_DICT_FILE"]
+        
+        # 确保目录存在
+        os.makedirs(os.path.dirname(graph_dict_file), exist_ok=True)
+        
+        if "s3://" in graph_dict_file:
+            with conf.FS.open(graph_dict_file, mode="w") as f:
+                json.dump(graph_dict, f, ensure_ascii=False, indent=2)
+        else:
+            with open(graph_dict_file, 'w', encoding='utf-8') as f:
+                json.dump(graph_dict, f, ensure_ascii=False, indent=2)
+    
+    def read_lstm_predictions(self, object_ids=None, t_range_list=None, **kwargs):
+        """
+        读取LSTM预测数据
+        
+        Parameters
+        ----------
+        object_ids : list, optional
+            流域ID列表, by default None
+        t_range_list : list, optional
+            时间范围列表, by default None
+        **kwargs : dict
+            其他参数
+            
+        Returns
+        -------
+        xr.Dataset
+            LSTM预测数据集
+        """
+        lstm_pred_file = self.data_source_description["LSTM_PRED_FILE"]
+        
+        if "s3://" in lstm_pred_file:
+            with conf.FS.open(lstm_pred_file, mode="rb") as f:
+                lstm_data = xr.open_dataset(f)
+        else:
+            lstm_data = xr.open_dataset(lstm_pred_file)
+        
+        # 根据参数筛选数据
+        if object_ids is not None:
+            lstm_data = lstm_data.sel(basin=object_ids)
+        
+        if t_range_list is not None:
+            start_time = pd.to_datetime(t_range_list[0])
+            end_time = pd.to_datetime(t_range_list[1])
+            lstm_data = lstm_data.sel(time=slice(start_time, end_time))
+        
+        return lstm_data
+    
+    def read_timeseries_with_lstm(self, object_ids=None, t_range=None, var_lst=None, time_units=None):
+        """
+        读取时间序列数据和LSTM预测数据
+        
+        Parameters
+        ----------
+        object_ids : list, optional
+            对象ID列表（流域名称）, by default None
+        t_range : list, optional
+            时间范围，格式为[start_time, end_time], by default None
+        var_lst : list, optional
+            变量列表, by default None
+        time_units : list, optional
+            时间单位，默认使用类的time_unit属性, by default None
+            
+        Returns
+        -------
+        tuple
+            (时间序列数据xarray.Dataset, LSTM预测数据xarray.Dataset)
+        """
+        if time_units is None:
+            time_units = self.time_unit
+
+        var_lst_tggnn = ['total_precipitation_hourly', 'discharge', 'streamflow']
+            
+        # 使用父类方法读取时间序列数据
+        timeseries_data = self.read_ts_xrdataset(
+            gage_id_lst=object_ids,
+            t_range=t_range,
+            var_lst=var_lst_tggnn,
+            time_units=time_units
+        )
+        
+        # 读取LSTM预测数据
+        lstm_data = self.read_lstm_predictions(
+            object_ids=object_ids,
+            t_range_list=t_range
+        )
+        
+        return timeseries_data, lstm_data
+    
+    def read_node_attributes(self, object_ids=None, selected_attrs=None):
+        """
+        读取节点静态属性数据
+        
+        Parameters
+        ----------
+        object_ids : array-like, optional
+            流域ID列表, by default None
+        selected_attrs : list, optional
+            选择的属性列表, by default None
+            
+        Returns
+        -------
+        xr.Dataset
+            属性数据集
+        """
+        if selected_attrs is None:
+            selected_attrs = ['ele_mt_sav', 'area', 'p_mean']
+        
+        # 使用父类方法读取属性数据
+        attr_data = self.read_attr_xrdataset(var_lst=selected_attrs)
+        
+        # 如果指定了object_ids，则筛选数据
+        if object_ids is not None:
+            # 确保object_ids中的所有ID都存在于数据中
+            available_basins = attr_data.coords['basin'].values
+            valid_ids = [basin_id for basin_id in object_ids if basin_id in available_basins]
+            if len(valid_ids) != len(object_ids):
+                missing_ids = set(object_ids) - set(valid_ids)
+                print(f"警告：以下流域ID在属性数据中不存在: {missing_ids}")
+            
+            if valid_ids:
+                attr_data = attr_data.sel(basin=valid_ids)
+        
+        return attr_data
+    
+    def gen_nx_graph(self, basin_id, object_ids=None):
+        """
+        生成网络图，确保节点索引与数据中basin顺序一致
+        
+        Parameters
+        ----------
+        basin_id : str
+            流域ID
+        object_ids : array-like, optional
+            对象ID列表，如果为None则使用所有可用的流域ID, by default None
+            
+        Returns
+        -------
+        tuple
+            (NetworkX图对象, 边列表, 节点映射字典, 有效的对象ID列表)
+        """
+        basin_path_lists = self.graph_dict.get(basin_id)
+        if basin_path_lists is None:
+            raise ValueError(f"未找到流域 {basin_id} 的图网络结构")
+        
+        # 构建有向图
+        dg = nx.DiGraph()
+        for path in basin_path_lists:
+            nx.add_path(dg, path)
+        
+        # 获取图中所有节点
+        graph_nodes = set(dg.nodes)
+        
+        # 如果没有指定object_ids，使用图中所有节点
+        if object_ids is None:
+            # 从数据中获取可用的流域ID
+            available_basins = self.read_object_ids()
+            # 取图中节点与可用数据的交集
+            valid_object_ids = [basin_id for basin_id in available_basins if basin_id in graph_nodes]
+        else:
+            # 检查指定的object_ids是否在图中存在
+            object_ids_list = list(object_ids)
+            valid_object_ids = [basin_id for basin_id in object_ids_list if basin_id in graph_nodes]
+            
+            # 报告不在图中的节点
+            missing_in_graph = set(object_ids_list) - graph_nodes
+            if missing_in_graph:
+                print(f"警告：以下流域ID在图网络结构中不存在: {missing_in_graph}")
+        
+        # 创建节点映射（节点名称到索引的映射）
+        node_mapping = {node_id: idx for idx, node_id in enumerate(valid_object_ids)}
+        
+        # 生成边列表（使用索引）
+        edges = []
+        for u, v in dg.edges:
+            if u in node_mapping and v in node_mapping:
+                edges.append((node_mapping[u], node_mapping[v]))
+        
+        return dg, edges, node_mapping, valid_object_ids
+    
+    def classify_nodes(dg, basin_names):
+        """
+        分类节点为源头节点和汇流节点
+        
+        Args:
+            dg: NetworkX有向图
+            basin_names: 节点名称列表
+        
+        Returns:
+            source_nodes: 源头节点列表（没有入度的节点）
+            confluence_nodes: 汇流节点列表（有入度的节点）
+            node_mask: 布尔掩码，True表示汇流节点，False表示源头节点
+        """
+        source_nodes = []
+        confluence_nodes = []
+        
+        for node in basin_names:
+            # 检查节点的入度
+            in_degree = dg.in_degree(node)
+            if in_degree == 0:
+                source_nodes.append(node)
+            else:
+                confluence_nodes.append(node)
+        
+        # 创建节点掩码：True表示汇流节点（需要训练），False表示源头节点（不训练）
+        node_mask = []
+        for node in basin_names:
+            node_mask.append(node in confluence_nodes)
+        
+        print(f"源头节点 ({len(source_nodes)}个): {source_nodes}")
+        print(f"汇流节点 ({len(confluence_nodes)}个): {confluence_nodes}")
+        
+        return source_nodes, confluence_nodes, node_mask
