@@ -1842,9 +1842,7 @@ class TgHydroDatasource(SelfMadeHydroDataset):
       └── graph_dict.json  # 图网络结构
     """
 
-    def __init__(
-        self, data_path, download=False, time_unit=None, dataset_name=None, **kwargs
-    ):
+    def __init__(self, data_path, dataset_name=None, time_unit=None, **kwargs):
         """
         初始化TG流域数据集
 
@@ -1852,17 +1850,21 @@ class TgHydroDatasource(SelfMadeHydroDataset):
         ----------
         data_path : str
             数据根目录路径
-        download : bool, optional
-            是否下载数据, by default False
-        time_unit : list, optional
-            时间单位列表, by default None
         dataset_name : str, optional
             数据集名称, by default None
+        time_unit : list, optional
+            时间单位列表, by default None
         **kwargs : dict
             其他参数
         """
         # 调用父类初始化
-        super().__init__(data_path, download, time_unit, dataset_name, **kwargs)
+        self.inter_basin_pred_file = kwargs.get("inter_basin_pred_file", None)
+        if self.inter_basin_pred_file is None:
+            raise ValueError(
+                "inter_basin_pred_file is required; please run scripts/generate_inter_basin_predictions.py to generate the inter-basin predictions."
+            )
+        kwargs.pop("inter_basin_pred_file")
+        super().__init__(data_path, dataset_name, time_unit, **kwargs)
 
         # 加载图网络结构
         self.graph_dict = self._load_graph_dict()
@@ -2287,3 +2289,24 @@ class TgHydroDatasource(SelfMadeHydroDataset):
         print(f"汇流节点 ({len(confluence_nodes)}个): {confluence_nodes}")
 
         return source_nodes, confluence_nodes, node_mask
+
+    def read_ts_xrdataset(
+        self,
+        gage_id_lst: list = None,
+        t_range: list = None,
+        var_lst: list = None,
+        **kwargs,
+    ) -> dict:
+        """
+        Read the time series data from the data source.
+
+        TODO: Implement this function.
+        """
+        pass
+
+    def read_attr_xrdataset(self, gage_id_lst=None, var_lst=None, **kwargs):
+        """Read the attribute data from the data source.
+
+        TODO: Implement this function.
+        """
+        pass
