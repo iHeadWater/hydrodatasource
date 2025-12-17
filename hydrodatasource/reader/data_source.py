@@ -747,7 +747,7 @@ class SelfMadeHydroDataset(HydroData):
                     selected_datasets.append(ds_selected)
 
                 ds.close()  # Close the dataset to free memory
-
+                print(f"Successfully read from data cache: {batch_file}")
             # If any datasets were selected, concatenate them along the 'basin' dimension
             if selected_datasets:
                 # NOTE: the chosen part must be sorted by basin, or there will be some negative sideeffect for continue usage of this repo
