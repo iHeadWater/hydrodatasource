@@ -1832,14 +1832,16 @@ class TgHydroDatasource(SelfMadeHydroDataset):
 
     该类在标准的水文数据集基础上，增加了对LSTM预测数据和图网络结构的支持，
     主要用于图神经网络相关的水文建模任务。
+    catch中应包含LSTM预测结果NC文件，文件名格式为lstmpred.nc
 
     数据目录结构:
-    - attributes/           # 流域属性数据
-    - timeseries/          # 时间序列数据
-    - shapes/              # 流域形状文件
-    - tggnn/               # TG-GNN专用数据
-      ├── lstmpred.nc      # LSTM预测数据
-      └── graph_dict.json  # 图网络结构
+    - attributes/          # 控制流域属性数据
+    - timeseries/          # 控制流域时间序列数据
+    - shapes/              # 控制流域形状文件
+    - intermediate/        # 区间流域数据
+      ├── attributes/      # 区间流域属性数据，包含拓扑关系
+      ├── timeseries/      # 区间流域时间序列数据
+      └── shapes/          # 区间流域形状文件
     """
 
     def __init__(self, data_path, dataset_name=None, time_unit=None, **kwargs):
@@ -1857,17 +1859,17 @@ class TgHydroDatasource(SelfMadeHydroDataset):
         **kwargs : dict
             其他参数
         """
-        # 调用父类初始化
-        self.inter_basin_pred_file = kwargs.get("inter_basin_pred_file", None)
-        if self.inter_basin_pred_file is None:
-            raise ValueError(
-                "inter_basin_pred_file is required; please run scripts/generate_inter_basin_predictions.py to generate the inter-basin predictions."
-            )
-        kwargs.pop("inter_basin_pred_file")
+        # # 调用父类初始化
+        # self.inter_basin_pred_file = kwargs.get("inter_basin_pred_file", None)
+        # if self.inter_basin_pred_file is None:
+        #     raise ValueError(
+        #         "inter_basin_pred_file is required; please run scripts/generate_inter_basin_predictions.py to generate the inter-basin predictions."
+        #     )
+        # kwargs.pop("inter_basin_pred_file")
         super().__init__(data_path, dataset_name, time_unit, **kwargs)
 
-        # 加载图网络结构
-        self.graph_dict = self._load_graph_dict()
+        # 基于 intermediate 属性数据的 downstream_id 生成拓扑关系
+        self.dg = self._build_graph_from_intermediate_attributes()
 
     def get_name(self):
         """返回数据源名称"""
@@ -1883,412 +1885,522 @@ class TgHydroDatasource(SelfMadeHydroDataset):
             包含所有数据路径的有序字典
         """
         # 获取父类的数据源描述
-        data_source_desc = super().set_data_source_describe()
+        base_desc = super().set_data_source_describe()
 
-        # 添加TGGNN相关路径
+        # ==== LSTM paths ====
         data_root_dir = self.data_source_dir
-        tggnn_dir = os.path.join(data_root_dir, "tggnn")
-        lstm_pred_file = os.path.join(tggnn_dir, "lstmpred.nc")
-        graph_dict_file = os.path.join(tggnn_dir, "graph_dict.json")
 
-        # 更新数据源描述
+        lstm_pred_file = os.path.join(CACHE_DIR, "lstmpred.nc")
+
+
+
+        # ==== Intermediate dataset paths ====
+        intermediate_root = os.path.join(data_root_dir, "intermediate")
+        inter_attr_file = os.path.join(intermediate_root, "attributes", "attributes.csv")
+        inter_shapes_dir = os.path.join(intermediate_root, "shapes")
+        inter_shape_file = os.path.join(inter_shapes_dir, "basins.shp")
+        inter_basinoutlets_file = os.path.join(inter_shapes_dir, "basinoutlets.shp")
+        inter_ts_dir = os.path.join(intermediate_root, "timeseries")
+
+        # 列出 intermediate 下的时间单位目录（若存在）
+        inter_ts_dirs = []
+        if ("s3://" in inter_ts_dir and is_minio_folder(inter_ts_dir)) or (
+            "s3://" not in inter_ts_dir and os.path.isdir(inter_ts_dir)
+        ):
+            inter_ts_dirs = self._where_ts_dir(inter_ts_dir)
+
+        # 组装并返回完整描述
+        data_source_desc = collections.OrderedDict()
+        data_source_desc.update(base_desc)
         data_source_desc.update(
             {
-                "TGGNN_DIR": tggnn_dir,
+                # LSTM paths
                 "LSTM_PRED_FILE": lstm_pred_file,
-                "GRAPH_DICT_FILE": graph_dict_file,
+
+                # Intermediate paths
+                "INTERMEDIATE_ROOT_DIR": intermediate_root,
+                "INTERMEDIATE_ATTR_FILE": inter_attr_file,
+                "INTERMEDIATE_SHAPE_FILE": inter_shape_file,
+                "INTERMEDIATE_BASINOUTLETS_FILE": inter_basinoutlets_file,
+                "INTERMEDIATE_TS_DIRS": inter_ts_dirs,
             }
         )
 
         return data_source_desc
 
-    def _load_graph_dict(self):
+    def _build_graph_from_intermediate_attributes(self):
         """
-        从JSON文件加载图网络结构
+        从 intermediate/attributes/attributes.csv 读取 downstream_id 列，生成有向拓扑图。
+
+        约定：
+        - 使用列 `basin_id` 作为节点标识；
+        - 使用列 `downstream_id` 指定下游站点ID；当值为 0/空/NaN 表示为出口站（不连接下游）。
+        - 仅在下游ID也存在于数据集中时建立边（忽略数据集外的下游指向）。
 
         Returns
         -------
-        dict
-            图网络结构字典
+        networkx.DiGraph
+            由属性文件构建的有向图
         """
-        graph_dict_file = self.data_source_description["GRAPH_DICT_FILE"]
+        attr_file_inter = self._get_intermediate_attr_file()
+        # 若 intermediate 属性文件不存在，则优雅回退到基础属性文件
+        if "s3://" in attr_file_inter:
+            try:
+                exists_inter = conf.FS.exists(attr_file_inter)
+            except Exception:
+                exists_inter = False
+        else:
+            exists_inter = os.path.exists(attr_file_inter)
 
+        attr_file = (
+            attr_file_inter
+            if exists_inter
+            else self.data_source_description.get("ATTR_FILE", attr_file_inter)
+        )
+
+        # 读取 CSV（兼容本地与 s3）；不存在则返回空图
         try:
-            if "s3://" in graph_dict_file:
-                with conf.FS.open(graph_dict_file, mode="rb") as f:
-                    graph_dict = json.load(f)
+            if "s3://" in attr_file:
+                with conf.FS.open(attr_file, mode="rb") as f:
+                    df = pd.read_csv(f, dtype={"basin_id": str})
             else:
-                with open(graph_dict_file, "r", encoding="utf-8") as f:
-                    graph_dict = json.load(f)
+                df = pd.read_csv(attr_file, dtype={"basin_id": str})
         except FileNotFoundError:
-            # 如果文件不存在，返回默认的图网络结构
-            print(f"警告：图网络结构文件 {graph_dict_file} 不存在，使用默认结构")
-            graph_dict = self._get_default_graph_dict()
-            # 保存默认结构到文件
-            self._save_graph_dict(graph_dict)
+            print(
+                f"警告：未找到属性文件 {attr_file}；返回空图。请提供 intermediate/attributes/attributes.csv 或基础 attributes.csv"
+            )
+            return nx.DiGraph()
 
-        return graph_dict
+        # 列校验
+        if "basin_id" not in df.columns:
+            raise ValueError("attributes.csv 缺少必需列 'basin_id'")
+        if "downstream_id" not in df.columns:
+            # 若缺失下游列，则生成无边图，仅包含节点
+            print("警告：attributes.csv 中未找到 'downstream_id' 列，生成无边图")
+            dg = nx.DiGraph()
+            dg.add_nodes_from(df["basin_id"].astype(str).tolist())
+            return dg
 
-    def _get_default_graph_dict(self):
-        """
-        获取默认的图网络结构
+        # 规范化下游列为字符串，并处理出口标识
+        def _norm_downstream(val):
+            if pd.isna(val):
+                return None
+            s = str(val).strip()
+            if s in ("", "0", "0.0", "None", "nan", "NaN"):
+                return None
+            return s
 
-        Returns
-        -------
-        dict
-            默认图网络结构
-        """
-        return {
-            "sanxia_60703800": [
-                ["sanxia_60718300", "sanxia_60703780", "sanxia_60703800"],
-                [
-                    "sanxia_60716700",
-                    "sanxia_60715400",
-                    "sanxia_60715955",
-                    "sanxia_60703780",
-                    "sanxia_60703800",
-                ],
-                [
-                    "sanxia_60716250",
-                    "sanxia_60715000",
-                    "sanxia_60715400",
-                    "sanxia_60715955",
-                    "sanxia_60703780",
-                    "sanxia_60703800",
-                ],
-                [
-                    "sanxia_60701001",
-                    "sanxia_60715000",
-                    "sanxia_60715400",
-                    "sanxia_60715955",
-                    "sanxia_60703780",
-                    "sanxia_60703800",
-                ],
-                [
-                    "sanxia_60717050",
-                    "sanxia_60715400",
-                    "sanxia_60715955",
-                    "sanxia_60703780",
-                    "sanxia_60703800",
-                ],
-                [
-                    "sanxia_60710650",
-                    "sanxia_60703700",
-                    "sanxia_60703780",
-                    "sanxia_60703800",
-                ],
-                [
-                    "sanxia_60706825",
-                    "sanxia_60700001",
-                    "sanxia_60700002",
-                    "sanxia_60703700",
-                    "sanxia_60703780",
-                    "sanxia_60703800",
-                ],
-                [
-                    "sanxia_60701750",
-                    "sanxia_60700002",
-                    "sanxia_60703700",
-                    "sanxia_60703780",
-                    "sanxia_60703800",
-                ],
-                [
-                    "sanxia_60709859",
-                    "sanxia_60703700",
-                    "sanxia_60703780",
-                    "sanxia_60703800",
-                ],
-                [
-                    "sanxia_60713800",
-                    "sanxia_60712000",
-                    "sanxia_60703780",
-                    "sanxia_60703800",
-                ],
-                [
-                    "sanxia_60713730",
-                    "sanxia_60711800",
-                    "sanxia_60712000",
-                    "sanxia_60703780",
-                    "sanxia_60703800",
-                ],
-                [
-                    "sanxia_60713630",
-                    "sanxia_60711800",
-                    "sanxia_60712000",
-                    "sanxia_60703780",
-                    "sanxia_60703800",
-                ],
-                [
-                    "sanxia_60713400",
-                    "sanxia_60706011",
-                    "sanxia_60713170",
-                    "sanxia_60711800",
-                    "sanxia_60712000",
-                    "sanxia_60703780",
-                    "sanxia_60703800",
-                ],
-                [
-                    "sanxia_60713270",
-                    "sanxia_60713170",
-                    "sanxia_60711800",
-                    "sanxia_60712000",
-                    "sanxia_60703780",
-                    "sanxia_60703800",
-                ],
-                [
-                    "sanxia_60712900",
-                    "sanxia_60711800",
-                    "sanxia_60712000",
-                    "sanxia_60703780",
-                    "sanxia_60703800",
-                ],
-                [
-                    "sanxia_60701101",
-                    "sanxia_60711800",
-                    "sanxia_60712000",
-                    "sanxia_60703780",
-                    "sanxia_60703800",
-                ],
-                [
-                    "sanxia_60711600",
-                    "sanxia_60711800",
-                    "sanxia_60712000",
-                    "sanxia_60703780",
-                    "sanxia_60703800",
-                ],
-            ]
-        }
+        df["downstream_id"] = df["downstream_id"].apply(_norm_downstream)
 
-    def _save_graph_dict(self, graph_dict):
-        """
-        保存图网络结构到JSON文件
-
-        Parameters
-        ----------
-        graph_dict : dict
-            图网络结构字典
-        """
-        graph_dict_file = self.data_source_description["GRAPH_DICT_FILE"]
-
-        # 确保目录存在
-        os.makedirs(os.path.dirname(graph_dict_file), exist_ok=True)
-
-        if "s3://" in graph_dict_file:
-            with conf.FS.open(graph_dict_file, mode="w") as f:
-                json.dump(graph_dict, f, ensure_ascii=False, indent=2)
-        else:
-            with open(graph_dict_file, "w", encoding="utf-8") as f:
-                json.dump(graph_dict, f, ensure_ascii=False, indent=2)
-
-    def read_lstm_predictions(self, object_ids=None, t_range_list=None, **kwargs):
-        """
-        读取LSTM预测数据
-
-        Parameters
-        ----------
-        object_ids : list, optional
-            流域ID列表, by default None
-        t_range_list : list, optional
-            时间范围列表, by default None
-        **kwargs : dict
-            其他参数
-
-        Returns
-        -------
-        xr.Dataset
-            LSTM预测数据集
-        """
-        lstm_pred_file = self.data_source_description["LSTM_PRED_FILE"]
-
-        if "s3://" in lstm_pred_file:
-            with conf.FS.open(lstm_pred_file, mode="rb") as f:
-                lstm_data = xr.open_dataset(f)
-        else:
-            lstm_data = xr.open_dataset(lstm_pred_file)
-
-        # 根据参数筛选数据
-        if object_ids is not None:
-            lstm_data = lstm_data.sel(basin=object_ids)
-
-        if t_range_list is not None:
-            start_time = pd.to_datetime(t_range_list[0])
-            end_time = pd.to_datetime(t_range_list[1])
-            lstm_data = lstm_data.sel(time=slice(start_time, end_time))
-
-        return lstm_data
-
-    def read_timeseries_with_lstm(
-        self, object_ids=None, t_range=None, var_lst=None, time_units=None
-    ):
-        """
-        读取时间序列数据和LSTM预测数据
-
-        Parameters
-        ----------
-        object_ids : list, optional
-            对象ID列表（流域名称）, by default None
-        t_range : list, optional
-            时间范围，格式为[start_time, end_time], by default None
-        var_lst : list, optional
-            变量列表, by default None
-        time_units : list, optional
-            时间单位，默认使用类的time_unit属性, by default None
-
-        Returns
-        -------
-        tuple
-            (时间序列数据xarray.Dataset, LSTM预测数据xarray.Dataset)
-        """
-        if time_units is None:
-            time_units = self.time_unit
-
-        var_lst_tggnn = ["total_precipitation_hourly", "discharge", "streamflow"]
-
-        # 使用父类方法读取时间序列数据
-        timeseries_data = self.read_ts_xrdataset(
-            gage_id_lst=object_ids,
-            t_range=t_range,
-            var_lst=var_lst_tggnn,
-            time_units=time_units,
-        )
-
-        # 读取LSTM预测数据
-        lstm_data = self.read_lstm_predictions(
-            object_ids=object_ids, t_range_list=t_range
-        )
-
-        return timeseries_data, lstm_data
-
-    def read_node_attributes(self, object_ids=None, selected_attrs=None):
-        """
-        读取节点静态属性数据
-
-        Parameters
-        ----------
-        object_ids : array-like, optional
-            流域ID列表, by default None
-        selected_attrs : list, optional
-            选择的属性列表, by default None
-
-        Returns
-        -------
-        xr.Dataset
-            属性数据集
-        """
-        if selected_attrs is None:
-            selected_attrs = ["ele_mt_sav", "area", "p_mean"]
-
-        # 使用父类方法读取属性数据
-        attr_data = self.read_attr_xrdataset(var_lst=selected_attrs)
-
-        # 如果指定了object_ids，则筛选数据
-        if object_ids is not None:
-            # 确保object_ids中的所有ID都存在于数据中
-            available_basins = attr_data.coords["basin"].values
-            valid_ids = [
-                basin_id for basin_id in object_ids if basin_id in available_basins
-            ]
-            if len(valid_ids) != len(object_ids):
-                missing_ids = set(object_ids) - set(valid_ids)
-                print(f"警告：以下流域ID在属性数据中不存在: {missing_ids}")
-
-            if valid_ids:
-                attr_data = attr_data.sel(basin=valid_ids)
-
-        return attr_data
-
-    def gen_nx_graph(self, basin_id, object_ids=None):
-        """
-        生成网络图，确保节点索引与数据中basin顺序一致
-
-        Parameters
-        ----------
-        basin_id : str
-            流域ID
-        object_ids : array-like, optional
-            对象ID列表，如果为None则使用所有可用的流域ID, by default None
-
-        Returns
-        -------
-        tuple
-            (NetworkX图对象, 边列表, 节点映射字典, 有效的对象ID列表)
-        """
-        basin_path_lists = self.graph_dict.get(basin_id)
-        if basin_path_lists is None:
-            raise ValueError(f"未找到流域 {basin_id} 的图网络结构")
-
-        # 构建有向图
+        basin_set = set(df["basin_id"].astype(str).tolist())
         dg = nx.DiGraph()
-        for path in basin_path_lists:
-            nx.add_path(dg, path)
+        dg.add_nodes_from(basin_set)
 
-        # 获取图中所有节点
-        graph_nodes = set(dg.nodes)
+        # 建立边（仅当下游也在数据集内）
+        for _, row in df.iterrows():
+            u = str(row["basin_id"]).strip()
+            v = row["downstream_id"]
+            if v is None:
+                continue
+            v = str(v).strip()
+            if v in basin_set:
+                dg.add_edge(u, v)
 
-        # 如果没有指定object_ids，使用图中所有节点
+        return dg
+
+    def _build_graph_and_index(self, object_ids=None):
+        """
+        合并构图与索引映射生成：
+
+        - 基于 intermediate 属性构建全局有向图并赋值到 `self.dg`；
+        - 依据 `object_ids`（若提供）生成节点索引映射与边索引列表；
+        - 若未提供 `object_ids`，将使用数据集中所有可用对象ID与图节点的交集。
+
+        Returns
+        -------
+        tuple
+            (NetworkX图对象, 边列表(按索引), 节点映射字典, 有效对象ID列表)
+        """
+        # 确保全局图存在
+        base_graph = getattr(self, "dg", None)
+        if base_graph is None or not isinstance(base_graph, nx.DiGraph):
+            base_graph = self._build_graph_from_intermediate_attributes()
+            self.dg = base_graph
+
+        graph_nodes = set(base_graph.nodes)
+
+        # 选择对象ID集合
         if object_ids is None:
-            # 从数据中获取可用的流域ID
             available_basins = self.read_object_ids()
-            # 取图中节点与可用数据的交集
-            valid_object_ids = [
-                basin_id for basin_id in available_basins if basin_id in graph_nodes
-            ]
+            # 统一为字符串以避免类型不一致导致的交集为空
+            valid_object_ids = [str(bid) for bid in available_basins if str(bid) in graph_nodes]
         else:
-            # 检查指定的object_ids是否在图中存在
-            object_ids_list = list(object_ids)
-            valid_object_ids = [
-                basin_id for basin_id in object_ids_list if basin_id in graph_nodes
-            ]
-
-            # 报告不在图中的节点
+            object_ids_list = [str(bid) for bid in list(object_ids)]
+            valid_object_ids = [bid for bid in object_ids_list if bid in graph_nodes]
             missing_in_graph = set(object_ids_list) - graph_nodes
             if missing_in_graph:
                 print(f"警告：以下流域ID在图网络结构中不存在: {missing_in_graph}")
 
-        # 创建节点映射（节点名称到索引的映射）
+        # 节点到索引的映射
         node_mapping = {node_id: idx for idx, node_id in enumerate(valid_object_ids)}
 
-        # 生成边列表（使用索引）
+        # 在全局图上生成边索引（仅保留筛选集合内的边）
         edges = []
-        for u, v in dg.edges:
+        for u, v in base_graph.edges:
             if u in node_mapping and v in node_mapping:
                 edges.append((node_mapping[u], node_mapping[v]))
 
-        return dg, edges, node_mapping, valid_object_ids
+        return base_graph, edges, node_mapping, valid_object_ids
+        
 
-    def classify_nodes(dg, basin_names):
+    def read_graph_data(self, object_ids=None, as_numpy=False, include_optional=True):
         """
-        分类节点为源头节点和汇流节点
+        统一返回下游所需的图拓扑结构，满足最大兼容性约定。
 
-        Args:
-            dg: NetworkX有向图
-            basin_names: 节点名称列表
+        参数
+        ----
+        object_ids : list, optional
+            指定参与图构建的节点集合；不传则使用数据集可用节点与图节点的交集
+        as_numpy : bool, default False
+            将 edge_index 返回为 numpy.int64 的 ndarray；默认返回 torch.long 的 Tensor
+        include_optional : bool, default True
+            是否包含可选扩展字段（目前支持 upstream_indices）
 
-        Returns:
-            source_nodes: 源头节点列表（没有入度的节点）
-            confluence_nodes: 汇流节点列表（有入度的节点）
-            node_mask: 布尔掩码，True表示汇流节点，False表示源头节点
+        返回
+        ----
+        dict
+            {
+                'edge_index': [2, E] 的 torch.LongTensor 或 numpy.ndarray,
+                'node_ids': List[str]，长度为 num_nodes，顺序与索引一致,
+                'node_mask': List[bool]，长度为 num_nodes（汇流 True / 源头 False）, 
+                可选：'upstream_indices': List[List[int]]
+            }
         """
+        # 获取基本图数据
+        base_graph, edges, node_mapping, node_ids = self._build_graph_and_index(
+            object_ids=object_ids
+        )
+
+        # edge_index 构造
+        import numpy as np
+        if len(edges) == 0:
+            if as_numpy:
+                edge_index = np.empty((2, 0), dtype=np.int64)
+            else:
+                try:
+                    import torch
+                    edge_index = torch.empty((2, 0), dtype=torch.long)
+                except Exception as e:
+                    raise ImportError("read_graph_data 需要安装 PyTorch 或设置 as_numpy=True") from e
+        else:
+            e = np.array(edges, dtype=np.int64).T  # [2, E]
+            if as_numpy:
+                edge_index = e
+            else:
+                try:
+                    import torch
+                    edge_index = torch.from_numpy(e).long()
+                except Exception as e:
+                    raise ImportError("read_graph_data 需要安装 PyTorch 或设置 as_numpy=True") from e
+
+        # 节点掩码（与 node_ids 顺序一致）
+        _, _, node_mask = self.classify_nodes(basin_names=node_ids)
+
+        result = {
+            "edge_index": edge_index,
+            "node_ids": list(node_ids),
+            "node_mask": list(node_mask),
+        }
+
+        # 可选扩展：上游节点索引列表
+        if include_optional:
+            upstream_indices = []
+            # node_ids 与 node_mapping 对齐为索引域 [0..N-1]
+            for nid in node_ids:
+                preds = list(base_graph.predecessors(nid))
+                upstream_indices.append(sorted([node_mapping[p] for p in preds if p in node_mapping]))
+            result["upstream_indices"] = upstream_indices
+
+        return result
+
+    def classify_nodes(self, basin_names=None):
+        """
+        分类节点为源头节点和汇流节点。
+
+        - 默认在全局图 `self.dg` 上运行；
+        - 若 `basin_names` 为 None，则使用图中的所有节点，按数据集顺序（与 `read_object_ids` 对齐）。
+
+        Returns
+        -------
+        tuple
+            (source_nodes, confluence_nodes, node_mask)
+        """
+        dg = getattr(self, "dg", None)
+        if dg is None:
+            dg = self._build_graph_from_intermediate_attributes()
+
+        if basin_names is None:
+            available_basins = self.read_object_ids()
+            basin_names = [bid for bid in available_basins if bid in dg.nodes]
+
         source_nodes = []
         confluence_nodes = []
 
         for node in basin_names:
-            # 检查节点的入度
             in_degree = dg.in_degree(node)
             if in_degree == 0:
                 source_nodes.append(node)
             else:
                 confluence_nodes.append(node)
 
-        # 创建节点掩码：True表示汇流节点（需要训练），False表示源头节点（不训练）
-        node_mask = []
-        for node in basin_names:
-            node_mask.append(node in confluence_nodes)
+        node_mask = [node in confluence_nodes for node in basin_names]
 
         print(f"源头节点 ({len(source_nodes)}个): {source_nodes}")
         print(f"汇流节点 ({len(confluence_nodes)}个): {confluence_nodes}")
 
         return source_nodes, confluence_nodes, node_mask
+
+    # ===== Helpers for intermediate directory support =====
+    def _get_intermediate_root_dir(self):
+        # 优先使用 set_data_source_describe 中的路径
+        return self.data_source_description.get(
+            "INTERMEDIATE_ROOT_DIR", os.path.join(self.data_source_dir, "intermediate")
+        )
+
+    def _where_intermediate_ts_dir(self):
+        # 已在 set_data_source_describe 中计算，直接提供
+        inter_dirs = self.data_source_description.get("INTERMEDIATE_TS_DIRS")
+        if inter_dirs is not None:
+            return inter_dirs
+        ts_dir = os.path.join(self._get_intermediate_root_dir(), "timeseries")
+        return self._where_ts_dir(ts_dir)
+
+    def _get_intermediate_ts_dir(self, time_unit):
+        ts_dirs = self._where_intermediate_ts_dir()
+        # 选择匹配 time_unit 的目录（不附加版本后缀，目录名应与 time_unit 一致）
+        try:
+            base_dir = next(
+                dir_path for dir_path in ts_dirs if time_unit == os.path.basename(dir_path)
+            )
+        except StopIteration:
+            raise FileNotFoundError(
+                f"未找到 intermediate/timeseries 下的 {time_unit} 目录，请检查数据结构"
+            )
+        return base_dir
+
+    def _get_intermediate_attr_file(self):
+        # 使用描述中的路径，避免重复拼接
+        return self.data_source_description.get(
+            "INTERMEDIATE_ATTR_FILE",
+            os.path.join(self._get_intermediate_root_dir(), "attributes", "attributes.csv"),
+        )
+
+    def _get_intermediate_shape_file(self):
+        return self.data_source_description.get(
+            "INTERMEDIATE_SHAPE_FILE",
+            os.path.join(self._get_intermediate_root_dir(), "shapes", "basins.shp"),
+        )
+
+    def _get_intermediate_basinoutlets_file(self):
+        return self.data_source_description.get(
+            "INTERMEDIATE_BASINOUTLETS_FILE",
+            os.path.join(self._get_intermediate_root_dir(), "shapes", "basinoutlets.shp"),
+        )
+
+    def read_intermediate_timeseries(
+        self, object_ids=None, t_range_list: list = None, relevant_cols=None, **kwargs
+    ) -> dict:
+        """Read timeseries from the intermediate/timeseries directory.
+
+        Parameters
+        ----------
+        object_ids : list, optional
+            Basin IDs to read
+        t_range_list : list, optional
+            [start_time, end_time]
+        relevant_cols : list, optional
+            Variables to read
+        **kwargs : dict
+            time_units, start0101_freq, offset_to_utc, start_hour_in_a_day
+
+        Returns
+        -------
+        dict
+            {time_unit: np.ndarray [n_basin, n_time, n_var]}
+        """
+        time_units = kwargs.get("time_units", ["1D"])  # default aligns with parent
+        start0101_freq = kwargs.get("start0101_freq", False)
+        offset_to_utc = kwargs.get("offset_to_utc", self.offset_to_utc)
+        start_hour_in_a_day = kwargs.get("start_hour_in_a_day", 2)
+
+        if object_ids is None or t_range_list is None or relevant_cols is None:
+            raise ValueError("object_ids, t_range_list, relevant_cols 不能为空")
+
+        # Validate start_hour_in_a_day range
+        if not isinstance(start_hour_in_a_day, int) or not (0 <= start_hour_in_a_day <= 23):
+            raise ValueError(
+                f"start_hour_in_a_day must be an integer between 0 and 23, got {start_hour_in_a_day}"
+            )
+
+        results = {}
+
+        for time_unit in time_units:
+            if offset_to_utc:
+                # Prefer intermediate basinoutlets.shp if available; otherwise fall back to base
+                inter_basinoutlets = self._get_intermediate_basinoutlets_file()
+                base_basinoutlets = os.path.join(
+                    self.data_source_description["SHAPE_DIR"], "basinoutlets.shp"
+                )
+                basinoutlets_path = (
+                    inter_basinoutlets if os.path.exists(inter_basinoutlets) else base_basinoutlets
+                )
+                try:
+                    offset_dict = calculate_basin_offsets(basinoutlets_path)
+                except FileNotFoundError as e:
+                    raise FileNotFoundError(
+                        f"basinoutlets.shp not found in {basinoutlets_path}."
+                    ) from e
+
+            # Resolve intermediate ts dir for this time unit
+            ts_dir = self._get_intermediate_ts_dir(time_unit)
+
+            # Generate time range
+            if start0101_freq:
+                t_range = generate_start0101_time_range(
+                    start_time=t_range_list[0], end_time=t_range_list[-1], freq=time_unit
+                )
+            else:
+                t_range = pd.date_range(start=t_range_list[0], end=t_range_list[-1], freq=time_unit)
+
+            nt = len(t_range)
+            x = np.full([len(object_ids), nt, len(relevant_cols)], np.nan)
+
+            # Flag to check data alignment only once
+            data_alignment_checked = False
+
+            for k in tqdm(range(len(object_ids)), desc=f"Reading intermediate timeseries with {time_unit}"):
+                ts_file = os.path.join(ts_dir, object_ids[k] + ".csv")
+                if "s3://" in ts_file:
+                    with conf.FS.open(ts_file, mode="rb") as f:
+                        ts_data = pd.read_csv(f, engine="c")
+                else:
+                    ts_data = pd.read_csv(ts_file, engine="c")
+
+                date = pd.to_datetime(ts_data["time"]).values
+                if offset_to_utc:
+                    date = date - np.timedelta64(offset_dict[object_ids[k]], "h")
+
+                # Validate data alignment with start_hour_in_a_day (only check once)
+                if not data_alignment_checked:
+                    self._validate_time_alignment(date, time_unit, start_hour_in_a_day, object_ids[k])
+                    data_alignment_checked = True
+
+                [_, ind1, ind2] = np.intersect1d(date, t_range, return_indices=True)
+
+                for j in range(len(relevant_cols)):
+                    tmp_ = self._read_timeseries_1basin1var(ts_data, relevant_cols[j])
+                    x[k, ind2, j] = tmp_[ind1]
+
+            results[time_unit] = x
+
+        return results
+
+    def cache_intermediate_timeseries_xrdataset(self, **kwargs):
+        """Cache intermediate timeseries into NetCDF files per time unit, similar to parent cache_timeseries_xrdataset."""
+        batchsize = kwargs.get("batchsize", 100)
+        time_units = kwargs.get("time_units", self.time_unit) or ["1D"]
+        start0101_freq = kwargs.get("start0101_freq", False)
+        offset_to_utc = kwargs.get("offset_to_utc", self.offset_to_utc)
+        start_hour_in_a_day = kwargs.get("start_hour_in_a_day", 2)
+
+        # Validate start_hour_in_a_day
+        if not isinstance(start_hour_in_a_day, int) or not (0 <= start_hour_in_a_day <= 23):
+            raise ValueError(
+                f"start_hour_in_a_day must be an integer between 0 and 23, got {start_hour_in_a_day}"
+            )
+
+        variables = self.get_timeseries_cols()  # assume units_info identical and stored under base timeseries
+        basins = self.camels_sites["basin_id"].values
+
+        # Define the generator function for batching
+        def data_generator(basins_, batch_size):
+            for i in range(0, len(basins_), batch_size):
+                yield basins_[i : i + batch_size]
+
+        for time_unit in time_units:
+            # Set default cache time range
+            if self.trange4cache is None:
+                if time_unit != "3h":
+                    self.trange4cache = ["1960-01-01", "2024-12-31"]
+                else:
+                    # Calculate dynamic end hour for 3h intervals
+                    hours_in_day = list(range(start_hour_in_a_day, 24, 3))
+                    start_hour = str(start_hour_in_a_day).zfill(2)
+                    end_hour = str(hours_in_day[-1] if hours_in_day else 23).zfill(2)
+                    self.trange4cache = [f"1960-01-01 {start_hour}", f"2024-12-31 {end_hour}"]
+
+            # Build times for coordinates
+            if start0101_freq:
+                times = (
+                    generate_start0101_time_range(
+                        start_time=self.trange4cache[0], end_time=self.trange4cache[-1], freq=time_unit
+                    )
+                    .strftime("%Y-%m-%d %H:%M:%S")
+                    .tolist()
+                )
+            else:
+                times = (
+                    pd.date_range(start=self.trange4cache[0], end=self.trange4cache[-1], freq=time_unit)
+                    .strftime("%Y-%m-%d %H:%M:%S")
+                    .tolist()
+                )
+
+            # Retrieve units_info for this time unit from base units files
+            unit_file = next(
+                file for file in self.data_source_description["UNIT_FILES"] if time_unit in file
+            )
+            if "s3://" in unit_file:
+                with conf.FS.open(unit_file, mode="rb") as fp:
+                    units_info = json.load(fp)
+            else:
+                units_info = hydro_file.unserialize_json(unit_file)
+
+            for basin_batch in data_generator(basins, batchsize):
+                data = self.read_intermediate_timeseries(
+                    object_ids=basin_batch,
+                    t_range_list=self.trange4cache,
+                    relevant_cols=variables[time_unit],
+                    time_units=[time_unit],
+                    start0101_freq=start0101_freq,
+                    offset_to_utc=offset_to_utc,
+                    start_hour_in_a_day=start_hour_in_a_day,
+                )
+
+                dataset = xr.Dataset(
+                    data_vars={
+                        variables[time_unit][i]: (
+                            ["basin", "time"],
+                            data[time_unit][:, :, i],
+                            {"units": units_info[variables[time_unit][i]]},
+                        )
+                        for i in range(len(variables[time_unit]))
+                    },
+                    coords={
+                        "basin": basin_batch,
+                        "time": pd.to_datetime(times),
+                    },
+                )
+
+                prefix_ = self._get_ts_file_prefix_(f"{self.dataset_name}_intermediate", self.version)
+                batch_file_path = os.path.join(
+                    CACHE_DIR,
+                    f"{prefix_}timeseries_{time_unit}_batch_{basin_batch[0]}_{basin_batch[-1]}.nc",
+                )
+                dataset.to_netcdf(batch_file_path)
+
+                # Release memory
+                del dataset
+                del data
 
     def read_ts_xrdataset(
         self,
@@ -2298,15 +2410,325 @@ class TgHydroDatasource(SelfMadeHydroDataset):
         **kwargs,
     ) -> dict:
         """
-        Read the time series data from the data source.
+        读取时间序列数据，兼容基础目录与 intermediate 目录的缓存读取。
 
-        TODO: Implement this function.
+        - 默认沿用父类逻辑读取基础缓存；
+        - 当设置 `prefer_intermediate=True` 或存在 `combine=True` 时，读取/生成 intermediate 缓存；
+        - intermediate 缓存以 `dataset_name_intermediate` 作为前缀独立保存。
         """
-        pass
+        if var_lst is None:
+            return None
+
+        time_units = kwargs.get("time_units", self.time_unit)
+        recache = kwargs.get("recache", False)
+        prefer_intermediate = kwargs.get("prefer_intermediate", False)
+        combine = kwargs.get("combine", False)
+        # 是否需要注入 LSTM 预测变量
+        want_lstm = any(v == "lstm_pred" for v in (var_lst or []))
+        # 基础缓存读取所需的变量（剔除 lstm_pred，避免父类校验失败）
+        base_vars = [v for v in (var_lst or []) if v != "lstm_pred"]
+
+        # 读取基础缓存数据（剔除 lstm_pred）
+        base_by_time = super().read_ts_xrdataset(
+            gage_id_lst=gage_id_lst, t_range=t_range, var_lst=base_vars, **kwargs
+        )
+
+        # 为基础数据集注入来源标识
+        for time_unit in time_units:
+            ds_base = base_by_time.get(time_unit)
+            if isinstance(ds_base, xr.Dataset) and ds_base.dims.get("basin", 0) > 0:
+                source_arr = xr.DataArray(
+                    data=np.array(["base"] * len(ds_base["basin"]), dtype=object),
+                    dims=["basin"],
+                    coords={"basin": ds_base["basin"]},
+                    name="source",
+                )
+                base_by_time[time_unit] = ds_base.assign(source=source_arr)
+
+        # Prepare intermediate datasets
+        inter_by_time = {}
+        prefix_inter = self._get_ts_file_prefix_(f"{self.dataset_name}_intermediate", self.version)
+
+        # Only build/read intermediate caches when needed
+        if prefer_intermediate or combine:
+            for time_unit in time_units:
+                batch_files_inter = self._get_batch_files(prefix_inter, time_unit)
+                if not batch_files_inter or recache:
+                    # Build intermediate caches for this time unit
+                    self.cache_intermediate_timeseries_xrdataset(
+                        time_units=[time_unit],
+                        batchsize=kwargs.get("batchsize", 100),
+                        start0101_freq=kwargs.get("start0101_freq", False),
+                        offset_to_utc=kwargs.get("offset_to_utc", self.offset_to_utc),
+                        start_hour_in_a_day=kwargs.get("start_hour_in_a_day", 2),
+                    )
+                    batch_files_inter = self._get_batch_files(prefix_inter, time_unit)
+
+                selected_datasets = []
+                for batch_file in batch_files_inter:
+                    ds = xr.open_dataset(batch_file)
+                    all_vars = ds.data_vars
+                    if base_vars and any(var not in ds.variables for var in base_vars):
+                        ds.close()
+                        raise ValueError(f"var_lst must all be in {all_vars}")
+                    valid_gage_ids = (
+                        [gid for gid in (gage_id_lst or []) if gid in ds["basin"].values]
+                        if gage_id_lst is not None
+                        else ds["basin"].values.tolist()
+                    )
+                    if len(valid_gage_ids) > 0:
+                        ds_selected = ds[base_vars].sel(
+                            basin=valid_gage_ids, time=slice(t_range[0], t_range[1])
+                        )
+                        selected_datasets.append(ds_selected)
+                    ds.close()
+
+                if selected_datasets:
+                    inter_ds = xr.concat(selected_datasets, dim="basin").sortby("basin")
+                    # 注入来源标识
+                    source_arr = xr.DataArray(
+                        data=np.array(["intermediate"] * len(inter_ds["basin"]), dtype=object),
+                        dims=["basin"],
+                        coords={"basin": inter_ds["basin"]},
+                        name="source",
+                    )
+                    inter_by_time[time_unit] = inter_ds.assign(source=source_arr)
+                else:
+                    inter_by_time[time_unit] = xr.Dataset()
+
+        # 如果需要，将 LSTM 预测数据注入基础数据集中
+        if want_lstm:
+            lstm_pred_file = self.data_source_description.get("LSTM_PRED_FILE")
+
+            # 统一存在性校验：优先使用描述中的标志位，其次实时检查
+            exists_lstm = False
+            if lstm_pred_file is not None:
+                if "s3://" in lstm_pred_file:
+                    try:
+                        exists_lstm = conf.FS.exists(lstm_pred_file)
+                    except Exception:
+                        exists_lstm = False
+                else:
+                    exists_lstm = os.path.exists(lstm_pred_file)
+
+            if not lstm_pred_file or not exists_lstm:
+                raise FileNotFoundError(
+                    f"lstmpred.nc 未找到：{lstm_pred_file}。请确保在数据目录下提供 lstmpred.nc。"
+                )
+            # 打开 LSTM 预测文件并读取 streamflow 变量
+            if "s3://" in lstm_pred_file:
+                with conf.FS.open(lstm_pred_file, mode="rb") as f:
+                    lstm_ds_all = xr.open_dataset(f)
+            else:
+                lstm_ds_all = xr.open_dataset(lstm_pred_file)
+
+            # 处理每个 time_unit 的注入（按需重采样）
+            for time_unit in time_units:
+                ds_base = base_by_time.get(time_unit, xr.Dataset())
+                # 如果基础数据集为空，跳过注入（避免维度不匹配）
+                if not isinstance(ds_base, xr.Dataset) or ds_base.dims.get("basin", 0) == 0:
+                    continue
+
+                # 选择有效的 basin 和时间范围
+                valid_ids = (
+                    [gid for gid in (gage_id_lst or []) if gid in lstm_ds_all["basin"].values]
+                    if gage_id_lst is not None
+                    else ds_base["basin"].values.tolist()
+                )
+                if len(valid_ids) == 0:
+                    # 无有效 basin 时不注入
+                    continue
+
+                lstm_sel = lstm_ds_all.sel(basin=valid_ids)
+                if t_range is not None:
+                    lstm_sel = lstm_sel.sel(time=slice(t_range[0], t_range[1]))
+
+                # 根据 time_unit 重采样（若需要），默认使用均值
+                # 将 'h' 替换为大写 'H' 以兼容 pandas resample
+                resample_freq = time_unit.replace("h", "H")
+                try:
+                    lstm_resampled = lstm_sel.resample(time=resample_freq).mean()
+                except Exception:
+                    # 如果 time_unit 无法用于重采样，则直接使用原始频率
+                    lstm_resampled = lstm_sel
+
+                # 重命名变量为 lstm_pred，仅注入到基础数据集中
+                if "streamflow" not in lstm_resampled.data_vars:
+                    lstm_ds_all.close()
+                    raise ValueError("lstmpred.nc 中缺少 'streamflow' 变量，无法注入 'lstm_pred'")
+
+                lstm_var = lstm_resampled["streamflow"].rename("lstm_pred")
+                # 对齐时间范围
+                if t_range is not None:
+                    lstm_var = lstm_var.sel(time=slice(t_range[0], t_range[1]))
+
+                # 注入变量（自动按坐标对齐）
+                base_by_time[time_unit] = ds_base.assign(lstm_pred=lstm_var)
+
+            lstm_ds_all.close()
+
+        # Decide return
+        if prefer_intermediate:
+            return inter_by_time
+        if combine:
+            combined = {}
+            for time_unit in time_units:
+                base_ds = base_by_time.get(time_unit, xr.Dataset())
+                inter_ds = inter_by_time.get(time_unit, xr.Dataset())
+                if getattr(base_ds, "dims", {}).get("basin", 0) == 0:
+                    combined[time_unit] = inter_ds
+                elif getattr(inter_ds, "dims", {}).get("basin", 0) == 0:
+                    combined[time_unit] = base_ds
+                else:
+                    combined[time_unit] = xr.concat([base_ds, inter_ds], dim="basin").sortby("basin")
+            return combined
+        return base_by_time
 
     def read_attr_xrdataset(self, gage_id_lst=None, var_lst=None, **kwargs):
-        """Read the attribute data from the data source.
+        """读取属性数据，兼容基础目录与 intermediate 目录的缓存。
 
-        TODO: Implement this function.
+        - 默认沿用父类逻辑读取基础缓存；
+        - 当设置 `prefer_intermediate=True` 或 `combine=True` 时，读取/生成 intermediate 缓存；
+        - intermediate 缓存以 `dataset_name_intermediate` 作为前缀独立保存。
         """
-        pass
+        if var_lst is None or len(var_lst) == 0:
+            return None
+
+        recache = kwargs.get("recache", False)
+        prefer_intermediate = kwargs.get("prefer_intermediate", False)
+        combine = kwargs.get("combine", False)
+
+        # Base attributes (handle None gage_id_lst gracefully)
+        dataset_name = self.dataset_name
+        prefix_base = "" if dataset_name is None else dataset_name + "_"
+        recache_base = kwargs.get("recache", False)
+        base_attr_path = os.path.join(CACHE_DIR, f"{prefix_base}attributes.nc")
+        if (not os.path.exists(base_attr_path)) or recache_base:
+            self.cache_attributes_xrdataset()
+        base_all = xr.open_dataset(base_attr_path)
+        if any(var not in base_all.variables for var in var_lst):
+            base_all.close()
+            raise ValueError(f"var_lst must all be in {list(base_all.data_vars)}")
+        base_ds = base_all[var_lst]
+        if gage_id_lst is not None:
+            base_ds = base_ds.sel(basin=gage_id_lst)
+        # 注入来源标识
+        if isinstance(base_ds, xr.Dataset) and base_ds.dims.get("basin", 0) > 0:
+            source_arr_base = xr.DataArray(
+                data=np.array(["base"] * len(base_ds["basin"]), dtype=object),
+                dims=["basin"],
+                coords={"basin": base_ds["basin"]},
+                name="source",
+            )
+            base_ds = base_ds.assign(source=source_arr_base)
+        base_all.close()
+
+        # Prepare intermediate cache file
+        prefix_inter = "" if self.dataset_name is None else f"{self.dataset_name}_intermediate_"
+        inter_attr_file = os.path.join(CACHE_DIR, f"{prefix_inter}attributes.nc")
+
+        # Build intermediate cache when needed
+        inter_ds = None
+        if prefer_intermediate or combine:
+            if (not os.path.exists(inter_attr_file)) or recache:
+                try:
+                    self.cache_intermediate_attributes_xrdataset()
+                except FileNotFoundError:
+                    # If intermediate sources are missing, skip
+                    pass
+            if os.path.exists(inter_attr_file):
+                inter_all = xr.open_dataset(inter_attr_file)
+                if any(var not in inter_all.variables for var in var_lst):
+                    inter_all.close()
+                    raise ValueError(f"var_lst must all be in {list(inter_all.data_vars)}")
+                inter_ds = inter_all[var_lst]
+                if gage_id_lst is not None:
+                    inter_ds = inter_ds.sel(basin=gage_id_lst)
+                # 注入来源标识
+                if isinstance(inter_ds, xr.Dataset) and inter_ds.dims.get("basin", 0) > 0:
+                    source_arr_inter = xr.DataArray(
+                        data=np.array(["intermediate"] * len(inter_ds["basin"]), dtype=object),
+                        dims=["basin"],
+                        coords={"basin": inter_ds["basin"]},
+                        name="source",
+                    )
+                    inter_ds = inter_ds.assign(source=source_arr_inter)
+                inter_all.close()
+
+        if prefer_intermediate:
+            return inter_ds
+        if combine and inter_ds is not None and base_ds is not None:
+            # Concatenate along basin dimension; sort for consistency
+            return xr.concat([base_ds, inter_ds], dim="basin").sortby("basin")
+        return base_ds if base_ds is not None else inter_ds
+
+    def cache_intermediate_attributes_xrdataset(self):
+        """Convert intermediate attributes to a single dataset and cache as NetCDF."""
+        import pint_xarray  # noqa: F401
+
+        # Resolve shape file (prefer intermediate, else base)
+        shape_file_inter = self._get_intermediate_shape_file()
+        if os.path.exists(shape_file_inter):
+            if "s3://" in shape_file_inter:
+                with conf.FS.open(shape_file_inter, mode="rb") as f:
+                    shape = gpd.read_file(f)
+            else:
+                shape = gpd.read_file(shape_file_inter)
+        else:
+            shape_dir = os.path.join(self.data_source_description["SHAPE_DIR"], "basins.shp")
+            if "s3://" in shape_dir:
+                with conf.FS.open(shape_dir, mode="rb") as f:
+                    shape = gpd.read_file(f)
+            else:
+                shape = gpd.read_file(shape_dir)
+
+        df_area = cal_area_from_shp(shape)
+        df_area.set_index("basin_id", inplace=True)
+
+        # Intermediate attributes file
+        attr_file = self._get_intermediate_attr_file()
+        if "s3://" in attr_file:
+            with conf.FS.open(attr_file, mode="rb") as f:
+                df_attr = pd.read_csv(f, dtype={"basin_id": str})
+        else:
+            df_attr = pd.read_csv(attr_file, dtype={"basin_id": str})
+
+        df_attr.set_index("basin_id", inplace=True)
+        df_attr = df_attr.join(df_area, how="left")
+
+        # Units mapping from base units_info (shared structure)
+        if "s3://" in self.data_source_description["UNIT_FILES"][0]:
+            with conf.FS.open(self.data_source_description["UNIT_FILES"][0], mode="rb") as fp:
+                units_dict = json.load(fp)
+        else:
+            units_dict = hydro_file.unserialize_json(self.data_source_description["UNIT_FILES"][0])
+        units_dict["shp_area"] = "km^2"
+        units_dict["area"] = "km^2"
+
+        # Convert object columns to categorical codes with mapping
+        categorical_mappings = {}
+        for column in df_attr.columns:
+            if df_attr[column].dtype == "object":
+                df_attr[column] = df_attr[column].astype("category")
+                categorical_mappings[column] = dict(enumerate(df_attr[column].cat.categories))
+                df_attr[column] = df_attr[column].cat.codes
+
+        ds = xr.Dataset()
+        for column in df_attr.columns:
+            attrs = {"units": units_dict.get(column, "unknown")}
+            if column in categorical_mappings:
+                attrs["category_mapping"] = categorical_mappings[column]
+            ds[column] = xr.DataArray(
+                data=df_attr[column].values,
+                dims=["basin"],
+                coords={"basin": df_attr.index.values.astype(str)},
+                attrs=attrs,
+            )
+
+        # Convert categorical mapping dicts to strings
+        for column in ds.data_vars:
+            if "category_mapping" in ds[column].attrs:
+                ds[column].attrs["category_mapping"] = str(ds[column].attrs["category_mapping"])
+
+        prefix_ = "" if self.dataset_name is None else f"{self.dataset_name}_intermediate_"
+        ds.to_netcdf(os.path.join(CACHE_DIR, f"{prefix_}attributes.nc"))
