@@ -49,9 +49,10 @@ def read_setting(setting_path):
         )
 
     # Define the expected structure
+    # Note: cache is now optional
     expected_structure = {
         "minio": ["server_url", "client_endpoint", "access_key", "secret"],
-        "local_data_path": ["root", "datasets-origin", "datasets-interim", "cache"],
+        "local_data_path": ["root", "datasets-origin", "datasets-interim"],
         "postgres": ["server_url", "port", "username", "password", "database"],
     }
 
@@ -77,7 +78,8 @@ SETTING_FILE = os.path.join(Path.home(), "hydro_setting.yml")
 try:
     SETTING = read_setting(SETTING_FILE)
     LOCAL_DATA_PATH = SETTING["local_data_path"]["root"]
-    CACHE_DIR = SETTING["local_data_path"]["cache"]
+    # cache is optional, use default if not provided
+    CACHE_DIR = SETTING["local_data_path"].get("cache", Path.home().joinpath("hydrodatasource_data", ".cache"))
 except (ValueError, FileNotFoundError) as e:
     LOCAL_DATA_PATH = Path.home().joinpath("hydrodatasource_data")
     CACHE_DIR = Path.home().joinpath("hydrodatasource_data", ".cache")

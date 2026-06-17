@@ -92,6 +92,34 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             **kwargs,
         )
 
+        # 验证数据目录是否存在
+        if not os.path.exists(self.data_source_dir):
+            raise FileNotFoundError(
+                f"❌ 数据集目录不存在: {self.data_source_dir}\n"
+                f"\n配置信息:"
+                f"\n  data_path     = {data_path}"
+                f"\n  dataset_name  = {dataset_name}"
+                f"\n  拼接后路径    = {self.data_source_dir}"
+                f"\n\n请检查:"
+                f"\n  1. data_path 是否指向数据集的父目录"
+                f"\n  2. dataset_name 拼写是否正确"
+                f"\n  3. 数据集目录是否实际存在"
+            )
+
+        # 验证必需的子目录
+        required_subdirs = ["attributes", "timeseries"]
+        missing_dirs = []
+        for subdir in required_subdirs:
+            subdir_path = os.path.join(self.data_source_dir, subdir)
+            if not os.path.exists(subdir_path):
+                missing_dirs.append(subdir)
+
+        if missing_dirs:
+            raise FileNotFoundError(
+                f"❌ 数据集目录结构不完整: {self.data_source_dir}\n"
+                f"缺少以下子目录: {', '.join(missing_dirs)}"
+            )
+
     def get_constants(self):
         """
         Get the constant values used by this datasource.
@@ -419,8 +447,30 @@ class FloodEventDatasource(SelfMadeHydroDataset):
                         )
                     elif "Sample ID:" in line:
                         metadata["sample_id"] = int(line.split("Sample ID:")[1].strip())
+                    elif "Score:" in line:
+                        # 提取评分信息
+                        import re
+                        score_match = re.search(r"#\s*Score:\s*(\d+)", line)
+                        if score_match:
+                            score = int(score_match.group(1))
+                            # 限制评分范围0-100
+                            metadata["Score"] = max(0, min(100, score))
                 else:
                     break
+
+        # 处理缺失Score的情况：根据时间分界线判断
+        if "Score" not in metadata:
+            if "augmented_start_time" in metadata:
+                start_year = int(metadata["augmented_start_time"][:4])
+                if start_year <= 2025:
+                    # 真实数据：默认100分
+                    metadata["Score"] = 100
+                else:
+                    # 2026+增强数据无评分：标记为None（后续跳过）
+                    metadata["Score"] = None
+            else:
+                # 无法判断时间：默认100分
+                metadata["Score"] = 100
 
         return metadata
 
@@ -526,7 +576,11 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         return df
 
     def concatenate_warmup_and_augmented_data(
-        self, warmup_df: pd.DataFrame, augmented_file_path: str
+        self,
+        warmup_df: pd.DataFrame,
+        augmented_file_path: str,
+        use_score_as_weight: bool = False,  # 新增参数
+        score_threshold: int = 60,  # 新增参数
     ) -> pd.DataFrame:
         """
         拼接预热期数据和增强场次数据
@@ -534,7 +588,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         Parameters
         ----------
         warmup_df : pd.DataFrame
-            预热期数据
+            预热期数据（仅在增强CSV未包含预热期时使用）
         augmented_file_path : str
             增强文件路径
 
@@ -548,6 +602,49 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         # 将时间列保持为字符串格式，避免超出pandas时间戳范围限制
         aug_df["time"] = aug_df["time"].astype(str)
 
+        # 解析元数据获取event_id
+        metadata = self.parse_augmented_file_metadata(augmented_file_path)
+
+        # 检查增强CSV是否已包含flood_event列（表示已包含预热期）
+        if "flood_event" in aug_df.columns:
+            # CSV文件已包含预热期和洪水期数据，无需拼接外部warmup
+
+            # 解析元数据获取评分
+            score = metadata.get("Score", None)
+
+            # 根据模式处理 flood_event 列
+            if use_score_as_weight and score is not None:
+                # 评分加权模式：将评分存储到 flood_event 列
+                score = int(score)
+
+                def apply_score_weighting(flood_event_value):
+                    if flood_event_value == 0:
+                        # 非洪水保持为 0
+                        return 0
+                    elif flood_event_value == 1:
+                        # 洪水事件：根据评分决定
+                        if score < score_threshold:
+                            return 1  # 低质量：标记为 1
+                        else:
+                            return score  # 高质量：使用实际评分
+                    else:
+                        return flood_event_value  # 其他值保持不变
+
+                aug_df["flood_event"] = aug_df["flood_event"].apply(apply_score_weighting)
+                print(f"      📊 Applied score weighting: score={score}, threshold={score_threshold}")
+
+            # 添加 event_id 列
+            if "augmented_start_time" in metadata and "augmented_end_time" in metadata:
+                event_id = f"event_{metadata['augmented_start_time']}_{metadata['augmented_end_time']}"
+                aug_df["event_id"] = aug_df["flood_event"].apply(
+                    lambda x: event_id if x >= 1 else ""  # 修改：>= 1 包含所有洪水事件
+                )
+            else:
+                aug_df["event_id"] = ""
+
+            return aug_df
+
+        # 旧版CSV文件不包含flood_event列，需要拼接外部warmup
         # 获取增强数据的起始时间，用于调整预热期数据的年份
         if not aug_df.empty:
             # 从字符串格式的时间中提取年份
@@ -564,7 +661,29 @@ class FloodEventDatasource(SelfMadeHydroDataset):
 
         # 为预热期数据和增强数据添加标记列
         adjusted_warmup_df["flood_event"] = 0  # 预热期数据标记为0
-        aug_df["flood_event"] = 1  # 洪水期数据标记为1
+
+        # 根据模式设置洪水期的 flood_event 值
+        score = metadata.get("Score", None)
+
+        if use_score_as_weight and score is not None:
+            # 评分加权模式
+            score = int(score)
+            if score < score_threshold:
+                aug_df["flood_event"] = 1  # 低质量：标记为 1
+            else:
+                aug_df["flood_event"] = score  # 高质量：使用实际评分
+            print(f"      📊 Applied score weighting: score={score}, threshold={score_threshold}")
+        else:
+            # 阈值过滤模式
+            aug_df["flood_event"] = 1  # 洪水期数据统一标记为1
+
+        # 添加event_id列（用于后续评分匹配）
+        if "augmented_start_time" in metadata and "augmented_end_time" in metadata:
+            event_id = f"event_{metadata['augmented_start_time']}_{metadata['augmented_end_time']}"
+            aug_df["event_id"] = event_id
+        else:
+            aug_df["event_id"] = ""
+        adjusted_warmup_df["event_id"] = ""  # 预热期无event_id
 
         # 拼接数据并按字符串格式的时间排序
         combined_df = pd.concat([adjusted_warmup_df, aug_df], ignore_index=True)
@@ -642,47 +761,48 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         """
         # The gen_discharge is the generated discharge by the data augmentation method
         # 创建数据集字典
+        # 注意：维度顺序必须为 ["basin", "time"] 以与hydrodatasource标准格式兼容
         data_vars = {}
 
         # 添加降雨数据
         if "rain" in df.columns:
             data_vars["rain"] = (
-                ["time", "basin"],
-                df[["rain"]].values.reshape(-1, 1),
+                ["basin", "time"],  # 修正：维度顺序改为 basin 在前
+                df[["rain"]].values.reshape(1, -1),  # 修正：形状改为 (1, n_time)
             )
 
         # 添加生成的流量数据
         if "inflow" in df.columns:
             data_vars["inflow"] = (
-                ["time", "basin"],
-                df[["inflow"]].values.reshape(-1, 1),
+                ["basin", "time"],
+                df[["inflow"]].values.reshape(1, -1),
             )
 
         if "gen_discharge" in df.columns:
             data_vars["inflow"] = (
-                ["time", "basin"],
-                df[["gen_discharge"]].values.reshape(-1, 1),
+                ["basin", "time"],
+                df[["gen_discharge"]].values.reshape(1, -1),
             )
 
         # 添加观测流量数据
         # if "obs_discharge" in df.columns:
         #     data_vars["obs_discharge"] = (
-        #         ["time", "basin"],
-        #         df[["obs_discharge"]].values.reshape(-1, 1),
+        #         ["basin", "time"],
+        #         df[["obs_discharge"]].values.reshape(1, -1),
         #     )
 
         # 洪水期标记
         if "flood_event" in df.columns:
             data_vars["flood_event"] = (
-                ["time", "basin"],
-                df[["flood_event"]].values.reshape(-1, 1),
+                ["basin", "time"],
+                df[["flood_event"]].values.reshape(1, -1),
             )
 
         # 添加蒸散发数据
         if "ES" in df.columns:
             data_vars["ES"] = (
-                ["time", "basin"],
-                df[["ES"]].values.reshape(-1, 1),
+                ["basin", "time"],
+                df[["ES"]].values.reshape(1, -1),
             )
 
         # 创建数据集
@@ -1044,6 +1164,8 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         latest_only: bool = True,
         warmup_hours: int = 240,
         time_unit: str = "3h",
+        score_threshold: int = 60,
+        use_score_as_weight:bool = False,
     ) -> Optional[str]:
         """
         Process augmented data files based on file discovery.
@@ -1066,6 +1188,16 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             Number of warmup hours.
         time_unit : str, optional
             Time unit.
+        score_threshold : int, optional
+            Score threshold (default: 60). Behavior depends on use_score_as_weight:
+            - If use_score_as_weight=False: Only events with Score >= score_threshold are included (filtering mode)
+            - If use_score_as_weight=True: Events with Score < score_threshold get flood_event=1,
+              events with Score >= score_threshold get flood_event=score (weighting mode)
+        use_score_as_weight : bool, optional
+            If True, use score-based weighting mode where flood_event stores actual scores (1-100)
+            instead of binary values (0/1). Default is False (threshold filtering mode).
+            - False (filtering): flood_event=0/1, only score>=threshold included
+            - True (weighting): flood_event=-1/0 (non-flood), 1 (low-quality), or score (high-quality)
 
         Returns
         -------
@@ -1089,17 +1221,17 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             print("❌ No augmented data files were found")
             return None
         print(f"🔄 Prepare to process {len (discovered_files)} augmented data files:")
-        # for file_info in discovered_files:
-        #     modified_by = file_info.get("modified_by", "unknown")
-        #     print(f"   - {file_info['filename']} (修改者: {modified_by})")
+
         # 创建文件路径列表，用于现有的处理方法
         file_paths = [file_info["file_path"] for file_info in discovered_files]
-        # 调用现有的处理方法，但使用文件路径而不是编号
+        # 调用现有的处理方法，传递 use_score_as_weight 参数
         return self._process_augmented_files_by_paths(
             station_ids=station_ids,
             file_paths=file_paths,
             warmup_hours=warmup_hours,
             time_unit=time_unit,
+            score_threshold=score_threshold,
+            use_score_as_weight=use_score_as_weight,  # 新增
         )
 
     def _process_augmented_files_by_paths(
@@ -1108,25 +1240,31 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         file_paths: List[str],
         warmup_hours: int = 240,
         time_unit: str = "3h",
+        score_threshold: int = 60,
+        use_score_as_weight: bool = False,  # 新增参数
     ) -> Optional[str]:
         """
-        Process augmented data files based on file paths.
+        处理增强数据文件基于文件路径（结构化数组版）- 解决字典保存问题
 
         Parameters
         ----------
         station_ids : Union[str, List[str]]
-            Station ID or list of station IDs.
+            站点ID或站点ID列表
         file_paths : List[str]
-            List of file paths to process.
+            要处理的文件路径列表
         warmup_hours : int, optional
-            Number of warmup hours.
+            预热小时数，默认240
         time_unit : str, optional
-            Time unit.
+            时间单位，默认"3h"
+        score_threshold : int, optional
+            分数阈值，默认60。根据 use_score_as_weight 有不同行为
+        use_score_as_weight : bool, optional
+            是否使用评分加权模式，默认False（阈值过滤模式）
 
         Returns
         -------
         Optional[str]
-            Path to the cache file, or None if processing fails.
+            缓存文件路径，处理失败返回None
         """
         # 兼容单个站点的情况
         if isinstance(station_ids, str):
@@ -1137,73 +1275,105 @@ class FloodEventDatasource(SelfMadeHydroDataset):
 
         # 对每个站点处理增强数据
         for station_id in station_ids:
-            print(f"🔄 Processing : {station_id}")
+            print(f"🔄🔄 Processing station: {station_id}")
             station_timeseries = []
+            total_files = len(file_paths)  # 总文件数
+            processed_files = 0  # 成功处理的文件数
 
             for file_path in file_paths:
                 try:
-                    print(f"   🔄 Processing file: {os.path.basename(file_path)}")
+                    print(f"   🔄🔄 Processing file: {os.path.basename(file_path)}")
 
                     # 解析增强文件的元信息
                     metadata = self.parse_augmented_file_metadata(file_path)
                     if not metadata:
-                        print(
-                            f"      ⚠️ Skip file {file_path}: unable to parse metadata"
-                        )
+                        print(f"      ⚠⚠⚠️ Skip file {file_path}: unable to parse metadata")
                         continue
 
-                    # 获取预热期数据
-                    warmup_df = self.get_warmup_period_data(
-                        original_start_time=metadata.get("original_start_time"),
-                        original_end_time=metadata.get("original_end_time"),
-                        station_id=station_id,
-                        warmup_hours=warmup_hours,
-                    )
-
-                    if warmup_df is None:
-                        print(
-                            f"      ⚠️ Skip file {file_path}: unable to get warmup data"
-                        )
+                    # 跳过2026+无评分的文件
+                    if "Score" in metadata and metadata["Score"] is None:
+                        print(f"      ⚠⚠⚠️ Skip unscored augmented data file: {os.path.basename(file_path)}")
                         continue
+
+                    # 根据模式处理评分
+                    if "Score" in metadata:
+                        score = int(metadata["Score"])
+                        if use_score_as_weight:
+                            # 评分加权模式：所有数据都接受，稍后在 flood_event 中存储评分
+                            print(f"      ✅ Accept file {os.path.basename(file_path)}: Score {score} (weighting mode)")
+                        else:
+                            # 阈值过滤模式：只接受 >= threshold 的数据
+                            if score < score_threshold:
+                                print(f"      ⚠⚠⚠️ Skip file {os.path.basename(file_path)}: Score {score} < threshold {score_threshold}")
+                                continue
+                            else:
+                                print(f"      ✅ Accept file {os.path.basename(file_path)}: Score {score} >= threshold {score_threshold}")
+                    else:
+                        # 真实数据（无Score字段）默认通过
+                        print(f"      ✅ Accept file {os.path.basename(file_path)}: Real data (no score)")
+
+                    # 检查CSV文件是否已包含flood_event列
+                    try:
+                        sample_df = pd.read_csv(file_path, comment="#", nrows=1)
+                        has_flood_event = "flood_event" in sample_df.columns
+                    except Exception as e:
+                        print(f"      ⚠⚠⚠️ Skip file {file_path}: unable to read CSV header - {str(e)}")
+                        continue
+
+                    # 仅当CSV不包含flood_event列时，才获取外部预热期数据
+                    if has_flood_event:
+                        warmup_df = pd.DataFrame()
+                    else:
+                        # 获取预热期数据
+                        warmup_df = self.get_warmup_period_data(
+                            original_start_time=metadata.get("original_start_time", ""),
+                            original_end_time=metadata.get("original_end_time", ""),
+                            station_id=station_id,
+                            warmup_hours=warmup_hours,
+                        )
+
+                        if warmup_df is None:
+                            print(f"      ⚠⚠⚠️ Skip file {file_path}: unable to get warmup data")
+                            continue
 
                     # 调整预热期时间并拼接增强数据
                     timeseries_df = self.concatenate_warmup_and_augmented_data(
-                        warmup_df, file_path
+                        warmup_df,
+                        file_path,
+                        use_score_as_weight=use_score_as_weight,  # 新增
+                        score_threshold=score_threshold,  # 新增
                     )
 
                     if timeseries_df is not None and len(timeseries_df) > 0:
                         station_timeseries.append(timeseries_df)
-                        # print(f"      ✅ 成功处理: {len(timeseries_df)} 条记录")
+                        processed_files += 1  # 成功处理文件计数
                     else:
-                        print(
-                            f"      ⚠️ Skip file {file_path}: The processed data is empty"
-                        )
+                        print(f"      ⚠⚠⚠️ Skip file {file_path}: The processed data is empty")
+
                 except Exception as e:
-                    print(f"      ❌ Processing file failed {file_path}: {str(e)}")
+                    print(f"      ❌❌ Processing file failed {file_path}: {str(e)}")
                     continue
 
             # 如果该站点有数据，则合并并转换为xarray Dataset
             if station_timeseries:
-                print(f"   🔄 Merge time series data of {station_id}...")
+                print(f"\n   🔄🔄 Merge time series data of {station_id}...")
+                print(f"   📊 Successfully merged {processed_files}/{total_files} augmented files")
                 combined_df = pd.concat(station_timeseries, ignore_index=True)
                 combined_df = combined_df.sort_values("time").reset_index(drop=True)
+
                 # 重命名列 gen_discharge -> inflow
                 combined_df = self.rename_dataframe_columns(combined_df)
 
                 # 转换为xarray Dataset
-                station_ds = self.create_xarray_dataset_from_augdf(
-                    combined_df, station_id, time_unit
-                )
+                station_ds = self.create_xarray_dataset_from_augdf(combined_df, station_id, time_unit)
                 all_datasets.append(station_ds)
                 processed_count += 1
-                print(
-                    f"   ✅  {station_id} processing completed: {len (combined_df)} records"
-                )
+                print(f"   ✅ {station_id} processing completed: {len(combined_df)} records\n")
             else:
-                print(f"   ⚠️  {station_id} No data available")
+                print(f"   ⚠⚠⚠️  {station_id} No data available")
 
         if not all_datasets:
-            print("❌ Failed to process data from any basin successfully")
+            print("❌❌ Failed to process data from any basin successfully")
             return None
 
         print(f"✅ Successfully processed {processed_count} basins")
@@ -1212,14 +1382,25 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         if len(all_datasets) == 1:
             final_ds = all_datasets[0]
         else:
-            print("🔄 Merge datasets from multiple basins...")
-            final_ds = xr.concat(all_datasets, dim="gage_id")
+            print("🔄🔄 Merge datasets from multiple basins...")
+            final_ds = xr.concat(all_datasets, dim="basin")  # 修正：使用basin而非gage_id
+
+        # 添加数据集属性
+        final_ds.attrs.update({
+            'processing_timestamp': datetime.now().isoformat(),
+            'data_source': 'augmented_flood_events',
+            'use_score_as_weight': int(use_score_as_weight),  # 转换 boolean 为 int (NetCDF 不支持 boolean 类型)
+        })
 
         # 保存到缓存
-        print("🔄 Save augmented data to cache...")
-        cache_file_path = self.save_augmented_timeseries_to_cache(
-            final_ds, station_ids, time_unit
-        )
+        print("🔄🔄 Save augmented data to cache...")
+        cache_file_path = self.save_augmented_timeseries_to_cache(final_ds, station_ids, time_unit)
+        
+        if cache_file_path:
+            print(f"✅ Successfully saved to: {cache_file_path}")
+        else:
+            print("❌ Failed to save cache file")
+        
         return cache_file_path
 
     def get_user_contributions_summary(self, augmented_files_dir: str) -> pd.DataFrame:
