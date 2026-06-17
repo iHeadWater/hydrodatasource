@@ -79,11 +79,9 @@ class SelfMadeHydroDataset(HydroData):
         kwargs : dict, optional
             additional keyword arguments, by default None
         """
-        if time_unit is None:
-            time_unit = ["1D"]
-        if any(unit not in ["1h", "3h", "1D", "8D"] for unit in time_unit):
+        if any(unit not in ["1h", "3h", "1D", "8D", "1M"] for unit in time_unit):
             raise ValueError(
-                "time_unit must be one of ['1h', '3h', '1D', '8D']. We only support these time units now."
+                "time_unit must be one of ['1h', '3h', '1D', '8D','1M']. We only support these time units now."
             )
         # TODO: maybe starting with "s3://" is a better idea?
         self.head = "minio" if "s3://" in data_path else "local"
@@ -99,7 +97,7 @@ class SelfMadeHydroDataset(HydroData):
 
     @property
     def streamflow_unit(self):
-        unit_mapping = {"1h": "mm/h", "3h": "mm/3h", "1D": "mm/d"}
+        unit_mapping = {"1h": "mm/h", "3h": "mm/3h", "1D": "mm/d", "1MS": "mm/M"}
         return {unit: unit_mapping[unit] for unit in self.time_unit}
 
     def get_name(self):
@@ -271,6 +269,10 @@ class SelfMadeHydroDataset(HydroData):
                     end_time=t_range_list[-1],
                     freq=time_unit,
                 )
+            elif time_unit == "1M":
+                t_range = pd.date_range(
+                    start=t_range_list[0], end=t_range_list[-1], freq="1MS"
+                )
             else:
                 t_range = pd.date_range(
                     start=t_range_list[0], end=t_range_list[-1], freq=time_unit
@@ -402,6 +404,7 @@ class SelfMadeHydroDataset(HydroData):
                 ts_file = os.path.join(ts_dir, os.listdir(ts_dir)[0])
                 ts_tmp = pd.read_csv(ts_file, dtype={"basin_id": str})
             # Get the relevant forcing units and validate against unit info
+            # first column must be time
             forcing_units = ts_tmp.columns.values[1:]
             the_vars = self._check_vars_in_unitsinfo(forcing_units, unit_file)
             # Map the variables to the corresponding time unit
@@ -618,15 +621,27 @@ class SelfMadeHydroDataset(HydroData):
                     .tolist()
                 )
             else:
-                times = (
-                    pd.date_range(
-                        start=self.trange4cache[0],
-                        end=self.trange4cache[-1],
-                        freq=time_unit,
+                # For monthly frequency, ensure we get month start dates
+                if time_unit == "1M":
+                    times = (
+                        pd.date_range(
+                            start=self.trange4cache[0],
+                            end=self.trange4cache[-1],
+                            freq="1MS",
+                        )
+                        .strftime("%Y-%m-%d %H:%M:%S")
+                        .tolist()
                     )
-                    .strftime("%Y-%m-%d %H:%M:%S")
-                    .tolist()
-                )
+                else:
+                    times = (
+                        pd.date_range(
+                            start=self.trange4cache[0],
+                            end=self.trange4cache[-1],
+                            freq=time_unit,
+                        )
+                        .strftime("%Y-%m-%d %H:%M:%S")
+                        .tolist()
+                    )
             # Retrieve the correct units information for this time unit
             unit_file = next(
                 file
@@ -822,6 +837,8 @@ class SelfMadeHydroDataset(HydroData):
             converted_data = da / (8760 / 3)
         elif unit in ["mm/8d", "mm/8day"]:
             converted_data = da / (365 / 8)
+        elif unit in ["mm/M"]:
+            converted_data = da / 12
         else:
             raise ValueError(
                 "unit must be one of ['mm/d', 'mm/day', 'mm/h', 'mm/hour', 'mm/3h', 'mm/3hour', 'mm/8d', 'mm/8day']"
@@ -832,6 +849,64 @@ class SelfMadeHydroDataset(HydroData):
         # Assign the modified DataArray back to the Dataset
         pre_mm_syr["pre_mm_syr"] = converted_data
         return pre_mm_syr
+
+
+class LongTermDataset(SelfMadeHydroDataset):
+    def __init__(self, data_path, download=False, time_unit=None, **kwargs):
+        if time_unit is None:
+            time_unit = ["1M"]
+        if "dataset_name" not in kwargs:
+            kwargs["dataset_name"] = "gmspa"
+        super().__init__(data_path, download, time_unit, **kwargs)
+
+    def set_data_source_describe(self):
+        the_dict = super().set_data_source_describe()
+        the_dict["ATTR_FILE"] = os.path.join(
+            self.data_source_dir, "attributes", "hydroatlas_attributes.csv"
+        )
+        the_dict["TELECONNECTIONS_DIR"] = self._where_ts_dir(
+            os.path.join(self.data_source_dir, "teleconnections")
+        )
+        return the_dict
+
+    def read_global_data(
+        self, object_ids: list = None, t_range_list: list = None, var_lst: list = None
+    ) -> dict:
+        if var_lst is None or not var_lst:
+            return None
+        if not os.path.exists(os.path.join(CACHE_DIR, "global_data.nc")):
+            self.cache_global_dataset(object_ids, t_range_list)
+        netcdf_file = os.path.join(CACHE_DIR, "global_data.nc")
+        global_data = xr.open_dataset(netcdf_file)
+
+        return global_data[var_lst].sel(basin=object_ids)
+
+    def cache_global_dataset(self, object_ids: list = None, t_range_list: list = None):
+        """
+        读取 CSV 数据并将其转换为 xarray 数据集并保存为 NetCDF 文件。
+        """
+        global_data_file = os.path.join(
+            self.data_source_description["GLOBAL_DIR"], "global_data.csv"
+        )
+        if not os.path.exists(global_data_file):
+            raise FileNotFoundError(f"Global data file not found at {global_data_file}")
+        global_data = pd.read_csv(global_data_file, parse_dates=["time"])
+        start_time = t_range_list[0]
+        end_time = t_range_list[-1]
+        mask = (global_data["time"] >= start_time) & (global_data["time"] <= end_time)
+        filtered_data = global_data[mask]
+
+        time_col = pd.to_datetime(filtered_data["time"])
+
+        variable_names = filtered_data.columns.drop("time").tolist()
+        ds = xr.Dataset(coords={"basin": object_ids, "time": time_col})
+
+        for var in variable_names:
+            data_array = np.tile(filtered_data[var].values, (len(object_ids), 1))
+            ds[var] = (("basin", "time"), data_array)
+
+        ds.to_netcdf(os.path.join(CACHE_DIR, "global_data.nc"))
+        del global_data
 
 
 class SelfMadeForecastDataset(SelfMadeHydroDataset):
