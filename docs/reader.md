@@ -1,96 +1,75 @@
-<!--
- * @Author: Wenyu Ouyang
- * @Date: 2024-03-28 09:39:58
- * @LastEditTime: 2024-05-20 20:49:07
- * @LastEditors: Wenyu Ouyang
- * @Description: 
- * @FilePath: \hydrodatasource\docs\reader.md
- * Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
--->
-# Reader模块
+# Reader
 
-读取数据。
+The `reader` module is the core component of `hydrodatasource` for accessing and reading various hydrological datasets. It provides a unified interface for handling different data sources, with a special focus on custom, user-prepared datasets.
 
-## 功能
+## SelfMadeHydroDataset
 
-通过给定的AOI范围：
-- 读取[MinIO](http://minio.waterism.com:9090/)服务器上的数据，如era5、gpm、gfs等；
-- 通过[STAC](https://stacspec.org/en/)读取landsat、sentinel等遥感数据。
+The `SelfMadeHydroDataset` class is the most important feature of the `reader` module. It allows you to read your own hydrological data as long as it follows a specific directory structure. This is designed for flexibility, enabling you to work with non-public or specially prepared datasets.
 
-## 使用
+### Directory Structure
 
-- 读取era5数据
+To use `SelfMadeHydroDataset`, your data should be organized in the following structure:
 
-```python
-from hydrodatasource.reader.minio import ERA5LReader
-import numpy as np
-
-era5 = ERA5LReader()
-
-# 指定开始及结束时间
-start_time=np.datetime64("2021-06-01T00:00:00.000000000")
-end_time=np.datetime64("2021-06-30T23:00:00.000000000")
-
-# 通过指定四至范围读取
-bbox=(121,39,123,40)
-ds1 = era5.open_dataset(data_variables=['Total precipitation'], start_time=start_time, end_time=end_time, dataset='wis', bbox=bbox)
-
-# 通过矢量数据文件读取
-shp = 'basin.shp'
-ds2 = era5.from_shp(data_variables=['Total precipitation'], start_time=start_time, end_time=end_time, dataset='wis', shp=shp)
-
-# 通过已有aoi对象读取
-aoi = gpd.read_file(shp)
-ds3 = era5.from_aoi(data_variables=['Total precipitation'], start_time=start_time, end_time=end_time, dataset='wis', aoi=aoi)
+```
+/path/to/your_dataset_name/
+├── attributes/
+│   ├── attributes.csv
+├── shapes/
+│   ├── basins.shp
+├── timeseries/
+│   ├── 1D/
+│   │   ├── basin_1.csv
+│   │   ├── basin_2.csv
+│   │   ├── ...
+│   ├── 1D_units_info.json
+│   ├── 3h/
+│   │   ├── basin_1.csv
+│   │   ├── ...
+│   ├── 3h_units_info.json
 ```
 
-- 读取gpm数据
+- **`attributes/attributes.csv`**: A CSV file containing static attributes for each basin (e.g., area, slope, land cover). It must contain a `basin_id` column.
+- **`shapes/basins.shp`**: A shapefile containing the geographic boundaries of each basin.
+- **`timeseries/`**: This directory holds the time series data, with subdirectories for each time resolution (e.g., `1D` for daily, `3h` for 3-hourly).
+    - Each subdirectory contains CSV files, one for each basin, named with the `basin_id`.
+    - Each subdirectory also contains a `*_units_info.json` file that specifies the units for the variables in the CSV files.
+
+### Example Usage
+
+Here is how you can use `SelfMadeHydroDataset` to read your data:
 
 ```python
-from hydrodatasource.reader.minio import GPMReader
-import numpy as np
+from hydrodatasource.reader.data_source import SelfMadeHydroDataset
 
-# 指定数据集wis或camels
-gpm = GPMReader('wis')
+# Path to the parent directory of your dataset
+data_path = "/path/to/your_data/"
+# The name of your dataset directory
+dataset_name = "my_custom_dataset"
 
-# 指定开始及结束时间
-start_time=np.datetime64("2023-06-01T00:00:00.000000000")
-end_time=np.datetime64("2023-06-30T23:30:00.000000000")
+# Initialize the reader
+reader = SelfMadeHydroDataset(data_path=data_path, dataset_name=dataset_name, time_unit=["1D"])
 
-# 通过指定四至范围读取
-bbox=(121,39,123,40)
-ds1 = gpm.open_dataset(start_time=start_time, end_time=end_time, dataset='wis', bbox=bbox, time_resolution='1d')
+# Get a list of all basin IDs
+basin_ids = reader.read_object_ids()
 
-# 通过矢量数据文件读取
-shp = 'basin.shp'
-ds2 = gpm.from_shp(start_time=start_time, end_time=end_time, dataset='wis', shp=shp, time_resolution='1d')
+# Define the time range and variables to read
+t_range = ["2000-01-01", "2010-12-31"]
+variables = ["precipitation", "streamflow"]
 
-# 通过已有aoi对象读取
-aoi = gpd.read_file(shp)
-ds3 = gpm.from_aoi(start_time=start_time, end_time=end_time, dataset='wis', aoi=aoi, time_resolution='1d')
+# Read the time series data
+timeseries_data = reader.read_ts_xrdataset(
+    gage_id_lst=basin_ids,
+    t_range=t_range,
+    var_lst=variables,
+    time_units=["1D"]
+)
+
+# The result is a dictionary with time units as keys and xarray.Dataset as values
+daily_data = timeseries_data["1D"]
+print(daily_data)
 ```
 
-- 读取gpm数据
+## Other Readers
 
-```python
-from hydrodatasource.reader.minio import GFSReader
-import numpy as np
-
-gfs = GFSReader()
-
-# 指定日期
-creation_date=np.datetime64("2023-06-01")
-
-# 通过指定四至范围读取
-bbox=(121,39,123,40)
-ds1 = gfs.open_dataset(creation_date=creation_date, creation_time='00', dataset='wis', bbox=bbox)
-
-# 通过矢量数据文件读取
-shp = 'basin.shp'
-ds2 = gfs.from_shp(creation_date=creation_date, creation_time='00', dataset='wis', shp=shp)
-
-# 通过已有aoi对象读取
-aoi = gpd.read_file(shp)
-ds3 = gfs.from_aoi(creation_date=creation_date, creation_time='00', dataset='wis', aoi=aoi)
-```
-
+- **`SelfMadeForecastDataset`**: Extends `SelfMadeHydroDataset` to support forecast data, which is expected to be in a `forecasts` directory.
+- **`StationHydroDataset`**: Extends `SelfMadeHydroDataset` to include data from gauging stations, which is expected to be in a `stations` directory.

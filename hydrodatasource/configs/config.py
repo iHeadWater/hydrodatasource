@@ -1,7 +1,7 @@
 """
 Author: Jianfeng Zhu
 Date: 2023-10-25 18:49:02
-LastEditTime: 2025-08-17 21:04:26
+LastEditTime: 2025-10-31 11:28:17
 LastEditors: Wenyu Ouyang
 Description: Some configs for minio server
 FilePath: \hydrodatasource\hydrodatasource\configs\config.py
@@ -15,8 +15,6 @@ import s3fs
 import yaml
 from minio import Minio
 import psycopg2
-
-from hydroutils import hydro_file
 
 
 def read_setting(setting_path):
@@ -36,6 +34,7 @@ def read_setting(setting_path):
         "  root: 'D:\\data\\waterism' # Update with your root data directory\n"
         "  datasets-origin: 'D:\\data\\waterism\\datasets-origin'\n"
         "  datasets-interim: 'D:\\data\\waterism\\datasets-interim'\n"
+        "  cache: 'D:\\data\\waterism\\.cache'\n"
         "postgres:\n"
         "  server_url: your_postgres_server_url\n"
         "  port: 5432\n"
@@ -50,6 +49,7 @@ def read_setting(setting_path):
         )
 
     # Define the expected structure
+    # Note: cache is now optional
     expected_structure = {
         "minio": ["server_url", "client_endpoint", "access_key", "secret"],
         "local_data_path": ["root", "datasets-origin", "datasets-interim"],
@@ -74,18 +74,58 @@ def read_setting(setting_path):
     return setting
 
 
-CACHE_DIR = hydro_file.get_cache_dir()
 SETTING_FILE = os.path.join(Path.home(), "hydro_setting.yml")
 try:
     SETTING = read_setting(SETTING_FILE)
-except ValueError as e:
+    LOCAL_DATA_PATH = SETTING["local_data_path"]["root"]
+    # cache is optional, use default if not provided
+    CACHE_DIR = SETTING["local_data_path"].get("cache", Path.home().joinpath("hydrodatasource_data", ".cache"))
+except (ValueError, FileNotFoundError) as e:
+    LOCAL_DATA_PATH = Path.home().joinpath("hydrodatasource_data")
+    CACHE_DIR = Path.home().joinpath("hydrodatasource_data", ".cache")
+    SETTING = {
+        "minio": {
+            "server_url": "",
+            "client_endpoint": "",
+            "access_key": "",
+            "secret": "",
+        },
+        "postgres": {
+            "server_url": "",
+            "port": 5432,
+            "username": "",
+            "password": "",
+            "database": "",
+        },
+        "local_data_path": {
+            "root": LOCAL_DATA_PATH,
+            "cache": CACHE_DIR,
+        }
+    }
     print(e)
 except Exception as e:
+    LOCAL_DATA_PATH = Path.home().joinpath("hydrodatasource_data")
+    CACHE_DIR = Path.home().joinpath("hydrodatasource_data", ".cache")
+    SETTING = {
+        "minio": {
+            "server_url": "",
+            "client_endpoint": "",
+            "access_key": "",
+            "secret": "",
+        },
+        "postgres": {
+            "server_url": "",
+            "port": 5432,
+            "username": "",
+            "password": "",
+            "database": "",
+        },
+        "local_data_path": {
+            "root": LOCAL_DATA_PATH,
+            "cache": CACHE_DIR,
+        }
+    }
     print(f"Unexpected error: {e}")
-
-# Initialize local data path
-LOCAL_DATA_PATH = SETTING["local_data_path"]["root"]
-
 
 # Initialize remote service settings
 MINIO_PARAM = {}

@@ -360,6 +360,10 @@ def streamflow_unit_conv(
 
     This function is now a wrapper around the implementation in hydroutils for backward compatibility.
 
+    .. deprecated::
+        This function is deprecated and will be removed in the next version.
+        Please use `hydroutils.hydro_units.streamflow_unit_conv` directly instead.
+
     Parameters
     ----------
     streamflow: xarray.Dataset, numpy.ndarray, pandas.DataFrame/Series, or pint.Quantity
@@ -385,6 +389,14 @@ def streamflow_unit_conv(
     Converted data in the same type as the input streamflow.
     For numpy arrays, returns numpy array directly.
     """
+    import warnings
+
+    warnings.warn(
+        "streamflow_unit_conv is deprecated and will be removed in the next version. "
+        "Please use hydroutils.hydro_units.streamflow_unit_conv directly instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     # Import the new implementation from hydroutils
     try:
         from hydroutils.hydro_units import (
