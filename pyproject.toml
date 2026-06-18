@@ -175,6 +175,9 @@ exclude = [
     ".tox",
 ]
 
+[tool.uv.sources]
+hydrodataset = { path = "../hydrodataset", editable = true }
+
 [tool.uv]
 # Override aqua-fetch's outdated dependency constraints
 # aqua-fetch 限制了 pandas<=2.1.4，但实际上新版本的 pandas 和 xarray 已经修复了兼容性问题
