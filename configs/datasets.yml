@@ -1,0 +1,12 @@
+# Hydrodatasource dataset registry.
+# Maps dataset id -> reader alias + relative path.
+# Format: datasets.<id>.reader (str), datasets.<id>.path (relative str)
+#
+# Rules (from hydromodel ADR 0001):
+# - path must be relative (no absolute, no URI, no .. traversal)
+# - reader must name a registered alias in data_resolver.READER_ALIASES
+
+datasets:
+  songliao_event:
+    reader: floodevent
+    path: projects/songliao/event
