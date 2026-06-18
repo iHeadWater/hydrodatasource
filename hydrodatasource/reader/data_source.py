@@ -2,6 +2,7 @@ import collections
 import glob
 import json
 import os
+from pathlib import Path
 import re
 import numpy as np
 import pandas as pd
@@ -34,15 +35,28 @@ from tqdm import tqdm
 class HydroData(ABC):
     """An interface for reading multi-modal data sources.
 
+    Supports two construction patterns:
+    1. New (resolved URI): HydroData(uri="/path/to/data")
+    2. Legacy: HydroData(data_path="/parent", dataset_name="child")
+
     Parameters
     ----------
-    ABC : _type_
-        _description_
+    data_path : str, optional
+        Parent directory path (legacy mode).
+    dataset_name : str, optional
+        Subdirectory name under data_path (legacy mode).
+    uri : str, optional
+        Resolved absolute URI pointing directly to the data directory.
+        When provided, data_path and dataset_name are ignored.
     """
 
-    def __init__(self, data_path, dataset_name):
-        self.data_source_dir = os.path.join(data_path, dataset_name)
-        self.dataset_name = dataset_name
+    def __init__(self, data_path=None, dataset_name=None, *, uri=None):
+        if uri is not None:
+            self.data_source_dir = str(uri)
+            self.dataset_name = dataset_name or Path(str(uri)).name
+        else:
+            self.data_source_dir = os.path.join(data_path, dataset_name)
+            self.dataset_name = dataset_name
 
     def get_name(self):
         raise NotImplementedError
@@ -64,28 +78,45 @@ class SelfMadeHydroDataset(HydroData):
     Only two directories are needed: attributes and timeseries
     """
 
-    def __init__(self, data_path, dataset_name, time_unit=None, **kwargs):
+    def __init__(
+        self,
+        data_path=None,
+        dataset_name=None,
+        time_unit=None,
+        *,
+        uri=None,
+        **kwargs,
+    ):
         """Initialize a self-made Caravan-style dataset.
 
         Parameters
         ----------
-        data_path : str
-            The path to the custom-made data sources' parent directory.
-        dataset_name : str
-            SelfMadeHydroDataset's name, for example, googleflood or fdsources,
-            different dataset may use this same datasource class, but they have different dataset_name.
+        data_path : str, optional
+            Parent directory path (legacy mode).
+        dataset_name : str, optional
+            Dataset name (legacy mode, or label when uri is used).
         time_unit : list, optional
-            we have different time units, by default None
+            Time units to process, by default None.
+        uri : str, optional
+            Resolved absolute URI pointing directly to the data directory.
+            When provided, data_path and dataset_name are used as labels only.
         kwargs : dict, optional
-            additional keyword arguments, by default None
+            Additional keyword arguments, by default None.
         """
-        if any(unit not in ["1h", "3h", "1D", "8D", "1M"] for unit in time_unit):
+        if time_unit and any(
+            unit not in ["1h", "3h", "1D", "8D", "1M"] for unit in time_unit
+        ):
             raise ValueError(
                 "time_unit must be one of ['1h', '3h', '1D', '8D','1M']. We only support these time units now."
             )
-        # TODO: maybe starting with "s3://" is a better idea?
-        self.head = "minio" if "s3://" in data_path else "local"
-        super().__init__(data_path, dataset_name)
+        # Determine filesystem head from URI or data_path
+        effective_path = str(uri) if uri is not None else (data_path or "")
+        self.head = "minio" if "s3://" in effective_path else "local"
+        super().__init__(
+            data_path=data_path,
+            dataset_name=dataset_name,
+            uri=uri,
+        )
         self.data_source_description = self.set_data_source_describe()
         self.camels_sites = self.read_site_info()
         self.time_unit = time_unit
@@ -852,12 +883,18 @@ class SelfMadeHydroDataset(HydroData):
 
 
 class LongTermDataset(SelfMadeHydroDataset):
-    def __init__(self, data_path, download=False, time_unit=None, **kwargs):
+    def __init__(self, data_path=None, download=False, time_unit=None, *, uri=None, **kwargs):
         if time_unit is None:
             time_unit = ["1M"]
         if "dataset_name" not in kwargs:
             kwargs["dataset_name"] = "gmspa"
-        super().__init__(data_path, download, time_unit, **kwargs)
+        super().__init__(
+            data_path=data_path,
+            dataset_name=kwargs.pop("dataset_name", str(download)),
+            time_unit=time_unit,
+            uri=uri,
+            **kwargs,
+        )
 
     def set_data_source_describe(self):
         the_dict = super().set_data_source_describe()
@@ -912,7 +949,7 @@ class LongTermDataset(SelfMadeHydroDataset):
 class SelfMadeForecastDataset(SelfMadeHydroDataset):
     """For selfmadehydrodataset, we design a new file format for forecast data from GFS et al."""
 
-    def __init__(self, data_path, dataset_name, time_unit=None):
+    def __init__(self, data_path=None, dataset_name=None, time_unit=None, *, uri=None):
         """intialize a Class for reading forecast data
 
         Parameters
@@ -924,7 +961,12 @@ class SelfMadeForecastDataset(SelfMadeHydroDataset):
         dataset_name: str
             name will be used for cache files
         """
-        super().__init__(data_path, dataset_name, time_unit)
+        super().__init__(
+            data_path=data_path,
+            dataset_name=dataset_name,
+            time_unit=time_unit,
+            uri=uri,
+        )
 
     def set_data_source_describe(self):
         """set data source description
@@ -1321,7 +1363,7 @@ class StationHydroDataset(SelfMadeHydroDataset):
         - adjacency_xxx_True.csv
     """
 
-    def __init__(self, data_path, dataset_name, time_unit=None, **kwargs):
+    def __init__(self, data_path=None, dataset_name=None, time_unit=None, *, uri=None, **kwargs):
         """Initialize StationHydroDataset.
 
         Parameters
@@ -1335,7 +1377,13 @@ class StationHydroDataset(SelfMadeHydroDataset):
         **kwargs : dict
             Additional keyword arguments passed to parent class
         """
-        super().__init__(data_path, dataset_name, time_unit, **kwargs)
+        super().__init__(
+            data_path=data_path,
+            dataset_name=dataset_name,
+            time_unit=time_unit,
+            uri=uri,
+            **kwargs,
+        )
         self.station_info = None
         self.basin_station_mapping = None
 
@@ -1919,7 +1967,7 @@ class TgHydroDatasource(SelfMadeHydroDataset):
       └── shapes/          # 区间流域形状文件
     """
 
-    def __init__(self, data_path, dataset_name=None, time_unit=None, **kwargs):
+    def __init__(self, data_path=None, dataset_name=None, time_unit=None, *, uri=None, **kwargs):
         """
         初始化TG流域数据集
 
@@ -1941,7 +1989,13 @@ class TgHydroDatasource(SelfMadeHydroDataset):
         #         "inter_basin_pred_file is required; please run scripts/generate_inter_basin_predictions.py to generate the inter-basin predictions."
         #     )
         # kwargs.pop("inter_basin_pred_file")
-        super().__init__(data_path, dataset_name, time_unit, **kwargs)
+        super().__init__(
+            data_path=data_path,
+            dataset_name=dataset_name,
+            time_unit=time_unit,
+            uri=uri,
+            **kwargs,
+        )
 
         # 基于 intermediate 属性数据的 downstream_id 生成拓扑关系
         self.dg = self._build_graph_from_intermediate_attributes()

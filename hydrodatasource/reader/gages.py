@@ -25,8 +25,8 @@ from hydrodatasource.reader.data_source import HydroData
 
 
 class Gages(HydroData):
-    def __init__(self, data_path, dataset_name):
-        super().__init__(data_path, dataset_name)
+    def __init__(self, data_path=None, dataset_name=None, *, uri=None):
+        super().__init__(data_path=data_path, dataset_name=dataset_name, uri=uri)
         self.data_source_description = self.set_data_source_describe()
         self.gages_sites = self.read_site_info()
 

@@ -32,9 +32,11 @@ class FloodEventDatasource(SelfMadeHydroDataset):
 
     def __init__(
         self,
-        data_path: str,
+        data_path: str = None,
         dataset_name: str = "songliaorrevents",
         time_unit: Optional[List[str]] = None,
+        *,
+        uri: str = None,
         rain_key: str = "rain",
         pet_key: str = "ES",
         net_rain_key: str = "net_rain",
@@ -86,9 +88,9 @@ class FloodEventDatasource(SelfMadeHydroDataset):
 
         super().__init__(
             data_path=data_path,
-            download=False,
             time_unit=time_unit,
             dataset_name=dataset_name,
+            uri=uri,
             **kwargs,
         )
 

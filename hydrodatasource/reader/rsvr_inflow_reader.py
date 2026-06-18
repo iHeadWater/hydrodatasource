@@ -18,8 +18,8 @@ from hydrodatasource.reader.data_source import HydroData
 
 
 class RsvrInflowReader(HydroData):
-    def __init__(self, data_folder):
-        self.data_source_dir = data_folder
+    def __init__(self, data_folder=None, *, uri=None):
+        self.data_source_dir = str(uri) if uri is not None else data_folder
         self.data_source_description = self.set_data_source_describe()
         self.rsvr_info = self.read_rsvr_info()
 

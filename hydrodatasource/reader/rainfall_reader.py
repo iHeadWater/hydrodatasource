@@ -81,7 +81,7 @@ def filter_out_rows(df1, df2, key_columns):
 
 @hydro_logger
 class RainfallReader(HydroData):
-    def __init__(self, data_folder):
+    def __init__(self, data_folder=None, *, uri=None):
         """A reader for basin rainfall data
         Even for station data, we still use basin as the index
 
@@ -90,7 +90,7 @@ class RainfallReader(HydroData):
         data_folder : _type_
             _description_
         """
-        self.data_source_dir = data_folder
+        self.data_source_dir = str(uri) if uri is not None else data_folder
         self.data_source_description = self.set_data_source_describe()
         self.station_info = self.read_station_info()
 
