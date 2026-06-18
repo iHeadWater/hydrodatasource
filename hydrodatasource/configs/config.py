@@ -1,232 +1,208 @@
 """
-Author: Jianfeng Zhu
+Author: Jianfeng Zhu, Wenyu Ouyang
 Date: 2023-10-25 18:49:02
-LastEditTime: 2025-10-31 11:28:17
+LastEditTime: 2025-06-18
 LastEditors: Wenyu Ouyang
-Description: Some configs for minio server
-FilePath: \hydrodatasource\hydrodatasource\configs\config.py
-Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
+Description: Storage and cache configuration for hydrodatasource.
+
+Reads ~/hydro_setting.yml (shared with hydromodel and hydrodataset).
+Supports the unified storage.* format defined in hydromodel ADR 0001.
+
+Legacy minio.* and postgres.* config blocks have been removed.
+Cloud access is unified under storage.s3.
+Database access is decoupled to a separate real-time service.
+
+Critical globals (SETTING, CACHE_DIR, FS, LOCAL_DATA_PATH, MINIO_PARAM) are
+initialized at import time for backward compatibility.
+New code should use the pure-function APIs (get_local_root, get_cache_dir).
+
+FilePath: \\hydrodatasource\\hydrodatasource\\configs\\config.py
+Copyright (c) 2023-2026 Wenyu Ouyang. All rights reserved.
 """
 
 import os
 from pathlib import Path
-import boto3
+from typing import Any, Dict, Optional
+
 import s3fs
 import yaml
-from minio import Minio
-import psycopg2
+
+from hydrodataset.configs.settings import (
+    get_cache_dir as _hd_get_cache_dir,
+    get_local_root as _hd_get_local_root,
+    get_storage_config as _hd_get_storage_config,
+)
+
+# ── Internal helpers (defined first — called by init) ───────────────────────
 
 
-def read_setting(setting_path):
+def _load_settings_from_file() -> Dict[str, Any]:
+    """Load settings from ~/hydro_setting.yml (supports old and new formats)."""
+    setting_path = os.path.join(Path.home(), "hydro_setting.yml")
     if not os.path.exists(setting_path):
-        raise FileNotFoundError(f"Configuration file not found: {setting_path}")
+        return {}
 
-    with open(setting_path, "r", encoding="utf-8") as file:  # 指定编码为 UTF-8
+    with open(setting_path, "r", encoding="utf-8") as file:
         setting = yaml.safe_load(file)
 
-    example_setting = (
-        "minio:\n"
-        "  server_url: 'http://minio.waterism.com:9090' # Update with your URL\n"
-        "  client_endpoint: 'http://minio.waterism.com:9000' # Update with your URL\n"
-        "  access_key: 'your minio access key'\n"
-        "  secret: 'your minio secret'\n\n"
-        "local_data_path:\n"
-        "  root: 'D:\\data\\waterism' # Update with your root data directory\n"
-        "  datasets-origin: 'D:\\data\\waterism\\datasets-origin'\n"
-        "  datasets-interim: 'D:\\data\\waterism\\datasets-interim'\n"
-        "  cache: 'D:\\data\\waterism\\.cache'\n"
-        "postgres:\n"
-        "  server_url: your_postgres_server_url\n"
-        "  port: 5432\n"
-        "  username: your_postgres_username\n"
-        "  password: your_postgres_secret_code\n"
-        "  database: your_postgres_database\n"
-    )
-
     if setting is None:
-        raise ValueError(
-            f"Configuration file is empty or has invalid format.\n\nExample configuration:\n{example_setting}"
-        )
-
-    # Define the expected structure
-    # Note: cache is now optional
-    expected_structure = {
-        "minio": ["server_url", "client_endpoint", "access_key", "secret"],
-        "local_data_path": ["root", "datasets-origin", "datasets-interim"],
-        "postgres": ["server_url", "port", "username", "password", "database"],
-    }
-
-    # Validate the structure
-    try:
-        for key, subkeys in expected_structure.items():
-            if key not in setting:
-                raise KeyError(f"Missing required key in config: {key}")
-
-            if isinstance(subkeys, list):
-                for subkey in subkeys:
-                    if subkey not in setting[key]:
-                        raise KeyError(f"Missing required subkey '{subkey}' in '{key}'")
-    except KeyError as e:
-        raise ValueError(
-            f"Incorrect configuration format: {e}\n\nExample configuration:\n{example_setting}"
-        ) from e
+        return {}
 
     return setting
 
 
-SETTING_FILE = os.path.join(Path.home(), "hydro_setting.yml")
-try:
-    SETTING = read_setting(SETTING_FILE)
-    LOCAL_DATA_PATH = SETTING["local_data_path"]["root"]
-    # cache is optional, use default if not provided
-    CACHE_DIR = SETTING["local_data_path"].get("cache", Path.home().joinpath("hydrodatasource_data", ".cache"))
-except (ValueError, FileNotFoundError) as e:
-    LOCAL_DATA_PATH = Path.home().joinpath("hydrodatasource_data")
-    CACHE_DIR = Path.home().joinpath("hydrodatasource_data", ".cache")
-    SETTING = {
-        "minio": {
-            "server_url": "",
-            "client_endpoint": "",
-            "access_key": "",
-            "secret": "",
-        },
-        "postgres": {
-            "server_url": "",
-            "port": 5432,
-            "username": "",
-            "password": "",
-            "database": "",
-        },
-        "local_data_path": {
-            "root": LOCAL_DATA_PATH,
-            "cache": CACHE_DIR,
+# ── Module-level state (initialized once at import for backward compat) ──
+
+SETTING: Dict[str, Any] = {}
+CACHE_DIR: str = ""
+LOCAL_DATA_PATH: str = ""
+FS: Optional[s3fs.S3FileSystem] = None
+MINIO_PARAM: Dict[str, str] = {}
+
+
+def _init_settings() -> None:
+    """Load settings from ~/hydro_setting.yml once at module load time."""
+    global SETTING, CACHE_DIR, LOCAL_DATA_PATH, FS, MINIO_PARAM
+
+    try:
+        setting = _load_settings_from_file()
+    except (ValueError, FileNotFoundError) as e:
+        print(f"Warning: Could not load hydro_setting.yml: {e}")
+        setting = {}
+
+    default_root = os.path.join(Path.home(), "hydrodatasource_data")
+    if not setting:
+        print(f"Using default data paths in home directory: {default_root}")
+        setting = {
+            "local_data_path": {
+                "root": default_root,
+                "datasets-origin": os.path.join(default_root, "datasets-origin"),
+                "datasets-interim": os.path.join(default_root, "datasets-interim"),
+                "cache": os.path.join(default_root, ".cache"),
+            }
         }
-    }
-    print(e)
-except Exception as e:
-    LOCAL_DATA_PATH = Path.home().joinpath("hydrodatasource_data")
-    CACHE_DIR = Path.home().joinpath("hydrodatasource_data", ".cache")
-    SETTING = {
-        "minio": {
-            "server_url": "",
-            "client_endpoint": "",
-            "access_key": "",
-            "secret": "",
-        },
-        "postgres": {
-            "server_url": "",
-            "port": 5432,
-            "username": "",
-            "password": "",
-            "database": "",
-        },
-        "local_data_path": {
-            "root": LOCAL_DATA_PATH,
-            "cache": CACHE_DIR,
+
+    # Bridge: if new format (storage.*) exists but old (local_data_path) is
+    # missing, create derived local_data_path for backward compat.
+    if "local_data_path" not in setting and "storage" in setting:
+        storage_local = setting["storage"].get("local", {})
+        storage_root = storage_local.get("root", default_root)
+        setting["local_data_path"] = {
+            "root": storage_root,
+            "datasets-origin": os.path.join(storage_root, "datasets-origin"),
+            "datasets-interim": os.path.join(storage_root, "datasets-interim"),
+            "cache": storage_local.get(
+                "cache", os.path.join(storage_root, ".cache")
+            ),
         }
-    }
-    print(f"Unexpected error: {e}")
 
-# Initialize remote service settings
-MINIO_PARAM = {}
-RO = {}
-S3 = None
-MC = None
-PS = None
-FS = None
-
-STATION_BUCKET = "stations"
-STATION_OBJECT = "sites.csv"
-GRID_INTERIM_BUCKET = "grids-interim"
-
-# Handle MinIO connection
-try:
-    # MinIO parameters
-    MINIO_PARAM = {
-        "endpoint_url": SETTING["minio"]["client_endpoint"],
-        "key": SETTING["minio"]["access_key"],
-        "secret": SETTING["minio"]["secret"],
-    }
-
-    # Initialize S3 FileSystem
-    FS = s3fs.S3FileSystem(
-        client_kwargs={"endpoint_url": MINIO_PARAM["endpoint_url"]},
-        key=MINIO_PARAM["key"],
-        secret=MINIO_PARAM["secret"],
-        use_ssl=False,
+    root = setting.get("local_data_path", {}).get("root", default_root)
+    cache = setting.get("local_data_path", {}).get(
+        "cache", os.path.join(Path.home(), "hydrodatasource_data", ".cache")
     )
 
-    # remote_options parameters for xr open_dataset from minio
-    RO = {
-        "client_kwargs": {"endpoint_url": MINIO_PARAM["endpoint_url"]},
-        "key": MINIO_PARAM["key"],
-        "secret": MINIO_PARAM["secret"],
-        "use_ssl": False,
-    }
+    SETTING = setting
+    LOCAL_DATA_PATH = root
+    CACHE_DIR = cache
 
-    # Set up MinIO client
-    S3 = boto3.client(
-        "s3",
-        endpoint_url=SETTING["minio"]["client_endpoint"],
-        aws_access_key_id=MINIO_PARAM["key"],
-        aws_secret_access_key=MINIO_PARAM["secret"],
-    )
-    MC = Minio(
-        SETTING["minio"]["client_endpoint"].replace("http://", ""),
-        access_key=MINIO_PARAM["key"],
-        secret_key=MINIO_PARAM["secret"],
-        secure=False,  # True if using HTTPS
-    )
-except KeyError as e:
-    print(f"Configuration error: {e}")
-except Exception as e:
-    print(f"Remote service setup failed: {e}")
-
-# PostgreSQL connection parameters (lazy loading)
-POSTGRES_PARAM = {}
-PS = None
-
-# Initialize PostgreSQL parameters but don't connect yet
-try:
-    POSTGRES_PARAM = {
-        "database": SETTING["postgres"]["database"],
-        "user": SETTING["postgres"]["username"],
-        "password": SETTING["postgres"]["password"],
-        "host": SETTING["postgres"]["server_url"],
-        "port": SETTING["postgres"]["port"],
-    }
-except KeyError as e:
-    print(f"PostgreSQL configuration error: {e}")
-    POSTGRES_PARAM = {}
-
-
-def get_postgres_connection():
-    """
-    Get PostgreSQL connection with lazy initialization.
-
-    Returns:
-        psycopg2.connection: PostgreSQL connection object, or None if failed
-    """
-    global PS
-
-    if PS is not None:
-        # Check if connection is still alive
+    # Initialize S3FS only if minio credentials are present in old-format config
+    minio_cfg = setting.get("minio", {})
+    if minio_cfg.get("client_endpoint") and minio_cfg.get("access_key"):
+        MINIO_PARAM = {
+            "endpoint_url": minio_cfg["client_endpoint"],
+            "key": minio_cfg["access_key"],
+            "secret": minio_cfg.get("secret", ""),
+        }
         try:
-            PS.cursor().execute("SELECT 1")
-            return PS
-        except (psycopg2.OperationalError, psycopg2.InterfaceError):
-            # Connection is dead, need to reconnect
-            PS = None
-
-    # Create new connection
-    if POSTGRES_PARAM:
-        try:
-            PS = psycopg2.connect(**POSTGRES_PARAM)
-            return PS
+            FS = s3fs.S3FileSystem(
+                client_kwargs={"endpoint_url": MINIO_PARAM["endpoint_url"]},
+                key=MINIO_PARAM["key"],
+                secret=MINIO_PARAM["secret"],
+                use_ssl=False,
+            )
         except Exception as e:
-            print(f"Failed to connect to PostgreSQL: {e}")
-            PS = None
-            return None
+            print(f"Warning: S3FS initialization failed: {e}")
+            FS = None
     else:
-        print("PostgreSQL configuration not available")
-        return None
+        MINIO_PARAM = {}
+        FS = None
+
+
+# Initialize at module load (backward compat)
+_init_settings()
+
+
+# ── Public API (pure functions — no side effects) ─────────────────────────
+
+
+def get_local_root() -> Optional[Path]:
+    """Get the local storage root directory.
+
+    Uses the new storage.local.root format (via hydrodataset settings).
+    Falls back to the old local_data_path.root format for backward compat.
+    """
+    root = _hd_get_local_root()
+    if root is not None:
+        return root
+    if LOCAL_DATA_PATH:
+        return Path(LOCAL_DATA_PATH)
+    return None
+
+
+def get_cache_dir() -> Path:
+    """Get cache directory via hydrodataset's cache resolution logic."""
+    return _hd_get_cache_dir()
+
+
+def get_storage_config() -> Dict[str, Any]:
+    """Get storage configuration block (new format)."""
+    return _hd_get_storage_config()
+
+
+def read_setting(setting_path: str) -> Dict[str, Any]:
+    """Read and validate a hydro_setting.yml file.
+
+    Accepts both old (local_data_path.*) and new (storage.*) formats.
+    No longer requires minio or postgres sections.
+    """
+    if not os.path.exists(setting_path):
+        raise FileNotFoundError(f"Configuration file not found: {setting_path}")
+
+    with open(setting_path, "r", encoding="utf-8") as file:
+        setting = yaml.safe_load(file)
+
+    example_setting = (
+        "# New format (recommended):\n"
+        "storage:\n"
+        "  default_source: local\n"
+        "  local:\n"
+        "    root: 'D:\\\\data\\\\hydrodatasource'\n"
+        "  s3:\n"
+        "    bucket: hydro-data\n"
+        "    prefix: hydromodel\n"
+        "    region: us-east-1\n"
+        "    profile: default\n\n"
+        "# Old format (deprecated, still supported):\n"
+        "local_data_path:\n"
+        "  root: 'D:\\\\data\\\\waterism'\n"
+        "  datasets-origin: 'D:\\\\data\\\\waterism\\\\datasets-origin'\n"
+        "  datasets-interim: 'D:\\\\data\\\\waterism\\\\datasets-interim'\n"
+        "  cache: 'D:\\\\data\\\\waterism\\\\.cache'\n"
+    )
+
+    if setting is None:
+        raise ValueError(
+            f"Configuration file is empty or has invalid format.\n\n"
+            f"Example configuration:\n{example_setting}"
+        )
+
+    has_old = "local_data_path" in setting
+    has_new = "storage" in setting
+    if not has_old and not has_new:
+        raise ValueError(
+            f"Configuration must have 'storage' (new format) or "
+            f"'local_data_path' (old format) section.\n\n"
+            f"Example configuration:\n{example_setting}"
+        )
+
+    return setting
