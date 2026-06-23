@@ -285,3 +285,27 @@ class TestFormatBridging:
         # Restore
         monkeypatch.setattr(config, "_load_settings_from_file", original_load)
         config._init_settings()
+
+    def test_cache_dir_consistent_with_get_cache_dir(self, monkeypatch):
+        """CACHE_DIR delegates to hydrodataset get_cache_dir."""
+        from hydrodatasource.configs import config
+        from pathlib import Path
+
+        unified_cache = str(Path.home() / ".cache" / "unified_test")
+
+        original_load = config._load_settings_from_file
+
+        def mock_load():
+            return {"storage": {"local": {"root": "/tmp/data"}}}
+
+        monkeypatch.setattr(config, "_load_settings_from_file", mock_load)
+        monkeypatch.setattr(config, "_hd_get_cache_dir", lambda: Path(unified_cache))
+        config._init_settings()
+
+        assert config.CACHE_DIR == unified_cache, (
+            f"CACHE_DIR={config.CACHE_DIR} != expected {unified_cache}"
+        )
+
+        # Restore
+        monkeypatch.setattr(config, "_load_settings_from_file", original_load)
+        config._init_settings()

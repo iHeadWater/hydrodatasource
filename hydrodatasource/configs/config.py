@@ -13,14 +13,14 @@ Cloud access is unified under storage.s3.
 Database access is decoupled to a separate real-time service.
 
 Critical globals (SETTING, CACHE_DIR, FS, LOCAL_DATA_PATH, MINIO_PARAM) are
-initialized at import time for backward compatibility.
-New code should use the pure-function APIs (get_local_root, get_cache_dir).
+lazy-loaded via module __getattr__ to avoid import-time side effects.
 
 FilePath: \\hydrodatasource\\hydrodatasource\\configs\\config.py
 Copyright (c) 2023-2026 Wenyu Ouyang. All rights reserved.
 """
 
 import os
+import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -51,18 +51,21 @@ def _load_settings_from_file() -> Dict[str, Any]:
     return setting
 
 
-# ── Module-level state (initialized once at import for backward compat) ──
+# ── Lazy-loading state ──────────────────────────────────────────────────────
 
-SETTING: Dict[str, Any] = {}
-CACHE_DIR: str = ""
-LOCAL_DATA_PATH: str = ""
-FS: Optional[s3fs.S3FileSystem] = None
-MINIO_PARAM: Dict[str, str] = {}
+_LAZY_KEYS = frozenset({"SETTING", "CACHE_DIR", "LOCAL_DATA_PATH", "FS", "MINIO_PARAM"})
+_lazy: Dict[str, Any] = {}
+_initialized: bool = False
 
 
 def _init_settings() -> None:
-    """Load settings from ~/hydro_setting.yml once at module load time."""
-    global SETTING, CACHE_DIR, LOCAL_DATA_PATH, FS, MINIO_PARAM
+    """Load settings from ~/hydro_setting.yml — called lazily on first access."""
+    global _initialized
+
+    # Remove stale __dict__ entries that may have been left by monkeypatch
+    # teardowns in tests (they shadow __getattr__ for lazy keys).
+    for key in _LAZY_KEYS:
+        globals().pop(key, None)
 
     try:
         setting = _load_settings_from_file()
@@ -97,39 +100,50 @@ def _init_settings() -> None:
         }
 
     root = setting.get("local_data_path", {}).get("root", default_root)
-    cache = setting.get("local_data_path", {}).get(
-        "cache", os.path.join(Path.home(), "hydrodatasource_data", ".cache")
-    )
 
-    SETTING = setting
-    LOCAL_DATA_PATH = root
-    CACHE_DIR = cache
+    _lazy["SETTING"] = setting
+    _lazy["LOCAL_DATA_PATH"] = root
+    _lazy["CACHE_DIR"] = str(_hd_get_cache_dir())
 
     # Initialize S3FS only if minio credentials are present in old-format config
     minio_cfg = setting.get("minio", {})
     if minio_cfg.get("client_endpoint") and minio_cfg.get("access_key"):
-        MINIO_PARAM = {
+        _lazy["MINIO_PARAM"] = {
             "endpoint_url": minio_cfg["client_endpoint"],
             "key": minio_cfg["access_key"],
             "secret": minio_cfg.get("secret", ""),
         }
         try:
-            FS = s3fs.S3FileSystem(
-                client_kwargs={"endpoint_url": MINIO_PARAM["endpoint_url"]},
-                key=MINIO_PARAM["key"],
-                secret=MINIO_PARAM["secret"],
+            _lazy["FS"] = s3fs.S3FileSystem(
+                client_kwargs={"endpoint_url": _lazy["MINIO_PARAM"]["endpoint_url"]},
+                key=_lazy["MINIO_PARAM"]["key"],
+                secret=_lazy["MINIO_PARAM"]["secret"],
                 use_ssl=False,
             )
         except Exception as e:
             print(f"Warning: S3FS initialization failed: {e}")
-            FS = None
+            _lazy["FS"] = None
     else:
-        MINIO_PARAM = {}
-        FS = None
+        _lazy["MINIO_PARAM"] = {}
+        _lazy["FS"] = None
+
+    _initialized = True
 
 
-# Initialize at module load (backward compat)
-_init_settings()
+def __getattr__(name: str) -> Any:
+    """Lazy-load critical globals on first access.
+
+    Avoids import-time side effects (YAML reads, s3fs connections, print()
+    calls) — all deferred until a caller actually accesses SETTING, CACHE_DIR,
+    LOCAL_DATA_PATH, FS, or MINIO_PARAM.
+    """
+    if name not in _LAZY_KEYS:
+        raise AttributeError(
+            f"module 'hydrodatasource.configs.config' has no attribute '{name}'"
+        )
+    if not _initialized:
+        _init_settings()
+    return _lazy[name]
 
 
 # ── Public API (pure functions — no side effects) ─────────────────────────
@@ -144,8 +158,10 @@ def get_local_root() -> Optional[Path]:
     root = _hd_get_local_root()
     if root is not None:
         return root
-    if LOCAL_DATA_PATH:
-        return Path(LOCAL_DATA_PATH)
+    # Use getattr to support monkeypatched values (tests) and __getattr__ fallback
+    local = getattr(sys.modules[__name__], "LOCAL_DATA_PATH", "")
+    if local:
+        return Path(local)
     return None
 
 
