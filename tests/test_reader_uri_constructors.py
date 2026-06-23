@@ -179,6 +179,41 @@ class TestPatternBConstructors:
         ds = RsvrInflowReader(data_folder="/data/rsvr_inflow")
         assert ds.data_source_dir == "/data/rsvr_inflow"
 
+    @pytest.mark.parametrize(
+        "reader_cls_factory, expected_name",
+        [
+            ("grdc", "grdc"),
+            ("rainfall", "rainfall"),
+            ("crd", "crd"),
+            ("rsvrinflow", "rsvrinflow"),
+        ],
+    )
+    def test_pattern_b_readers_have_dataset_name(
+        self, mock_read_site_info, reader_cls_factory, expected_name
+    ):
+        """Pattern B readers set dataset_name from URI (uri mode)."""
+        if reader_cls_factory == "grdc":
+            from hydrodatasource.reader.grdc import Grdc
+
+            ds = Grdc(uri=f"/data/{expected_name}")
+        elif reader_cls_factory == "rainfall":
+            from hydrodatasource.reader.rainfall_reader import RainfallReader
+
+            ds = RainfallReader(uri=f"/data/{expected_name}")
+        elif reader_cls_factory == "crd":
+            from hydrodatasource.reader.reservoir_datasets import Crd
+
+            ds = Crd(uri=f"/data/{expected_name}")
+        elif reader_cls_factory == "rsvrinflow":
+            from hydrodatasource.reader.rsvr_inflow_reader import RsvrInflowReader
+
+            ds = RsvrInflowReader(uri=f"/data/{expected_name}")
+
+        assert hasattr(ds, "dataset_name"), f"{reader_cls_factory}: no dataset_name attr"
+        assert ds.dataset_name == expected_name, (
+            f"{reader_cls_factory}: expected {expected_name}, got {ds.dataset_name}"
+        )
+
 
 # ── Pattern A classes (call super().__init__ via SelfMadeHydroDataset) ──────
 
@@ -392,6 +427,38 @@ class TestSelfMadeHydroDatasetConstructor:
         )
         assert ds.dataset_name == "minimal_dataset"
         assert str(minimal_dataset) in ds.data_source_dir
+
+
+class TestS3UriPathCheck:
+    """FloodEventDatasource with S3 uris should skip os.path.exists checks."""
+
+    def test_s3_uri_does_not_raise_filenotfound(self, monkeypatch):
+        """S3 URIs skip local filesystem checks — no FileNotFoundError."""
+        from hydrodatasource.reader.floodevent import FloodEventDatasource
+
+        # Prevent network calls triggered by set_data_source_describe
+        monkeypatch.setattr(
+            "hydrodatasource.reader.data_source.SelfMadeHydroDataset.set_data_source_describe",
+            lambda self: {"TS_DIRS": [], "ATTR_FILE": "", "UNIT_FILES": [], "SHAPE_DIR": ""},
+        )
+        monkeypatch.setattr(
+            "hydrodatasource.reader.data_source.SelfMadeHydroDataset.read_site_info",
+            lambda self: type("obj", (), {"__getitem__": lambda s, k: type("arr", (), {"values": []})()})(),
+        )
+
+        ds = FloodEventDatasource(
+            uri="s3://hydro-data/hydromodel/projects/songliao/event"
+        )
+        assert ds.head == "minio"
+        assert "s3://" in ds.data_source_dir
+
+    def test_local_nonexistent_path_raises(self, tmp_path):
+        """Non-existent local path still raises FileNotFoundError."""
+        from hydrodatasource.reader.floodevent import FloodEventDatasource
+
+        bad_path = str(tmp_path / "nonexistent" / "dataset")
+        with pytest.raises(FileNotFoundError):
+            FloodEventDatasource(uri=bad_path)
 
 
 # ── Import fix: needed for patch.object ─────────────────────────────────────

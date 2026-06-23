@@ -30,6 +30,7 @@ class Grdc(HydroData):
 
     def __init__(self, data_path=None, *, uri=None):
         self.data_source_dir = str(uri) if uri is not None else data_path
+        self.dataset_name = Path(str(uri)).name if uri else os.path.basename(str(data_path))
         self.data_source_description = self.set_data_source_describe()
         self.grdc_site_info = self.read_site_info()
 

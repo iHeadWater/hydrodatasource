@@ -10,6 +10,7 @@ Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 
 import collections
 import os
+from pathlib import Path
 
 import pandas as pd
 from tqdm import tqdm
@@ -20,6 +21,7 @@ from hydrodatasource.reader.data_source import HydroData
 class RsvrInflowReader(HydroData):
     def __init__(self, data_folder=None, *, uri=None):
         self.data_source_dir = str(uri) if uri is not None else data_folder
+        self.dataset_name = Path(str(uri)).name if uri else os.path.basename(str(data_folder))
         self.data_source_description = self.set_data_source_describe()
         self.rsvr_info = self.read_rsvr_info()
 

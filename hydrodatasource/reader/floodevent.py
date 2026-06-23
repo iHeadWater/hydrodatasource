@@ -94,33 +94,34 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             **kwargs,
         )
 
-        # 验证数据目录是否存在
-        if not os.path.exists(self.data_source_dir):
-            raise FileNotFoundError(
-                f"❌ 数据集目录不存在: {self.data_source_dir}\n"
-                f"\n配置信息:"
-                f"\n  data_path     = {data_path}"
-                f"\n  dataset_name  = {dataset_name}"
-                f"\n  拼接后路径    = {self.data_source_dir}"
-                f"\n\n请检查:"
-                f"\n  1. data_path 是否指向数据集的父目录"
-                f"\n  2. dataset_name 拼写是否正确"
-                f"\n  3. 数据集目录是否实际存在"
-            )
+        # 验证数据目录是否存在（S3/云端路径跳过本地文件系统检查）
+        if self.head != "minio":
+            if not os.path.exists(self.data_source_dir):
+                raise FileNotFoundError(
+                    f"❌ 数据集目录不存在: {self.data_source_dir}\n"
+                    f"\n配置信息:"
+                    f"\n  data_path     = {data_path}"
+                    f"\n  dataset_name  = {dataset_name}"
+                    f"\n  拼接后路径    = {self.data_source_dir}"
+                    f"\n\n请检查:"
+                    f"\n  1. data_path 是否指向数据集的父目录"
+                    f"\n  2. dataset_name 拼写是否正确"
+                    f"\n  3. 数据集目录是否实际存在"
+                )
 
-        # 验证必需的子目录
-        required_subdirs = ["attributes", "timeseries"]
-        missing_dirs = []
-        for subdir in required_subdirs:
-            subdir_path = os.path.join(self.data_source_dir, subdir)
-            if not os.path.exists(subdir_path):
-                missing_dirs.append(subdir)
+            # 验证必需的子目录
+            required_subdirs = ["attributes", "timeseries"]
+            missing_dirs = []
+            for subdir in required_subdirs:
+                subdir_path = os.path.join(self.data_source_dir, subdir)
+                if not os.path.exists(subdir_path):
+                    missing_dirs.append(subdir)
 
-        if missing_dirs:
-            raise FileNotFoundError(
-                f"❌ 数据集目录结构不完整: {self.data_source_dir}\n"
-                f"缺少以下子目录: {', '.join(missing_dirs)}"
-            )
+            if missing_dirs:
+                raise FileNotFoundError(
+                    f"❌ 数据集目录结构不完整: {self.data_source_dir}\n"
+                    f"缺少以下子目录: {', '.join(missing_dirs)}"
+                )
 
     def get_constants(self):
         """
@@ -316,13 +317,13 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             if include_peak_obs:
                 peak_flow = np.nanmax(inflow)
                 if peak_flow < 1e-6:
-                    return {}
+                    return None
                 event_dict["peak_obs"] = peak_flow
 
             return event_dict
 
         except Exception:
-            return {}
+            return None
 
     def load_1basin_flood_events(
         self,

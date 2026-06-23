@@ -109,7 +109,7 @@ class TestResolveDataPath:
         from hydrodatasource.configs.data_resolver import resolve_data_path
 
         monkeypatch.setattr(
-            "hydrodatasource.configs.data_resolver.get_local_root",
+            "hydrodataset.configs.data_resolver.get_local_root",
             lambda: temp_root / "data",
         )
 
@@ -127,7 +127,7 @@ class TestResolveDataPath:
         )
 
         monkeypatch.setattr(
-            "hydrodatasource.configs.data_resolver.get_local_root",
+            "hydrodataset.configs.data_resolver.get_local_root",
             lambda: tmp_path / "data",
         )
 
@@ -153,7 +153,7 @@ class TestResolveDataPath:
         from hydrodatasource.configs.data_resolver import resolve_data_path
 
         monkeypatch.setattr(
-            "hydrodatasource.configs.data_resolver.get_storage_config",
+            "hydrodataset.configs.data_resolver.get_storage_config",
             lambda: {
                 "s3": {
                     "bucket": "hydro-data",
@@ -166,3 +166,18 @@ class TestResolveDataPath:
             "songliao_event", source="cloud", project_root=str(datasets_yml)
         )
         assert uri == "s3://hydro-data/hydromodel/projects/songliao/event"
+
+    def test_resolve_with_local_root_override(self, tmp_path):
+        """local_root overrides storage.local.root for project-level override."""
+        from hydrodatasource.configs.data_resolver import resolve_data_path
+
+        custom_root = tmp_path / "custom"
+        custom_root.mkdir(parents=True)
+        dataset_dir = custom_root / "projects" / "songliao" / "event"
+        dataset_dir.mkdir(parents=True)
+
+        uri = resolve_data_path(
+            "songliao_event", source="local", local_root=str(custom_root)
+        )
+        expected = str(dataset_dir)
+        assert uri == expected

@@ -9,6 +9,7 @@ Description: Reader for cleaned rainfall data
 
 import collections
 import os
+from pathlib import Path
 
 import pandas as pd
 from tqdm import tqdm
@@ -91,6 +92,7 @@ class RainfallReader(HydroData):
             _description_
         """
         self.data_source_dir = str(uri) if uri is not None else data_folder
+        self.dataset_name = Path(str(uri)).name if uri else os.path.basename(str(data_folder))
         self.data_source_description = self.set_data_source_describe()
         self.station_info = self.read_station_info()
 
