@@ -181,3 +181,40 @@ class TestResolveDataPath:
         )
         expected = str(dataset_dir)
         assert uri == expected
+
+    def test_resolves_via_injected_registry_without_yaml(self, tmp_path, monkeypatch):
+        """songliao_event resolves via _HDS_DATASETS injection (no YAML needed).
+
+        The in-code _HDS_DATASETS registry is the library's source of truth.
+        YAML files (configs/datasets.yml) are for user projects — the library
+        does not ship one. Resolution must work without any YAML file present.
+        """
+        from hydrodatasource.configs.data_resolver import resolve_data_path
+
+        # Create temp data directory (no YAML anywhere)
+        data_dir = tmp_path / "data"
+        data_dir.mkdir(parents=True)
+        dataset_dir = data_dir / "projects" / "songliao" / "event"
+        dataset_dir.mkdir(parents=True)
+
+        monkeypatch.setattr(
+            "hydrodataset.configs.data_resolver.get_local_root",
+            lambda: data_dir,
+        )
+
+        # Pass a project_root that has NO configs/datasets.yml
+        # Resolution must succeed via _HDS_DATASETS injection alone
+        uri = resolve_data_path(
+            "songliao_event", source="local", project_root=str(tmp_path)
+        )
+        expected = str(dataset_dir)
+        assert uri == expected
+
+    def test_extra_registry_contains_songliao_event(self):
+        """_HDS_DATASETS hardcoded registry contains the songliao_event entry."""
+        from hydrodatasource.configs.data_resolver import _HDS_DATASETS
+
+        assert "songliao_event" in _HDS_DATASETS
+        spec = _HDS_DATASETS["songliao_event"]
+        assert spec["reader"] == "floodevent"
+        assert spec["path"] == "projects/songliao/event"

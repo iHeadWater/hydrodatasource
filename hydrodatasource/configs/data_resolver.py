@@ -97,7 +97,15 @@ READER_ALIASES: Dict[str, Dict[str, str]] = {
     **_HDS_READER_ALIASES,
 }
 
-# ── In-memory dataset registry (no YAML file needed) ─────────────────────
+# ── Dataset registry (in-code, not YAML) ──────────────────────────────────
+#
+# The library's dataset registry lives here in code. This is the authoritative
+# source for datasets served by this package (Layer 2 in the 3-layer cascade).
+#
+# YAML files (configs/datasets.yml) are a Layer 3 **user override** — external
+# projects using hydrodatasource or hydrodataset can provide their own
+# configs/datasets.yml to customize or extend the registry. The library itself
+# does not ship a default YAML.
 
 _HDS_DATASETS: Dict[str, Dict[str, str]] = {
     "songliao_event": {
