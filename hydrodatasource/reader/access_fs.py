@@ -52,7 +52,7 @@ def spec_path(url_path: str, head="local", need_cache=False, is_dir=False):
     else:
         ret_data = []
         if head == "local":
-            url_path = os.path.join(conf.LOCAL_DATA_PATH, url_path)
+            url_path = os.path.join(conf.LOCAL_ROOT, url_path)
             ret_data.extend(
                 read_valid_data(file, need_cache=need_cache)
                 for file in glob.glob(url_path + "/**", recursive=True)
@@ -101,19 +101,19 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False, need_refer=
     if not dot_in_obj:
         data_obj = pd.read_fwf(obj, storage_options=storage_option)
         if (need_cache is True) & (storage_option is not None):
-            data_obj.to_file(path=os.path.join(conf.LOCAL_DATA_PATH, cache_name))
+            data_obj.to_file(path=os.path.join(conf.LOCAL_ROOT, cache_name))
     else:
         ext_name = obj.split(".")[-1]
         if ext_name == "csv":
             data_obj = pd.read_csv(obj, storage_options=storage_option)
             if need_cache & (storage_option is not None):
                 data_obj.to_csv(
-                    path_or_buf=os.path.join(conf.LOCAL_DATA_PATH, cache_name)
+                    path_or_buf=os.path.join(conf.LOCAL_ROOT, cache_name)
                 )
         elif ext_name == "txt":
             data_obj = pd.read_fwf(obj, storage_options=storage_option)
             if need_cache & (storage_option is not None):
-                data_obj.to_csv(os.path.join(conf.LOCAL_DATA_PATH, cache_name))
+                data_obj.to_csv(os.path.join(conf.LOCAL_ROOT, cache_name))
         elif (ext_name in ["nc", "nc4", "h5", "hdf5"]) or ("nc4" in obj):
             if need_refer:
                 data_obj = gen_refer_and_read_zarr(obj, storage_option=storage_option)
@@ -140,12 +140,12 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False, need_refer=
                         phony_dims="access",
                     )
             if (need_cache is True) & (storage_option is not None):
-                data_obj.to_netcdf(path=os.path.join(conf.LOCAL_DATA_PATH, cache_name))
+                data_obj.to_netcdf(path=os.path.join(conf.LOCAL_ROOT, cache_name))
         elif ext_name == "json":
             data_obj = pd.read_json(obj, storage_options=storage_option)
             if (need_cache is True) & (storage_option is not None):
                 data_obj.to_json(
-                    path_or_buf=os.path.join(conf.LOCAL_DATA_PATH, cache_name)
+                    path_or_buf=os.path.join(conf.LOCAL_ROOT, cache_name)
                 )
         elif ext_name == "zip":
             # Now zipfile is used to read shapefile
@@ -156,7 +156,7 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False, need_refer=
             else:
                 data_obj = gpd.read_file(obj)
             if (need_cache is True) & (storage_option is not None):
-                data_obj.to_file(path=os.path.join(conf.LOCAL_DATA_PATH, cache_name))
+                data_obj.to_file(path=os.path.join(conf.LOCAL_ROOT, cache_name))
         elif "grb2" in obj:
             if storage_option is not None:
                 obj = f"simplecache::{obj}"
@@ -171,7 +171,7 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False, need_refer=
             else:
                 grib_ds = xr.open_dataset(obj)
             if (need_cache is True) & (storage_option is not None):
-                grib_ds.to_netcdf(path=os.path.join(conf.LOCAL_DATA_PATH, cache_name))
+                grib_ds.to_netcdf(path=os.path.join(conf.LOCAL_ROOT, cache_name))
         elif ext_name == "zarr":
             if storage_option is not None:
                 zarr_mapper = conf.FS.get_mapper(obj)

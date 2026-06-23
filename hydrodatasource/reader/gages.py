@@ -21,12 +21,14 @@ import pytz
 from pandas.core.dtypes.common import is_string_dtype, is_numeric_dtype
 from tqdm import tqdm
 from hydroutils import hydro_logger, hydro_file, hydro_stat
+import hydrodatasource.configs.config as conf
+from hydrodatasource.configs.config import CACHE_DIR
 from hydrodatasource.reader.data_source import HydroData
 
 
 class Gages(HydroData):
-    def __init__(self, data_path=None, dataset_name=None, *, uri=None):
-        super().__init__(data_path=data_path, dataset_name=dataset_name, uri=uri)
+    def __init__(self, uri):
+        super().__init__(uri)
         self.data_source_description = self.set_data_source_describe()
         self.gages_sites = self.read_site_info()
 

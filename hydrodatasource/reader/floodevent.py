@@ -32,11 +32,9 @@ class FloodEventDatasource(SelfMadeHydroDataset):
 
     def __init__(
         self,
-        data_path: str = None,
-        dataset_name: str = "songliaorrevents",
+        uri: str = None,
         time_unit: Optional[List[str]] = None,
         *,
-        uri: str = None,
         rain_key: str = "rain",
         pet_key: str = "ES",
         net_rain_key: str = "net_rain",
@@ -49,10 +47,8 @@ class FloodEventDatasource(SelfMadeHydroDataset):
 
         Parameters
         ----------
-        data_path : str
-            Path to the data.
-        dataset_name : str, optional
-            Name of the dataset.
+        uri : str
+            Absolute path or S3 URI pointing to the data directory.
         time_unit : list of str, optional
             List of time units, default is ["3h"].
         rain_key : str, optional
@@ -71,15 +67,14 @@ class FloodEventDatasource(SelfMadeHydroDataset):
             time_unit = ["3h"]
 
         # Derive delta_t_hours from time_unit
-        # 从time_unit推导出时间步长（小时）
-        primary_time_unit = time_unit[0]  # 使用第一个时间单位作为主要单位
+        primary_time_unit = time_unit[0]
         delta_t_hours = FloodEventDatasource._parse_time_unit_to_hours(
             primary_time_unit
         )
 
         # Store constants as instance attributes
         self.rain_key = rain_key
-        self.pet_key = pet_key  # 假设数据集中蒸散发的列名为 'ES'
+        self.pet_key = pet_key
         self.net_rain_key = net_rain_key
         self.obs_flow_key = obs_flow_key
         self.warmup_length = warmup_length
@@ -87,29 +82,19 @@ class FloodEventDatasource(SelfMadeHydroDataset):
         self.delta_t_seconds = self.delta_t_hours * 3600.0
 
         super().__init__(
-            data_path=data_path,
-            time_unit=time_unit,
-            dataset_name=dataset_name,
             uri=uri,
+            time_unit=time_unit,
             **kwargs,
         )
 
-        # 验证数据目录是否存在（S3/云端路径跳过本地文件系统检查）
+        # Skip local filesystem checks for S3/cloud paths
         if self.head != "minio":
             if not os.path.exists(self.data_source_dir):
                 raise FileNotFoundError(
-                    f"❌ 数据集目录不存在: {self.data_source_dir}\n"
-                    f"\n配置信息:"
-                    f"\n  data_path     = {data_path}"
-                    f"\n  dataset_name  = {dataset_name}"
-                    f"\n  拼接后路径    = {self.data_source_dir}"
-                    f"\n\n请检查:"
-                    f"\n  1. data_path 是否指向数据集的父目录"
-                    f"\n  2. dataset_name 拼写是否正确"
-                    f"\n  3. 数据集目录是否实际存在"
+                    f"Dataset directory does not exist: {self.data_source_dir}\n"
+                    f"uri = {uri}"
                 )
 
-            # 验证必需的子目录
             required_subdirs = ["attributes", "timeseries"]
             missing_dirs = []
             for subdir in required_subdirs:
@@ -119,8 +104,8 @@ class FloodEventDatasource(SelfMadeHydroDataset):
 
             if missing_dirs:
                 raise FileNotFoundError(
-                    f"❌ 数据集目录结构不完整: {self.data_source_dir}\n"
-                    f"缺少以下子目录: {', '.join(missing_dirs)}"
+                    f"Dataset directory structure incomplete: {self.data_source_dir}\n"
+                    f"Missing subdirectories: {', '.join(missing_dirs)}"
                 )
 
     def get_constants(self):

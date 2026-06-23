@@ -21,16 +21,15 @@ import xarray as xr
 import geopandas as gpd
 from dateutil.parser import parse
 
-from hydrodatasource.configs.config import CACHE_DIR, SETTING
+from hydrodatasource.configs.config import CACHE_DIR, get_local_root
 from hydrodatasource.reader.data_source import HydroData
 
 
 class Grdc(HydroData):
     """Reading GRDC streamflow data."""
 
-    def __init__(self, data_path=None, *, uri=None):
-        self.data_source_dir = str(uri) if uri is not None else data_path
-        self.dataset_name = Path(str(uri)).name if uri else os.path.basename(str(data_path))
+    def __init__(self, uri):
+        super().__init__(uri)
         self.data_source_description = self.set_data_source_describe()
         self.grdc_site_info = self.read_site_info()
 
@@ -610,7 +609,7 @@ def _convert_to_serializable(obj):
 
 
 if __name__ == "__main__":
-    data_dir = os.path.join(SETTING["local_data_path"]["datasets-origin"], "GRDC")
+    data_dir = str(get_local_root() / "datasets-origin" / "GRDC")
     grdc = Grdc(data_dir)
     # grdc.cache_grdc_daily(["1107700", "4101200"], ["1990-10-01", "2000-10-01"])
     grdc.cache_grdc_daily()

@@ -19,74 +19,70 @@ import pytest
 
 
 class TestHydroDataBase:
-    """Test the HydroData abstract base class constructor."""
+    """Test the HydroData abstract base class constructor.
+
+    Only uri= (positional) is accepted. No data_path, dataset_name, or data_folder.
+    """
 
     def test_uri_construction_sets_data_source_dir(self):
-        """uri kwarg sets data_source_dir directly."""
+        """uri sets data_source_dir directly."""
         from hydrodatasource.reader.data_source import HydroData
 
-        ds = HydroData(uri="/tmp/test/dataset")
+        ds = HydroData("/tmp/test/dataset")
         assert ds.data_source_dir == "/tmp/test/dataset"
 
     def test_uri_construction_sets_dataset_name_from_uri(self):
-        """dataset_name defaults to the last component of the URI path."""
+        """dataset_name is always derived from the URI basename."""
         from hydrodatasource.reader.data_source import HydroData
 
-        ds = HydroData(uri="/tmp/test/my_dataset")
+        ds = HydroData("/tmp/test/my_dataset")
         assert ds.dataset_name == "my_dataset"
-
-    def test_uri_with_explicit_dataset_name(self):
-        """Explicit dataset_name is preserved when uri is provided."""
-        from hydrodatasource.reader.data_source import HydroData
-
-        ds = HydroData(uri="/tmp/test/data", dataset_name="custom_label")
-        assert ds.data_source_dir == "/tmp/test/data"
-        assert ds.dataset_name == "custom_label"
 
     def test_uri_as_pathlib_path(self):
         """uri accepts pathlib.Path objects (via str conversion)."""
         from hydrodatasource.reader.data_source import HydroData
 
-        ds = HydroData(uri=Path("/tmp/test/dataset"))
+        ds = HydroData(Path("/tmp/test/dataset"))
         assert ds.data_source_dir.endswith("dataset")
 
     def test_uri_with_s3_prefix(self):
         """uri works with s3:// URIs."""
         from hydrodatasource.reader.data_source import HydroData
 
-        ds = HydroData(uri="s3://bucket/prefix/dataset")
+        ds = HydroData("s3://bucket/prefix/dataset")
         assert ds.data_source_dir == "s3://bucket/prefix/dataset"
         assert ds.dataset_name == "dataset"
 
-    def test_legacy_data_path_and_dataset_name(self):
-        """Legacy construction still works with data_path + dataset_name."""
+    def test_uri_is_required(self):
+        """HydroData() without uri raises TypeError."""
         from hydrodatasource.reader.data_source import HydroData
 
-        ds = HydroData(data_path="/parent", dataset_name="child")
-        assert ds.data_source_dir == os.path.join("/parent", "child")
-        assert ds.dataset_name == "child"
+        with pytest.raises(TypeError):
+            HydroData()
 
-    def test_uri_takes_precedence_over_data_path(self):
-        """When uri is provided, data_path and dataset_name are ignored."""
+    def test_data_path_rejected(self):
+        """data_path= is no longer accepted — raises TypeError."""
         from hydrodatasource.reader.data_source import HydroData
 
-        ds = HydroData(
-            uri="/explicit/uri/path",
-            data_path="/ignored/parent",
-            dataset_name="ignored_name",
-        )
-        assert ds.data_source_dir == "/explicit/uri/path"
-        assert ds.dataset_name == "ignored_name"
+        with pytest.raises(TypeError):
+            HydroData(data_path="/parent")
+
+    def test_dataset_name_rejected(self):
+        """dataset_name= is no longer accepted as a parameter."""
+        from hydrodatasource.reader.data_source import HydroData
+
+        with pytest.raises(TypeError):
+            HydroData("/path", dataset_name="custom")
 
 
 # ── Pattern B classes (bypass super().__init__, set data_source_dir directly) ─
 
 
 class TestPatternBConstructors:
-    """Test classes that bypass super().__init__().
+    """Test classes that call super().__init__() following the unified pattern.
 
-    Grdc, RainfallReader, Crd, RsvrInflowReader — these set
-    data_source_dir directly and DON'T call super().__init__().
+    Grdc, RainfallReader, Crd, RsvrInflowReader — all accept uri as positional
+    and delegate to HydroData.__init__().
     """
 
     @pytest.fixture
@@ -124,59 +120,31 @@ class TestPatternBConstructors:
             yield
 
     def test_grdc_uri_construction(self, mock_read_site_info):
-        """Grdc accepts uri kwarg and sets data_source_dir."""
+        """Grdc accepts uri as positional argument."""
         from hydrodatasource.reader.grdc import Grdc
 
-        ds = Grdc(uri="/data/grdc")
-        assert ds.data_source_dir == "/data/grdc"
-
-    def test_grdc_legacy_construction(self, mock_read_site_info):
-        """Grdc still works with legacy data_path arg."""
-        from hydrodatasource.reader.grdc import Grdc
-
-        ds = Grdc(data_path="/data/grdc")
+        ds = Grdc("/data/grdc")
         assert ds.data_source_dir == "/data/grdc"
 
     def test_rainfall_reader_uri_construction(self, mock_read_site_info):
-        """RainfallReader accepts uri kwarg."""
+        """RainfallReader accepts uri as positional argument."""
         from hydrodatasource.reader.rainfall_reader import RainfallReader
 
-        ds = RainfallReader(uri="/data/rainfall")
-        assert ds.data_source_dir == "/data/rainfall"
-
-    def test_rainfall_reader_legacy_construction(self, mock_read_site_info):
-        """RainfallReader still works with legacy data_folder arg."""
-        from hydrodatasource.reader.rainfall_reader import RainfallReader
-
-        ds = RainfallReader(data_folder="/data/rainfall")
+        ds = RainfallReader("/data/rainfall")
         assert ds.data_source_dir == "/data/rainfall"
 
     def test_crd_uri_construction(self, mock_read_site_info):
-        """Crd accepts uri kwarg."""
+        """Crd accepts uri as positional argument."""
         from hydrodatasource.reader.reservoir_datasets import Crd
 
-        ds = Crd(uri="/data/crd")
-        assert ds.data_source_dir == "/data/crd"
-
-    def test_crd_legacy_construction(self, mock_read_site_info):
-        """Crd still works with legacy data_path arg."""
-        from hydrodatasource.reader.reservoir_datasets import Crd
-
-        ds = Crd(data_path="/data/crd")
+        ds = Crd("/data/crd")
         assert ds.data_source_dir == "/data/crd"
 
     def test_rsvr_inflow_uri_construction(self, mock_read_site_info):
-        """RsvrInflowReader accepts uri kwarg."""
+        """RsvrInflowReader accepts uri as positional argument."""
         from hydrodatasource.reader.rsvr_inflow_reader import RsvrInflowReader
 
-        ds = RsvrInflowReader(uri="/data/rsvr_inflow")
-        assert ds.data_source_dir == "/data/rsvr_inflow"
-
-    def test_rsvr_inflow_legacy_construction(self, mock_read_site_info):
-        """RsvrInflowReader still works with legacy data_folder arg."""
-        from hydrodatasource.reader.rsvr_inflow_reader import RsvrInflowReader
-
-        ds = RsvrInflowReader(data_folder="/data/rsvr_inflow")
+        ds = RsvrInflowReader("/data/rsvr_inflow")
         assert ds.data_source_dir == "/data/rsvr_inflow"
 
     @pytest.mark.parametrize(
@@ -195,19 +163,19 @@ class TestPatternBConstructors:
         if reader_cls_factory == "grdc":
             from hydrodatasource.reader.grdc import Grdc
 
-            ds = Grdc(uri=f"/data/{expected_name}")
+            ds = Grdc(f"/data/{expected_name}")
         elif reader_cls_factory == "rainfall":
             from hydrodatasource.reader.rainfall_reader import RainfallReader
 
-            ds = RainfallReader(uri=f"/data/{expected_name}")
+            ds = RainfallReader(f"/data/{expected_name}")
         elif reader_cls_factory == "crd":
             from hydrodatasource.reader.reservoir_datasets import Crd
 
-            ds = Crd(uri=f"/data/{expected_name}")
+            ds = Crd(f"/data/{expected_name}")
         elif reader_cls_factory == "rsvrinflow":
             from hydrodatasource.reader.rsvr_inflow_reader import RsvrInflowReader
 
-            ds = RsvrInflowReader(uri=f"/data/{expected_name}")
+            ds = RsvrInflowReader(f"/data/{expected_name}")
 
         assert hasattr(ds, "dataset_name"), f"{reader_cls_factory}: no dataset_name attr"
         assert ds.dataset_name == expected_name, (
@@ -416,17 +384,16 @@ class TestSelfMadeHydroDatasetConstructor:
                 time_unit=["invalid_unit"],
             )
 
-    def test_legacy_construction_with_minimal_data(self, minimal_dataset):
-        """Legacy data_path + dataset_name still works."""
+    def test_uri_construction_from_parent_dir(self, minimal_dataset):
+        """uri pointing directly to the dataset directory."""
         from hydrodatasource.reader.data_source import SelfMadeHydroDataset
 
         ds = SelfMadeHydroDataset(
-            data_path=str(minimal_dataset.parent),
-            dataset_name="minimal_dataset",
+            uri=str(minimal_dataset),
             time_unit=["1D"],
         )
         assert ds.dataset_name == "minimal_dataset"
-        assert str(minimal_dataset) in ds.data_source_dir
+        assert ds.data_source_dir == str(minimal_dataset)
 
 
 class TestS3UriPathCheck:

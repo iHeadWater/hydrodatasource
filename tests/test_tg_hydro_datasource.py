@@ -165,7 +165,7 @@ def tg_dataset(tmp_path):
     _create_unit_info(base)
     _create_attributes(base)
 
-    ds = TgHydroDatasource(data_path=str(tmp_path), dataset_name=dataset_name, time_unit=["1D"])
+    ds = TgHydroDatasource(uri=str(base), time_unit=["1D"])
     return ds
 
 

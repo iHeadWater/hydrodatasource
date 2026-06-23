@@ -33,30 +33,19 @@ from tqdm import tqdm
 
 
 class HydroData(ABC):
-    """An interface for reading multi-modal data sources.
+    """Abstract base class for reading multi-modal hydrological data sources.
 
-    Supports two construction patterns:
-    1. New (resolved URI): HydroData(uri="/path/to/data")
-    2. Legacy: HydroData(data_path="/parent", dataset_name="child")
+    Single construction pattern: HydroData(uri).
 
     Parameters
     ----------
-    data_path : str, optional
-        Parent directory path (legacy mode).
-    dataset_name : str, optional
-        Subdirectory name under data_path (legacy mode).
-    uri : str, optional
-        Resolved absolute URI pointing directly to the data directory.
-        When provided, data_path and dataset_name are ignored.
+    uri : str or Path
+        Absolute path or S3 URI pointing directly to the data directory.
     """
 
-    def __init__(self, data_path=None, dataset_name=None, *, uri=None):
-        if uri is not None:
-            self.data_source_dir = str(uri)
-            self.dataset_name = dataset_name or Path(str(uri)).name
-        else:
-            self.data_source_dir = os.path.join(data_path, dataset_name)
-            self.dataset_name = dataset_name
+    def __init__(self, uri):
+        self.data_source_dir = str(uri)
+        self.dataset_name = Path(str(uri)).name
 
     def get_name(self):
         raise NotImplementedError
@@ -80,26 +69,18 @@ class SelfMadeHydroDataset(HydroData):
 
     def __init__(
         self,
-        data_path=None,
-        dataset_name=None,
-        time_unit=None,
-        *,
         uri=None,
+        time_unit=None,
         **kwargs,
     ):
         """Initialize a self-made Caravan-style dataset.
 
         Parameters
         ----------
-        data_path : str, optional
-            Parent directory path (legacy mode).
-        dataset_name : str, optional
-            Dataset name (legacy mode, or label when uri is used).
+        uri : str, optional
+            Absolute URI pointing directly to the data directory.
         time_unit : list, optional
             Time units to process, by default None.
-        uri : str, optional
-            Resolved absolute URI pointing directly to the data directory.
-            When provided, data_path and dataset_name are used as labels only.
         kwargs : dict, optional
             Additional keyword arguments, by default None.
         """
@@ -110,13 +91,9 @@ class SelfMadeHydroDataset(HydroData):
                 "time_unit must be one of ['1h', '3h', '1D', '8D','1M']. We only support these time units now."
             )
         # Determine filesystem head from URI or data_path
-        effective_path = str(uri) if uri is not None else (data_path or "")
+        effective_path = str(uri) if uri is not None else ""
         self.head = "minio" if "s3://" in effective_path else "local"
-        super().__init__(
-            data_path=data_path,
-            dataset_name=dataset_name,
-            uri=uri,
-        )
+        super().__init__(uri=uri)
         self.data_source_description = self.set_data_source_describe()
         self.camels_sites = self.read_site_info()
         self.time_unit = time_unit
@@ -883,16 +860,12 @@ class SelfMadeHydroDataset(HydroData):
 
 
 class LongTermDataset(SelfMadeHydroDataset):
-    def __init__(self, data_path=None, download=False, time_unit=None, *, uri=None, **kwargs):
+    def __init__(self, uri=None, download=False, time_unit=None, **kwargs):
         if time_unit is None:
             time_unit = ["1M"]
-        if "dataset_name" not in kwargs:
-            kwargs["dataset_name"] = "gmspa"
         super().__init__(
-            data_path=data_path,
-            dataset_name=kwargs.pop("dataset_name", str(download)),
-            time_unit=time_unit,
             uri=uri,
+            time_unit=time_unit,
             **kwargs,
         )
 
@@ -949,23 +922,20 @@ class LongTermDataset(SelfMadeHydroDataset):
 class SelfMadeForecastDataset(SelfMadeHydroDataset):
     """For selfmadehydrodataset, we design a new file format for forecast data from GFS et al."""
 
-    def __init__(self, data_path=None, dataset_name=None, time_unit=None, *, uri=None):
-        """intialize a Class for reading forecast data
+    def __init__(self, uri=None, time_unit=None, **kwargs):
+        """Initialize a class for reading forecast data.
 
         Parameters
         ----------
-        data_path : str
-            the path of data source
+        uri : str
+            Absolute path or S3 URI pointing to the forecast data directory.
         time_unit : list, optional
-            unit of one time period, by default None
-        dataset_name: str
-            name will be used for cache files
+            Unit of one time period, by default None.
         """
         super().__init__(
-            data_path=data_path,
-            dataset_name=dataset_name,
-            time_unit=time_unit,
             uri=uri,
+            time_unit=time_unit,
+            **kwargs,
         )
 
     def set_data_source_describe(self):
@@ -1363,25 +1333,21 @@ class StationHydroDataset(SelfMadeHydroDataset):
         - adjacency_xxx_True.csv
     """
 
-    def __init__(self, data_path=None, dataset_name=None, time_unit=None, *, uri=None, **kwargs):
+    def __init__(self, uri=None, time_unit=None, **kwargs):
         """Initialize StationHydroDataset.
 
         Parameters
         ----------
-        data_path : str
-            Path to the dataset directory
-        dataset_name : str
-            Name of the dataset
+        uri : str
+            Absolute path or S3 URI pointing to the station dataset directory.
         time_unit : list, optional
             Time units for the data, by default None
         **kwargs : dict
             Additional keyword arguments passed to parent class
         """
         super().__init__(
-            data_path=data_path,
-            dataset_name=dataset_name,
-            time_unit=time_unit,
             uri=uri,
+            time_unit=time_unit,
             **kwargs,
         )
         self.station_info = None
@@ -1967,33 +1933,21 @@ class TgHydroDatasource(SelfMadeHydroDataset):
       └── shapes/          # 区间流域形状文件
     """
 
-    def __init__(self, data_path=None, dataset_name=None, time_unit=None, *, uri=None, **kwargs):
-        """
-        初始化TG流域数据集
+    def __init__(self, uri=None, time_unit=None, **kwargs):
+        """Initialize TG basin dataset.
 
         Parameters
         ----------
-        data_path : str
-            数据根目录路径
-        dataset_name : str, optional
-            数据集名称, by default None
+        uri : str
+            Absolute path or S3 URI pointing to the TG dataset directory.
         time_unit : list, optional
-            时间单位列表, by default None
+            Time unit list, by default None.
         **kwargs : dict
-            其他参数
+            Other parameters.
         """
-        # # 调用父类初始化
-        # self.inter_basin_pred_file = kwargs.get("inter_basin_pred_file", None)
-        # if self.inter_basin_pred_file is None:
-        #     raise ValueError(
-        #         "inter_basin_pred_file is required; please run scripts/generate_inter_basin_predictions.py to generate the inter-basin predictions."
-        #     )
-        # kwargs.pop("inter_basin_pred_file")
         super().__init__(
-            data_path=data_path,
-            dataset_name=dataset_name,
-            time_unit=time_unit,
             uri=uri,
+            time_unit=time_unit,
             **kwargs,
         )
 

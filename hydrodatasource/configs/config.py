@@ -12,7 +12,7 @@ Legacy minio.* and postgres.* config blocks have been removed.
 Cloud access is unified under storage.s3.
 Database access is decoupled to a separate real-time service.
 
-Critical globals (SETTING, CACHE_DIR, FS, LOCAL_DATA_PATH, MINIO_PARAM) are
+Critical globals (SETTING, CACHE_DIR, FS, LOCAL_ROOT, MINIO_PARAM) are
 lazy-loaded via module __getattr__ to avoid import-time side effects.
 
 FilePath: \\hydrodatasource\\hydrodatasource\\configs\\config.py
@@ -21,6 +21,7 @@ Copyright (c) 2023-2026 Wenyu Ouyang. All rights reserved.
 
 import os
 import sys
+import warnings
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -53,7 +54,7 @@ def _load_settings_from_file() -> Dict[str, Any]:
 
 # ── Lazy-loading state ──────────────────────────────────────────────────────
 
-_LAZY_KEYS = frozenset({"SETTING", "CACHE_DIR", "LOCAL_DATA_PATH", "FS", "MINIO_PARAM"})
+_LAZY_KEYS = frozenset({"SETTING", "CACHE_DIR", "LOCAL_ROOT", "FS", "MINIO_PARAM"})
 _lazy: Dict[str, Any] = {}
 _initialized: bool = False
 
@@ -70,48 +71,30 @@ def _init_settings() -> None:
     try:
         setting = _load_settings_from_file()
     except (ValueError, FileNotFoundError) as e:
-        print(f"Warning: Could not load hydro_setting.yml: {e}")
+        warnings.warn(f"Could not load hydro_setting.yml: {e}", stacklevel=2)
         setting = {}
 
     default_root = os.path.join(Path.home(), "hydrodatasource_data")
     if not setting:
-        print(f"Using default data paths in home directory: {default_root}")
-        setting = {
-            "local_data_path": {
-                "root": default_root,
-                "datasets-origin": os.path.join(default_root, "datasets-origin"),
-                "datasets-interim": os.path.join(default_root, "datasets-interim"),
-                "cache": os.path.join(default_root, ".cache"),
-            }
-        }
+        warnings.warn(
+            f"Using default data paths in home directory: {default_root}",
+            stacklevel=2,
+        )
+        setting = {"storage": {"local": {"root": default_root}}}
 
-    # Bridge: if new format (storage.*) exists but old (local_data_path) is
-    # missing, create derived local_data_path for backward compat.
-    if "local_data_path" not in setting and "storage" in setting:
-        storage_local = setting["storage"].get("local", {})
-        storage_root = storage_local.get("root", default_root)
-        setting["local_data_path"] = {
-            "root": storage_root,
-            "datasets-origin": os.path.join(storage_root, "datasets-origin"),
-            "datasets-interim": os.path.join(storage_root, "datasets-interim"),
-            "cache": storage_local.get(
-                "cache", os.path.join(storage_root, ".cache")
-            ),
-        }
-
-    root = setting.get("local_data_path", {}).get("root", default_root)
+    root = setting.get("storage", {}).get("local", {}).get("root", default_root)
 
     _lazy["SETTING"] = setting
-    _lazy["LOCAL_DATA_PATH"] = root
+    _lazy["LOCAL_ROOT"] = root
     _lazy["CACHE_DIR"] = str(_hd_get_cache_dir())
 
-    # Initialize S3FS only if minio credentials are present in old-format config
-    minio_cfg = setting.get("minio", {})
-    if minio_cfg.get("client_endpoint") and minio_cfg.get("access_key"):
+    # Initialize S3FS from storage.s3 credentials
+    s3_cfg = setting.get("storage", {}).get("s3", {})
+    if s3_cfg.get("endpoint_url") and s3_cfg.get("key"):
         _lazy["MINIO_PARAM"] = {
-            "endpoint_url": minio_cfg["client_endpoint"],
-            "key": minio_cfg["access_key"],
-            "secret": minio_cfg.get("secret", ""),
+            "endpoint_url": s3_cfg["endpoint_url"],
+            "key": s3_cfg["key"],
+            "secret": s3_cfg.get("secret", ""),
         }
         try:
             _lazy["FS"] = s3fs.S3FileSystem(
@@ -121,7 +104,7 @@ def _init_settings() -> None:
                 use_ssl=False,
             )
         except Exception as e:
-            print(f"Warning: S3FS initialization failed: {e}")
+            warnings.warn(f"S3FS initialization failed: {e}", stacklevel=2)
             _lazy["FS"] = None
     else:
         _lazy["MINIO_PARAM"] = {}
@@ -135,7 +118,7 @@ def __getattr__(name: str) -> Any:
 
     Avoids import-time side effects (YAML reads, s3fs connections, print()
     calls) — all deferred until a caller actually accesses SETTING, CACHE_DIR,
-    LOCAL_DATA_PATH, FS, or MINIO_PARAM.
+    LOCAL_ROOT, FS, or MINIO_PARAM.
     """
     if name not in _LAZY_KEYS:
         raise AttributeError(
@@ -152,14 +135,13 @@ def __getattr__(name: str) -> Any:
 def get_local_root() -> Optional[Path]:
     """Get the local storage root directory.
 
-    Uses the new storage.local.root format (via hydrodataset settings).
-    Falls back to the old local_data_path.root format for backward compat.
+    Returns storage.local.root via hydrodataset settings.
+    Falls back to LOCAL_ROOT if set.
     """
     root = _hd_get_local_root()
     if root is not None:
         return root
-    # Use getattr to support monkeypatched values (tests) and __getattr__ fallback
-    local = getattr(sys.modules[__name__], "LOCAL_DATA_PATH", "")
+    local = getattr(sys.modules[__name__], "LOCAL_ROOT", "")
     if local:
         return Path(local)
     return None
@@ -178,8 +160,7 @@ def get_storage_config() -> Dict[str, Any]:
 def read_setting(setting_path: str) -> Dict[str, Any]:
     """Read and validate a hydro_setting.yml file.
 
-    Accepts both old (local_data_path.*) and new (storage.*) formats.
-    No longer requires minio or postgres sections.
+    Only the storage.* format is accepted. Old local_data_path.* format is rejected.
     """
     if not os.path.exists(setting_path):
         raise FileNotFoundError(f"Configuration file not found: {setting_path}")
@@ -188,22 +169,18 @@ def read_setting(setting_path: str) -> Dict[str, Any]:
         setting = yaml.safe_load(file)
 
     example_setting = (
-        "# New format (recommended):\n"
+        "# Required format:\n"
         "storage:\n"
         "  default_source: local\n"
         "  local:\n"
         "    root: 'D:\\\\data\\\\hydrodatasource'\n"
+        "  cache: data\\\\cache\n"
         "  s3:\n"
+        "    endpoint_url: 'http://minio:9000'\n"
+        "    key: 'access_key'\n"
+        "    secret: 'secret_key'\n"
         "    bucket: hydro-data\n"
         "    prefix: hydromodel\n"
-        "    region: us-east-1\n"
-        "    profile: default\n\n"
-        "# Old format (deprecated, still supported):\n"
-        "local_data_path:\n"
-        "  root: 'D:\\\\data\\\\waterism'\n"
-        "  datasets-origin: 'D:\\\\data\\\\waterism\\\\datasets-origin'\n"
-        "  datasets-interim: 'D:\\\\data\\\\waterism\\\\datasets-interim'\n"
-        "  cache: 'D:\\\\data\\\\waterism\\\\.cache'\n"
     )
 
     if setting is None:
@@ -212,12 +189,9 @@ def read_setting(setting_path: str) -> Dict[str, Any]:
             f"Example configuration:\n{example_setting}"
         )
 
-    has_old = "local_data_path" in setting
-    has_new = "storage" in setting
-    if not has_old and not has_new:
+    if "storage" not in setting:
         raise ValueError(
-            f"Configuration must have 'storage' (new format) or "
-            f"'local_data_path' (old format) section.\n\n"
+            f"Configuration must have 'storage' section.\n\n"
             f"Example configuration:\n{example_setting}"
         )
 

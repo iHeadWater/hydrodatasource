@@ -18,9 +18,8 @@ from hydrodatasource.reader.data_source import HydroData
 class Crd(HydroData):
     """Reading CRD reservoir dataset"""
 
-    def __init__(self, data_path=None, *, uri=None):
-        self.data_source_dir = str(uri) if uri is not None else data_path
-        self.dataset_name = Path(str(uri)).name if uri else os.path.basename(str(data_path))
+    def __init__(self, uri):
+        super().__init__(uri)
         self.data_source_description = self.set_data_source_describe()
         self.reservoir_info = self.read_reservoir_info()
 

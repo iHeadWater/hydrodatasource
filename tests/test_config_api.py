@@ -4,12 +4,14 @@ Tests the pure-function APIs (get_local_root, get_cache_dir, get_storage_config)
 and read_setting() validation, plus backward-compatible globals.
 
 These tests verify the changes made in feat/unified-data-interface.
+
+Only the new storage.* config format is supported. Old local_data_path.*
+and minio.* formats have been removed.
 """
 
 import os
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 import yaml
@@ -19,7 +21,7 @@ import yaml
 
 
 class TestReadSetting:
-    """Verify read_setting() accepts both old and new config formats."""
+    """Verify read_setting() accepts the new storage.* config format only."""
 
     def test_new_format_storage_section(self, tmp_path):
         """New format with storage.* sections is accepted."""
@@ -33,6 +35,9 @@ class TestReadSetting:
                         "default_source": "local",
                         "local": {"root": str(tmp_path / "data")},
                         "s3": {
+                            "endpoint_url": "http://minio:9000",
+                            "key": "mykey",
+                            "secret": "mysecret",
                             "bucket": "my-bucket",
                             "prefix": "hydromodel",
                         },
@@ -46,8 +51,8 @@ class TestReadSetting:
         assert "storage" in result
         assert result["storage"]["s3"]["bucket"] == "my-bucket"
 
-    def test_old_format_local_data_path(self, tmp_path):
-        """Old format with local_data_path.* is accepted (backward compat)."""
+    def test_old_format_rejected(self, tmp_path):
+        """Old format (local_data_path.*) raises ValueError."""
         from hydrodatasource.configs.config import read_setting
 
         setting_path = tmp_path / "hydro_setting.yml"
@@ -57,38 +62,14 @@ class TestReadSetting:
                     "local_data_path": {
                         "root": str(tmp_path / "data"),
                         "datasets-origin": str(tmp_path / "data" / "datasets-origin"),
-                        "datasets-interim": str(tmp_path / "data" / "datasets-interim"),
                     }
                 }
             ),
             encoding="utf-8",
         )
 
-        result = read_setting(str(setting_path))
-        assert "local_data_path" in result
-
-    def test_both_formats_accepted(self, tmp_path):
-        """Config with both old and new sections is valid."""
-        from hydrodatasource.configs.config import read_setting
-
-        setting_path = tmp_path / "hydro_setting.yml"
-        setting_path.write_text(
-            yaml.dump(
-                {
-                    "storage": {
-                        "local": {"root": str(tmp_path / "data")},
-                    },
-                    "local_data_path": {
-                        "root": str(tmp_path / "data"),
-                    },
-                }
-            ),
-            encoding="utf-8",
-        )
-
-        result = read_setting(str(setting_path))
-        assert "storage" in result
-        assert "local_data_path" in result
+        with pytest.raises(ValueError, match="must have 'storage'"):
+            read_setting(str(setting_path))
 
     def test_missing_file_raises(self, tmp_path):
         """Missing setting file raises FileNotFoundError."""
@@ -107,8 +88,8 @@ class TestReadSetting:
         with pytest.raises(ValueError, match="empty"):
             read_setting(str(setting_path))
 
-    def test_missing_required_sections_raises(self, tmp_path):
-        """Setting without 'storage' or 'local_data_path' raises ValueError."""
+    def test_missing_storage_section_raises(self, tmp_path):
+        """Setting without 'storage' section raises ValueError."""
         from hydrodatasource.configs.config import read_setting
 
         setting_path = tmp_path / "hydro_setting.yml"
@@ -126,35 +107,25 @@ class TestReadSetting:
 class TestGetLocalRoot:
     """Verify get_local_root() resolves correctly."""
 
-    def test_returns_path_when_local_data_path_set(self, monkeypatch):
-        """get_local_root returns LOCAL_DATA_PATH when not None."""
+    def test_returns_path_from_storage_local_root(self, monkeypatch):
+        """get_local_root returns storage.local.root from settings."""
         from hydrodatasource.configs import config
-
-        monkeypatch.setattr(config, "LOCAL_DATA_PATH", "/test/root")
-        # Patch _hd_get_local_root to return None (no new format)
-        monkeypatch.setattr(config, "_hd_get_local_root", lambda: None)
-
-        result = config.get_local_root()
-        assert result == Path("/test/root")
-
-    def test_returns_hd_root_when_available(self, monkeypatch):
-        """get_local_root prefers hydrodataset's root when available."""
-        from hydrodatasource.configs import config
+        from pathlib import Path
 
         monkeypatch.setattr(
-            config, "_hd_get_local_root", lambda: Path("/hd/root")
+            config, "_hd_get_local_root", lambda: Path("/storage/local/root")
         )
-        monkeypatch.setattr(config, "LOCAL_DATA_PATH", "/old/root")
+        monkeypatch.setattr(config, "LOCAL_ROOT", "")
 
         result = config.get_local_root()
-        assert result == Path("/hd/root")
+        assert result == Path("/storage/local/root")
 
     def test_returns_none_when_nothing_configured(self, monkeypatch):
         """get_local_root returns None when nothing is configured."""
         from hydrodatasource.configs import config
 
         monkeypatch.setattr(config, "_hd_get_local_root", lambda: None)
-        monkeypatch.setattr(config, "LOCAL_DATA_PATH", "")
+        monkeypatch.setattr(config, "LOCAL_ROOT", "")
 
         result = config.get_local_root()
         assert result is None
@@ -205,11 +176,11 @@ class TestBackwardCompatGlobals:
 
         assert isinstance(SETTING, dict)
 
-    def test_local_data_path_is_str(self):
-        """LOCAL_DATA_PATH is a str (may be empty)."""
-        from hydrodatasource.configs.config import LOCAL_DATA_PATH
+    def test_local_root_is_str(self):
+        """LOCAL_ROOT is a str (may be empty)."""
+        from hydrodatasource.configs.config import LOCAL_ROOT
 
-        assert isinstance(LOCAL_DATA_PATH, str)
+        assert isinstance(LOCAL_ROOT, str)
 
     def test_cache_dir_is_str(self):
         """CACHE_DIR is a str (may be empty)."""
@@ -224,24 +195,17 @@ class TestBackwardCompatGlobals:
         assert isinstance(MINIO_PARAM, dict)
 
 
-# ── Format bridging tests ───────────────────────────────────────────────────
+# ── Format bridging tests (new format only, bridge removed) ────────────────
 
 
 class TestFormatBridging:
-    """Verify old-format and new-format interop in _init_settings."""
+    """Verify new storage.* format initializes correctly."""
 
-    def test_new_format_derives_local_data_path(self, monkeypatch, tmp_path):
-        """When only storage.* is set, local_data_path is derived."""
+    def test_no_local_data_path_in_setting(self, monkeypatch, tmp_path):
+        """SETTING should NOT contain local_data_path key (bridge removed)."""
         from hydrodatasource.configs import config
-        import importlib
 
-        # Create a temp setting file with only new format
-        setting_path = Path.home() / "hydro_setting.yml"
-        # We can't modify the real home config, so test the logic directly
-        # by calling _init_settings with mocked _load_settings_from_file
         data_root = tmp_path / "data"
-
-        original_load = config._load_settings_from_file
 
         def mock_load():
             return {
@@ -251,28 +215,32 @@ class TestFormatBridging:
                 }
             }
 
+        original_load = config._load_settings_from_file
         monkeypatch.setattr(config, "_load_settings_from_file", mock_load)
         config._init_settings()
 
-        assert config.LOCAL_DATA_PATH == str(data_root)
+        assert "local_data_path" not in config.SETTING
+        assert config.LOCAL_ROOT == str(data_root)
 
         # Restore
         monkeypatch.setattr(config, "_load_settings_from_file", original_load)
         config._init_settings()
 
-    def test_old_format_still_works(self, monkeypatch, tmp_path):
-        """Old local_data_path format still initializes correctly."""
+    def test_s3_config_from_storage_s3(self, monkeypatch, tmp_path):
+        """MINIO_PARAM and FS are initialized from storage.s3, not minio."""
         from hydrodatasource.configs import config
 
-        data_root = str(tmp_path / "data")
+        data_root = tmp_path / "data"
 
         def mock_load():
             return {
-                "local_data_path": {
-                    "root": data_root,
-                    "datasets-origin": os.path.join(data_root, "datasets-origin"),
-                    "datasets-interim": os.path.join(data_root, "datasets-interim"),
-                    "cache": os.path.join(data_root, ".cache"),
+                "storage": {
+                    "local": {"root": str(data_root)},
+                    "s3": {
+                        "endpoint_url": "http://s3.example.com:9000",
+                        "key": "testkey",
+                        "secret": "testsecret",
+                    },
                 }
             }
 
@@ -280,7 +248,29 @@ class TestFormatBridging:
         monkeypatch.setattr(config, "_load_settings_from_file", mock_load)
         config._init_settings()
 
-        assert config.LOCAL_DATA_PATH == data_root
+        assert config.MINIO_PARAM["endpoint_url"] == "http://s3.example.com:9000"
+        assert config.MINIO_PARAM["key"] == "testkey"
+        assert config.MINIO_PARAM["secret"] == "testsecret"
+
+        # Restore
+        monkeypatch.setattr(config, "_load_settings_from_file", original_load)
+        config._init_settings()
+
+    def test_s3_config_empty_when_no_s3_section(self, monkeypatch, tmp_path):
+        """MINIO_PARAM is empty dict, FS is None when no storage.s3."""
+        from hydrodatasource.configs import config
+
+        data_root = tmp_path / "data"
+
+        def mock_load():
+            return {"storage": {"local": {"root": str(data_root)}}}
+
+        original_load = config._load_settings_from_file
+        monkeypatch.setattr(config, "_load_settings_from_file", mock_load)
+        config._init_settings()
+
+        assert config.MINIO_PARAM == {}
+        assert config.FS is None
 
         # Restore
         monkeypatch.setattr(config, "_load_settings_from_file", original_load)
@@ -304,6 +294,31 @@ class TestFormatBridging:
 
         assert config.CACHE_DIR == unified_cache, (
             f"CACHE_DIR={config.CACHE_DIR} != expected {unified_cache}"
+        )
+
+        # Restore
+        monkeypatch.setattr(config, "_load_settings_from_file", original_load)
+        config._init_settings()
+
+    def test_empty_config_creates_storage_format(self, monkeypatch):
+        """When no config file exists, SETTING uses storage.* format, not local_data_path."""
+        from hydrodatasource.configs import config
+
+        def mock_load():
+            return {}
+
+        original_load = config._load_settings_from_file
+        monkeypatch.setattr(config, "_load_settings_from_file", mock_load)
+        config._init_settings()
+
+        assert "local_data_path" not in config.SETTING, (
+            "SETTING must not contain local_data_path after bridge removal"
+        )
+        assert "storage" in config.SETTING, (
+            "SETTING must have storage key even when config file is empty"
+        )
+        assert config.SETTING["storage"]["local"]["root"], (
+            "storage.local.root must have a fallback value"
         )
 
         # Restore
