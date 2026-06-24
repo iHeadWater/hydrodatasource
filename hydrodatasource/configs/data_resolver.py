@@ -31,6 +31,13 @@ from hydrodataset.configs.data_resolver import (
     resolve_data_path as _hd_resolve_data_path,
 )
 
+__all__ = [
+    "DatasetResolutionError",
+    "HDS_DATASETS",
+    "READER_ALIASES",
+    "resolve_data_path",
+]
+
 # ── hydrodatasource-specific reader aliases ──────────────────────────────
 
 _HDS_READER_ALIASES: Dict[str, Dict[str, str]] = {
@@ -107,7 +114,7 @@ READER_ALIASES: Dict[str, Dict[str, str]] = {
 # configs/datasets.yml to customize or extend the registry. The library itself
 # does not ship a default YAML.
 
-_HDS_DATASETS: Dict[str, Dict[str, str]] = {
+HDS_DATASETS: Dict[str, Dict[str, str]] = {
     "songliao_event": {
         "reader": "floodevent",
         "path": "projects/songliao/event",
@@ -155,7 +162,7 @@ def resolve_data_path(
         source=source,
         project_root=project_root,
         local_root=Path(local_root) if local_root else None,
-        extra_registry_dicts=[_HDS_DATASETS],
+        extra_registry_dicts=[HDS_DATASETS],
         extra_reader_aliases=_HDS_READER_ALIASES,
     )
     return str(result)
