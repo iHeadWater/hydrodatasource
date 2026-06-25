@@ -11,6 +11,8 @@ except ImportError:
 # Re-export config APIs for convenience
 from .configs.data_resolver import (
     READER_ALIASES,
+    ResolverContext,
     resolve_data_path,
+    open_dataset,
     DatasetResolutionError,
 )

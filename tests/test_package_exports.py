@@ -59,9 +59,16 @@ class TestPackageExports:
         )
 
     def test_merged_total_count(self):
-        """Total merged aliases: 11 hydrodatasource + 33 hydrodataset = 44."""
+        """Total merged aliases: 11 hydrodatasource + 26 hydrodataset = 37."""
         from hydrodatasource import READER_ALIASES
 
-        assert len(READER_ALIASES) == 44, (
-            f"Expected 44 total aliases (11 HDS + 33 HD), got {len(READER_ALIASES)}"
+        assert len(READER_ALIASES) == 37, (
+            f"Expected 37 total aliases (11 HDS + 26 HD), got {len(READER_ALIASES)}"
         )
+
+    def test_resolver_context_importable_from_package(self):
+        """ResolverContext is importable from hydrodatasource."""
+        from hydrodatasource import ResolverContext
+        from dataclasses import is_dataclass
+
+        assert is_dataclass(ResolverContext)
