@@ -120,7 +120,7 @@ class SelfMadeHydroDataset(HydroData):
         pattern = os.path.join(ts_dir, "*_units_info.json")
         unit_files = glob.glob(pattern)
         attr_dir = os.path.join(data_root_dir, "attributes")
-        attr_file = os.path.join(attr_dir, "attributes.csv")
+        attr_file = self._where_attr_file(attr_dir)
         shape_dir = os.path.join(data_root_dir, "shapes")
 
         return collections.OrderedDict(
@@ -147,9 +147,34 @@ class SelfMadeHydroDataset(HydroData):
             ]
         )
 
+    def _where_attr_file(self, attr_dir):
+        """Locate the attributes file: prefer attributes.csv for backward
+        compatibility, otherwise fall back to a NetCDF file in the dir."""
+        attr_csv = os.path.join(attr_dir, "attributes.csv")
+        if "s3://" in attr_dir:
+            return attr_csv
+        if os.path.exists(attr_csv):
+            return attr_csv
+        nc_files = sorted(glob.glob(os.path.join(attr_dir, "*.nc")))
+        return nc_files[0] if nc_files else attr_csv
+
+    def _read_attributes_df(self):
+        """Read the attributes file (csv or nc) into a DataFrame that has a
+        'basin_id' column. Delegates to access_fs so that csv/nc and
+        local/minio are all handled uniformly."""
+        attr_file = self.data_source_description["ATTR_FILE"]
+        obj = access_fs.spec_path(attr_file, head=self.head)
+        if isinstance(obj, xr.Dataset):
+            df = obj.to_dataframe().reset_index()
+            if "basin_id" not in df.columns and "basin" in df.columns:
+                df = df.rename(columns={"basin": "basin_id"})
+        else:
+            df = obj
+        df["basin_id"] = df["basin_id"].astype(str)
+        return df
+
     def read_site_info(self):
-        camels_file = self.data_source_description["ATTR_FILE"]
-        attrs = access_fs.spec_path(camels_file, head=self.head)
+        attrs = self._read_attributes_df()
         return attrs[["basin_id", "area"]]
 
     def read_object_ids(self, object_params=None) -> np.array:
@@ -359,12 +384,7 @@ class SelfMadeHydroDataset(HydroData):
         self, object_ids=None, constant_cols=None, **kwargs
     ) -> np.array:
         """2d data (site_num * var_num), non-time-series data"""
-        attr_file = self.data_source_description["ATTR_FILE"]
-        if "s3://" in attr_file:
-            with conf.FS.open(attr_file, mode="rb") as f:
-                attrs = pd.read_csv(f, dtype={"basin_id": str})
-        else:
-            attrs = pd.read_csv(attr_file, dtype={"basin_id": str})
+        attrs = self._read_attributes_df()
         if object_ids is None:
             if constant_cols is None:
                 return attrs
@@ -380,12 +400,7 @@ class SelfMadeHydroDataset(HydroData):
 
     def get_attributes_cols(self) -> np.array:
         """the constant cols in this data_source"""
-        attr_file = self.data_source_description["ATTR_FILE"]
-        if "s3://" in attr_file:
-            with conf.FS.open(attr_file, mode="rb") as f:
-                attrs = pd.read_csv(f, dtype={"basin_id": str})
-        else:
-            attrs = pd.read_csv(attr_file, dtype={"basin_id": str})
+        attrs = self._read_attributes_df()
         attr_units = attrs.columns.values
         return self._check_vars_in_unitsinfo(attr_units)
 
@@ -479,20 +494,23 @@ class SelfMadeHydroDataset(HydroData):
         # NOTICE: although it seems that we don't use pint_xarray, we have to import this package
         import pint_xarray  # noqa: F401
 
+        df_attr = self.read_attributes()
+        df_attr.set_index("basin_id", inplace=True)
+
+        # basins.shp is optional: when present it provides shp_area; otherwise
+        # we rely on the 'area' column already in the attributes file.
         shape_dir = os.path.join(
             self.data_source_description["SHAPE_DIR"], "basins.shp"
         )
-        if "s3://" in shape_dir:
-            with conf.FS.open(shape_dir, mode="rb") as f:
-                shape = gpd.read_file(f)
-        else:
-            shape = gpd.read_file(shape_dir)
-        df_area = cal_area_from_shp(shape)  # calculate the area from shape file
-        df_area.set_index("basin_id", inplace=True)
-
-        df_attr = self.read_attributes()
-        df_attr.set_index("basin_id", inplace=True)
-        df_attr = df_attr.join(df_area)
+        if "s3://" in shape_dir or os.path.exists(shape_dir):
+            if "s3://" in shape_dir:
+                with conf.FS.open(shape_dir, mode="rb") as f:
+                    shape = gpd.read_file(f)
+            else:
+                shape = gpd.read_file(shape_dir)
+            df_area = cal_area_from_shp(shape)  # area from shape file
+            df_area.set_index("basin_id", inplace=True)
+            df_attr = df_attr.join(df_area)
         # Mapping provided units to the variables in the datasets
         # For attributes, all the variables' units are same in all unit_info files
         # hence, we just chose the first one
