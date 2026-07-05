@@ -87,6 +87,9 @@ def _init_settings() -> None:
     _lazy["SETTING"] = setting
     _lazy["LOCAL_ROOT"] = root
     _lazy["CACHE_DIR"] = str(_hd_get_cache_dir())
+    # Ensure the cache dir exists: downstream code writes NetCDF caches and
+    # lists this dir directly, and h5netcdf/os.listdir do not create it.
+    os.makedirs(_lazy["CACHE_DIR"], exist_ok=True)
 
     # Initialize S3FS from storage.s3 credentials
     s3_cfg = setting.get("storage", {}).get("s3", {})
