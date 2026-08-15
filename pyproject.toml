@@ -65,6 +65,7 @@ dev = [
     "pytest-asyncio",
     "pytest-mock",
     "pytest-dotenv",
+    "tomli; python_version < '3.11'",  # tomllib backport for Python 3.10
     
     # Packaging
     "wheel",
