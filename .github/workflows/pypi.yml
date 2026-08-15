@@ -3,6 +3,7 @@ name: Upload Python Package to PyPI
 on:
   release:
     types: [published]
+  workflow_dispatch: # allow manual re-publish after a version/CI fix
 
 jobs:
   deploy:
@@ -23,9 +24,10 @@ jobs:
       - name: Setup Python
         run: uv python install 3.11
 
-      - name: Install dependencies
-        run: uv sync --no-sources --all-extras # Install all dependencies including dev
-
+      # NOTE: do NOT run `uv sync` before `uv build`. uv sync's editable-install
+      # version detection yields next.dev0 (e.g. 0.3.1.dev0) at a clean tag,
+      # poisoning the wheel version. `uv build` alone derives the correct tag
+      # version (e.g. 0.3.0) from git via hatch-vcs.
       - name: Build package
         run: uv build
 
