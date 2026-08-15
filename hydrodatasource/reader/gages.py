@@ -653,8 +653,6 @@ class Gages(HydroData):
         -------
         None
         """
-        # NOTICE: although it seems that we don't use pint_xarray, we have to import this package
-        import pint_xarray  # noqa: F401
         from hydrodatasource.configs import config as conf
 
         # 1. Get all site IDs

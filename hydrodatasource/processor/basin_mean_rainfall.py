@@ -1,10 +1,8 @@
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-from matplotlib import pyplot as plt
 from scipy.spatial import Voronoi
 from shapely.geometry import Polygon
-import hydrodatasource.configs.config as hdscc
 
 
 def calculate_thiesen_polygons(stations, basin):
@@ -74,49 +72,6 @@ def calculate_thiesen_polygons(stations, basin):
     )
 
     return clipped_polygons
-
-
-def calculate_voronoi_polygons(stations, basin_geom):
-    """
-    @deprecated
-
-    Previous version of calculate_thiesen_polygons.
-    Deprecated in favor of calculate_thiesen_polygons.
-    Deprecated since version 0.0.11: Use calculate_thiesen_polygons instead.
-
-    Parameters
-    ----------
-    stations : GeoDataFrame
-        stations within the basin
-    basin_geom : GeoDataFrame
-        basin shapefile
-
-    Returns
-    -------
-    clipped_polygons_gdf : GeoDataFrame
-        clipped voronoi polygons
-    """
-
-    bounding_box = basin_geom.envelope.exterior.coords
-    points = np.array([point.coords[0] for point in stations.geometry])
-    points_extended = np.concatenate((points, bounding_box))
-    vor = Voronoi(points_extended)
-    regions = [vor.regions[vor.point_region[i]] for i in range(len(points))]
-    polygons = [
-        Polygon(vor.vertices[region]).buffer(0)
-        for region in regions
-        if -1 not in region
-    ]
-    polygons_gdf = gpd.GeoDataFrame(geometry=polygons, crs=stations.crs)
-    polygons_gdf["station_id"] = stations["STCD"].astype(str).values
-    polygons_gdf["original_area"] = polygons_gdf.geometry.area
-    clipped_polygons_gdf = gpd.clip(polygons_gdf, basin_geom)
-    clipped_polygons_gdf["clipped_area"] = clipped_polygons_gdf.geometry.area
-    total_basin_area = basin_geom.area
-    clipped_polygons_gdf["area_ratio"] = (
-        clipped_polygons_gdf["clipped_area"] / total_basin_area
-    )
-    return clipped_polygons_gdf
 
 
 def calculate_weighted_rainfall(
@@ -270,24 +225,6 @@ def basin_mean_func(df, weights_dict=None):
         result.loc[incomplete_rows_mask] = incomplete_data.mean(axis=1, skipna=True)
 
     return result
-
-
-def plot_voronoi_polygons(original_polygons, clipped_polygons, basin):
-    fig, (ax_original, ax_clipped) = plt.subplots(1, 2, figsize=(12, 6))
-    _plot_voronoi_polygons(
-        original_polygons, ax_original, basin, "Original Voronoi Polygons"
-    )
-    _plot_voronoi_polygons(
-        clipped_polygons, ax_clipped, basin, "Clipped Voronoi Polygons"
-    )
-    plt.tight_layout()
-    plt.show()
-
-
-def _plot_voronoi_polygons(arg0, ax, basin, arg3):
-    arg0.plot(ax=ax, edgecolor="black")
-    basin.boundary.plot(ax=ax, color="red")
-    ax.set_title(arg3)
 
 
 def stations_within_basin(basin_gdf, station_gdf, buffer_m=0, basin_crs_epsg=3857):

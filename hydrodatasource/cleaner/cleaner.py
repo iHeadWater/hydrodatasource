@@ -15,15 +15,29 @@ Description:
     └── waterlevel_cleaner.py # 包含 WaterlevelCleaner 类
 """
 
+import os
+
+import pandas as pd
+
 
 class Cleaner:
     def __init__(self, data_folder, *args, **kwargs):
         self.data_path = data_folder
+        self.origin_df = None
+        self.processed_df = None
         self.read_data()
 
     def read_data(self):
         # 读取数据并存储在origin_df中
-        pass
+        if self.data_path and os.path.isfile(self.data_path):
+            try:
+                self.origin_df = pd.read_csv(self.data_path)
+            except UnicodeDecodeError:
+                # 中文水文数据常为 GBK 编码
+                self.origin_df = pd.read_csv(self.data_path, encoding="gbk")
+        else:
+            self.origin_df = pd.DataFrame()
+        self.processed_df = self.origin_df.copy()
 
     def save_data(self, data, output_path):
         # 保存数据到CSV

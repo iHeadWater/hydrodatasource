@@ -315,10 +315,7 @@ class StreamflowCleaner(Cleaner):
                 end_date = date + pd.DateOffset(hours=half_window)
 
             # 计算窗口内的平均值
-            try:
-                window_data = streamflow_data[start_date:end_date]
-            except KeyError:
-                print("WTF")
+            window_data = streamflow_data[start_date:end_date]
             smoothed_value = window_data.mean()
             smoothed_data.loc[date] = smoothed_value
 
@@ -443,4 +440,4 @@ class StreamflowCleaner(Cleaner):
         self.processed_df[methods[0]] = streamflow_data
 
         # 去除提前插补的缺失值
-        self.processed_df[methods[0]][self.origin_df["INQ"].isna()] = np.nan
+        self.processed_df.loc[self.origin_df["INQ"].isna(), methods[0]] = np.nan

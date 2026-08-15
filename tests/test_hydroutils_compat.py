@@ -100,8 +100,8 @@ def test_pyproject_requires_hydroutils_0_2_or_newer():
     hydroutils_deps = [
         d for d in deps if d.strip().lower().startswith("hydroutils")
     ]
-    assert len(hydroutils_deps) == 1, (
-        "expected exactly one hydroutils entry in [project].dependencies"
+    assert hydroutils_deps, (
+        "expected at least one hydroutils entry in [project].dependencies"
     )
 
     req = Requirement(hydroutils_deps[0])

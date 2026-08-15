@@ -43,7 +43,7 @@ def three_hour_dataset():
 def one_day_dataset():
     if not _SELFMADE_DATA:
         pytest.skip("Set HDS_SELFMADE_DATA env var")
-    return SelfMadeHydroDataset(uri=_SELFMADE_DATA)
+    return SelfMadeHydroDataset(uri=_SELFMADE_DATA, time_unit=["1D"])
 
 
 @pytest.fixture

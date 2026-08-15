@@ -159,39 +159,6 @@ class ReservoirInflowBacktrack(Cleaner):
             ), f"Column {col} is not of numeric type"
         return rsvr_info
 
-    def _rsvr_rolling_window_abrupt_abnormal_rm(
-        self, df, var_col="RZ", threshold=50, window_size=5
-    ):
-        """
-        Detect and remove abnormal reservoir water level data using a rolling window.
-
-        Parameters
-        ----------
-        df : pd.DataFrame
-            The DataFrame containing the reservoir data.
-        var_col : str
-            the column to check, by default "RZ"
-        threshold: float
-            the threshold to remove the abnormal data
-        window_size : int
-            The size of the rolling window.
-
-        Returns
-        -------
-        pd.DataFrame
-            The DataFrame with an additional column indicating abnormal data.
-        """
-
-        # Calculate the median of the rolling window
-        df["median"] = df[var_col].rolling(window=window_size, center=True).median()
-        # Calculate the difference between the current value and the median
-        df["diff_median"] = abs(df[var_col] - df["median"])
-        # Mark as abnormal if the difference exceeds the threshold
-        df["set_nan"] = df["diff_median"] > threshold
-        # Set abnormal values to NaN
-        df.loc[df["set_nan"], var_col] = np.nan
-        return df
-
     def _rsvr_conservative_abrupt_abnormal_rm(self, df, var_col="RZ", threshold=10):
         """TODO: this method is not right, need to be fixed
 

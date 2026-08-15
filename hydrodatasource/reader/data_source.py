@@ -44,7 +44,7 @@ class HydroData(ABC):
     """
 
     def __init__(self, uri):
-        if uri is None:
+        if not uri:
             raise ValueError(
                 "uri must be provided: pass an absolute path or s3:// URI "
                 "pointing to the data directory."
@@ -118,8 +118,14 @@ class SelfMadeHydroDataset(HydroData):
 
     @property
     def streamflow_unit(self):
-        unit_mapping = {"1h": "mm/h", "3h": "mm/3h", "1D": "mm/d", "1M": "mm/M"}
-        return {unit: unit_mapping[unit] for unit in self.time_unit}
+        unit_mapping = {
+            "1h": "mm/h",
+            "3h": "mm/3h",
+            "1D": "mm/d",
+            "8D": "mm/8d",
+            "1M": "mm/M",
+        }
+        return {unit: unit_mapping[unit] for unit in (self.time_unit or [])}
 
     def get_name(self):
         return "SelfMadeHydroDataset"
@@ -506,9 +512,6 @@ class SelfMadeHydroDataset(HydroData):
         -------
         None
         """
-        # NOTICE: although it seems that we don't use pint_xarray, we have to import this package
-        import pint_xarray  # noqa: F401
-
         df_attr = self.read_attributes()
         df_attr.set_index("basin_id", inplace=True)
 
@@ -2783,8 +2786,6 @@ class TgHydroDatasource(SelfMadeHydroDataset):
 
     def cache_intermediate_attributes_xrdataset(self):
         """Convert intermediate attributes to a single dataset and cache as NetCDF."""
-        import pint_xarray  # noqa: F401
-
         # Resolve shape file (prefer intermediate, else base)
         shape_file_inter = self._get_intermediate_shape_file()
         if os.path.exists(shape_file_inter):

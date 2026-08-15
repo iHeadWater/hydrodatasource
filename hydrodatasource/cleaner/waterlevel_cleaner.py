@@ -84,7 +84,7 @@ class WaterlevelCleaner(Cleaner):
                 waterlevel_data = self.moving_gradient_filter(
                     waterlevel_data=waterlevel_data
                 )
-            if method == "roll":
+            elif method == "roll":
                 waterlevel_data = self.rolling_fill(waterlevel_data=waterlevel_data)
             else:
                 print("please check your method name")
