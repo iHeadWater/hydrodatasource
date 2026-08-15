@@ -12,8 +12,8 @@ import pytest
 import xarray as xr
 import geopandas as gpd
 from shapely.geometry import Polygon
-import hydrodatasource.configs.config as conf
 
+from hydrodatasource.reader import data_source
 from hydrodatasource.reader.data_source import TgHydroDatasource
 
 
@@ -65,8 +65,10 @@ def _create_lstm_predictions(base):
     lstm_dataset.to_netcdf(lstm_pred_file)
 
     # 同步写入到缓存目录，满足 TgHydroDatasource 的路径约定
-    os.makedirs(conf.CACHE_DIR, exist_ok=True)
-    lstm_dataset.to_netcdf(os.path.join(conf.CACHE_DIR, "lstmpred.nc"))
+    # 注意：data_source.py 顶部为模块级绑定 CACHE_DIR，必须通过 data_source.CACHE_DIR 访问，
+    # 这样 fixture 里 monkeypatch 的临时缓存目录才会生效，避免污染用户 home 下的真实缓存。
+    os.makedirs(data_source.CACHE_DIR, exist_ok=True)
+    lstm_dataset.to_netcdf(os.path.join(data_source.CACHE_DIR, "lstmpred.nc"))
     return lstm_pred_file
 
 
@@ -82,6 +84,9 @@ def _create_timeseries_csv(base):
         "station_6",
     ]
     np.random.seed(123)
+    base_ts_dir = os.path.join(base, "timeseries", "1D")
+    inter_ts_dir = os.path.join(base, "intermediate", "timeseries", "1D")
+    os.makedirs(inter_ts_dir, exist_ok=True)
     for name in basin_names:
         df = pd.DataFrame(
             {
@@ -90,7 +95,9 @@ def _create_timeseries_csv(base):
                 "streamflow": np.random.rand(len(time_range)) * 50,
             }
         )
-        df.to_csv(os.path.join(base, "timeseries", "1D", f"{name}.csv"), index=False)
+        df.to_csv(os.path.join(base_ts_dir, f"{name}.csv"), index=False)
+        # 同步写入 intermediate 目录，使 combine=True 路径能读取到 intermediate 数据
+        df.to_csv(os.path.join(inter_ts_dir, f"{name}.csv"), index=False)
 
 
 def _create_shapes(base):
@@ -155,7 +162,13 @@ def _create_attributes(base):
 
 
 @pytest.fixture
-def tg_dataset(tmp_path):
+def tg_dataset(tmp_path, monkeypatch):
+    # 隔离缓存目录：data_source.py 在模块级绑定 CACHE_DIR，这里 monkeypatch 该模块属性，
+    # 使缓存写入（含 lstmpred.nc）落在 tmp_path 下，避免污染用户 home 下的真实 CACHE_DIR。
+    cache_dir = tmp_path / "cache"
+    monkeypatch.setattr("hydrodatasource.reader.data_source.CACHE_DIR", str(cache_dir))
+    os.makedirs(cache_dir, exist_ok=True)
+
     dataset_name = "test_tg_dataset"
     base = _create_dirs(tmp_path, dataset_name)
     _create_graph_dict(base)
@@ -278,17 +291,22 @@ def test_read_ts_xrdataset_combine_outputs(tg_dataset):
         print(f"[TS-COMBINE] var={v} sample (first 6 basins x first 3 time):\n", sample.to_pandas())
 
     # lstm_pred 仅注入到 base 部分；intermediate 部分应为空或 NaN
+    # 注意：combine 后 base 与 intermediate 的 basin 名相同，basin 坐标存在重复，
+    # 不能用 .sel(basin=...) 标签索引，需按 source 掩码做位置索引。
     assert "lstm_pred" in ds.data_vars
     assert set(ds["lstm_pred"].dims) == {"basin", "time"}
     inter_mask = ds["source"].values == "intermediate"
     inter_basins = ds["basin"].values[inter_mask]
     base_mask = ds["source"].values == "base"
-    base_basins = ds["basin"].values[base_mask]
     # 打印样本
-    lstm_base_sample = ds["lstm_pred"].transpose("basin", "time").sel(basin=base_basins).isel(time=slice(0, 3))
+    lstm_base_sample = ds["lstm_pred"].transpose("basin", "time").isel(
+        basin=np.where(base_mask)[0], time=slice(0, 3)
+    )
     print("[TS-COMBINE] var=lstm_pred base sample:\n", lstm_base_sample.to_pandas().head())
     if len(inter_basins) > 0:
-        lstm_inter_sample = ds["lstm_pred"].transpose("basin", "time").sel(basin=inter_basins).isel(time=slice(0, 3))
+        lstm_inter_sample = ds["lstm_pred"].transpose("basin", "time").isel(
+            basin=np.where(inter_mask)[0], time=slice(0, 3)
+        )
         print("[TS-COMBINE] var=lstm_pred intermediate sample:\n", lstm_inter_sample.to_pandas().head())
         # 检查 intermediate 部分为 NaN
         assert np.isnan(lstm_inter_sample.to_numpy()).all()

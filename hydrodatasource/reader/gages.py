@@ -20,10 +20,12 @@ from typing import Tuple, Dict, Union
 import pytz
 from pandas.core.dtypes.common import is_string_dtype, is_numeric_dtype
 from tqdm import tqdm
-from hydroutils import hydro_logger, hydro_file, hydro_stat
+from hydroutils import hydro_file, hydro_stat
 import hydrodatasource.configs.config as conf
 from hydrodatasource.configs.config import CACHE_DIR
 from hydrodatasource.reader.data_source import HydroData
+
+logger = logging.getLogger(__name__)
 
 
 class Gages(HydroData):
@@ -590,7 +592,7 @@ class Gages(HydroData):
         return pd.DataFrame(out)
 
     def prepare_usgs_data(self):
-        hydro_logger.info(
+        logger.info(
             "NOT all data_source could be downloaded from website directly!"
         )
         data_source_description = self.data_source_description

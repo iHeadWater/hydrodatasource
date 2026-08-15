@@ -59,12 +59,23 @@ class TestPackageExports:
         )
 
     def test_merged_total_count(self):
-        """Total merged aliases: 11 hydrodatasource + 26 hydrodataset = 37."""
+        """Total merged aliases = hydrodatasource subset + hydrodataset subset (no overlap).
+
+        合并后的 READER_ALIASES 按 "category" 划分成两个互不相交的子集，
+        因此总数等于两个子集计数之和。用并集恒等式代替硬编码总数，
+        避免 hydrodataset 增减公共数据集时总数漂移导致测试失配。
+        """
         from hydrodatasource import READER_ALIASES
 
-        assert len(READER_ALIASES) == 37, (
-            f"Expected 37 total aliases (11 HDS + 26 HD), got {len(READER_ALIASES)}"
-        )
+        hds = {
+            k: v for k, v in READER_ALIASES.items() if v.get("category") == "hydrodatasource"
+        }
+        hd = {k: v for k, v in READER_ALIASES.items() if v.get("category") == "hydrodataset"}
+
+        # 并集恒等式：每个别名恰好属于一个类别
+        assert len(READER_ALIASES) == len(hds) + len(hd)
+        # 防倒退下限：别名总数不得少于上一版本
+        assert len(READER_ALIASES) >= 37
 
     def test_resolver_context_importable_from_package(self):
         """ResolverContext is importable from hydrodatasource."""

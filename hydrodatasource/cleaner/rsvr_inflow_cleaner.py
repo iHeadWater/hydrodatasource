@@ -16,13 +16,15 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from scipy.optimize import curve_fit
 
-from hydroutils.hydro_log import hydro_logger
+import logging
+
 from hydrodatasource.configs.table_name import RSVR_TS_TABLE_COLS
 from hydrodatasource.cleaner.cleaner import Cleaner
 
 
-@hydro_logger
 class ReservoirInflowBacktrack(Cleaner):
+    logger = logging.getLogger(__name__)
+
     def __init__(self, data_folder, output_folder):
         """
         Back-calculating inflow of reservior

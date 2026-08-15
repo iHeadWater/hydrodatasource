@@ -81,6 +81,12 @@ def _init_settings() -> None:
             stacklevel=2,
         )
         setting = {"storage": {"local": {"root": default_root}}}
+    elif "storage" not in setting:
+        warnings.warn(
+            f"hydro_setting.yml is non-empty but missing a 'storage' section; "
+            f"falling back to default data root: {default_root}",
+            stacklevel=2,
+        )
 
     root = setting.get("storage", {}).get("local", {}).get("root", default_root)
 

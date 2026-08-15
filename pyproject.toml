@@ -43,7 +43,7 @@ dependencies = [
     "pygeohydro",
     "pykalman",
     "xarray",
-    "hydroutils>=0.1.0",
+    "hydroutils>=0.2.0",
     "hydrodataset>=0.2.0",
     "hydrotopo",
     "aqua-fetch[all]",

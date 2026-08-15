@@ -10,6 +10,8 @@ import yaml
 
 from hydrodataset.configs.data_resolver import ResolverContext
 
+import hydrodatasource.reader.floodevent as _real_floodevent_module
+
 
 class TestReaderAliases:
     """Verify READER_ALIASES covers all hydrodatasource reader classes."""
@@ -273,12 +275,13 @@ class TestOpenDataset:
         mod.FloodEventDatasource = FakeFloodEvent
         sys.modules["hydrodatasource.reader.floodevent"] = mod
 
-        ctx = ResolverContext(
-            storage={"local": {"root": str(tmp_path)}},
-        )
-        yield ctx, FakeFloodEvent, constructed, dataset_dir
-
-        del sys.modules["hydrodatasource.reader.floodevent"]
+        try:
+            ctx = ResolverContext(
+                storage={"local": {"root": str(tmp_path)}},
+            )
+            yield ctx, FakeFloodEvent, constructed, dataset_dir
+        finally:
+            sys.modules["hydrodatasource.reader.floodevent"] = _real_floodevent_module
 
     def test_open_dataset_songliao_event(self, fake_flood_ctx):
         """open_dataset('songliao_event') resolves reader via registry, not alias key.

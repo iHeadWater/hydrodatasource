@@ -923,10 +923,10 @@ class FloodEventDatasource(SelfMadeHydroDataset):
                 available_stations = [
                     station
                     for station in gage_id_lst
-                    if station in ds.coords.get("gage_id", [])
+                    if station in ds.coords.get("basin", [])
                 ]
                 if available_stations:
-                    ds = ds.sel(gage_id=available_stations)
+                    ds = ds.sel(basin=available_stations)
 
                 # 应用时间范围过滤
                 if t_range is not None and len(t_range) >= 2:

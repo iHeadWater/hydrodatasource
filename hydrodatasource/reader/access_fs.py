@@ -13,7 +13,7 @@ from kerchunk.hdf import SingleHdf5ToZarr
 import hydrodatasource.configs.config as conf
 
 
-def spec_path(url_path: str, head="local", need_cache=False, is_dir=False):
+def spec_path(url_path: str, head="local", need_cache=False, is_dir=False, dtype=None):
     """Access the file system to get data of specific path, file or directory.
 
     Parameters
@@ -26,6 +26,9 @@ def spec_path(url_path: str, head="local", need_cache=False, is_dir=False):
         _description_, by default False
     is_dir : bool, optional
         file or directory, by default False, means file
+    dtype : dict, optional
+        Column type overrides forwarded to pandas when reading tabular
+        files (e.g. ``{"basin_id": str}`` to preserve zero-padded ids).
 
     Returns
     -------
@@ -41,11 +44,14 @@ def spec_path(url_path: str, head="local", need_cache=False, is_dir=False):
     """
     if is_dir is False:
         if head == "local":
-            ret_data = read_valid_data(url_path, need_cache=need_cache)
+            ret_data = read_valid_data(url_path, need_cache=need_cache, dtype=dtype)
         elif head == "minio":
             url_path = f"s3://{url_path}"
             ret_data = read_valid_data(
-                url_path, storage_option=conf.MINIO_PARAM, need_cache=need_cache
+                url_path,
+                storage_option=conf.MINIO_PARAM,
+                need_cache=need_cache,
+                dtype=dtype,
             )
         else:
             raise ValueError("head should be 'local' or 'minio'")
@@ -74,7 +80,7 @@ def spec_path(url_path: str, head="local", need_cache=False, is_dir=False):
     return ret_data
 
 
-def read_valid_data(obj: str, storage_option=None, need_cache=False, need_refer=False):
+def read_valid_data(obj: str, storage_option=None, need_cache=False, need_refer=False, dtype=None):
     """
     Read valid data from different file types.
     See https://intake.readthedocs.io/en/latest/plugin-directory.html
@@ -90,6 +96,9 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False, need_refer=
         See hydrodatasource.configs.config.MINIO_PARAM to get reference
     need_cache (bool, optional)
         Whether to cache the data. Defaults to False.
+    dtype (dict, optional)
+        Column type overrides forwarded to pandas when reading tabular
+        files (e.g. ``{"basin_id": str}``).
 
     Returns:
     ------------
@@ -105,7 +114,9 @@ def read_valid_data(obj: str, storage_option=None, need_cache=False, need_refer=
     else:
         ext_name = obj.split(".")[-1]
         if ext_name == "csv":
-            data_obj = pd.read_csv(obj, storage_options=storage_option)
+            data_obj = pd.read_csv(
+                obj, storage_options=storage_option, dtype=dtype
+            )
             if need_cache & (storage_option is not None):
                 data_obj.to_csv(
                     path_or_buf=os.path.join(conf.LOCAL_ROOT, cache_name)

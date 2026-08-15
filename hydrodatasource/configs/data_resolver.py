@@ -164,7 +164,7 @@ def _with_hds_extras(ctx: Optional[ResolverContext]) -> ResolverContext:
 def resolve_data_path(
     dataset_id: str,
     *,
-    source: Literal["local", "cloud"] = "local",
+    source: Optional[Literal["local", "cloud"]] = None,
     ctx: Optional[ResolverContext] = None,
 ) -> str:
     """Resolve a dataset id to an absolute data path (URI).
@@ -177,8 +177,9 @@ def resolve_data_path(
     ----------
     dataset_id : str
         Dataset identifier from the registry (e.g. 'camels_us', 'songliao_event').
-    source : str
-        Storage backend: 'local' or 'cloud'.
+    source : str, optional
+        Storage backend: 'local' or 'cloud'. When None (default), falls back
+        to ``storage.default_source`` from the settings.
     ctx : ResolverContext, optional
         Resolution context bundling project_root, storage config, registry
         overrides, and extra aliases.  When None (default), a new context
@@ -210,7 +211,7 @@ def resolve_data_path(
 def open_dataset(
     dataset_id: str,
     *,
-    source: Literal["local", "cloud"] = "local",
+    source: Optional[Literal["local", "cloud"]] = None,
     ctx: Optional[ResolverContext] = None,
     **reader_kwargs: Any,
 ):
@@ -226,8 +227,9 @@ def open_dataset(
     ----------
     dataset_id : str
         Dataset identifier from the registry (e.g. 'camels_us', 'songliao_event').
-    source : str
-        Storage backend: 'local' or 'cloud'.
+    source : str, optional
+        Storage backend: 'local' or 'cloud'. When None (default), falls back
+        to ``storage.default_source`` from the settings.
     ctx : ResolverContext, optional
         Resolution context.  When None, HDS defaults are used automatically.
     **reader_kwargs

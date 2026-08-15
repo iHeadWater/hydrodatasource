@@ -174,3 +174,6 @@ GEMINI.md
 
 # Cursor code graph
 .codegraph/
+
+# Specify / Speckit local tooling
+.specify/

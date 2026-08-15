@@ -44,6 +44,11 @@ class HydroData(ABC):
     """
 
     def __init__(self, uri):
+        if uri is None:
+            raise ValueError(
+                "uri must be provided: pass an absolute path or s3:// URI "
+                "pointing to the data directory."
+            )
         self.data_source_dir = str(uri)
         self.dataset_name = Path(str(uri)).name
 
@@ -84,6 +89,14 @@ class SelfMadeHydroDataset(HydroData):
         kwargs : dict, optional
             Additional keyword arguments, by default None.
         """
+        legacy = [
+            k for k in ("data_path", "dataset_name", "data_folder") if k in kwargs
+        ]
+        if legacy:
+            raise ValueError(
+                f"Unsupported legacy argument(s) {legacy}; they were replaced by "
+                "'uri='. Pass the absolute path or s3:// URI as uri=."
+            )
         if time_unit and any(
             unit not in ["1h", "3h", "1D", "8D", "1M"] for unit in time_unit
         ):
@@ -105,7 +118,7 @@ class SelfMadeHydroDataset(HydroData):
 
     @property
     def streamflow_unit(self):
-        unit_mapping = {"1h": "mm/h", "3h": "mm/3h", "1D": "mm/d", "1MS": "mm/M"}
+        unit_mapping = {"1h": "mm/h", "3h": "mm/3h", "1D": "mm/d", "1M": "mm/M"}
         return {unit: unit_mapping[unit] for unit in self.time_unit}
 
     def get_name(self):
@@ -163,7 +176,9 @@ class SelfMadeHydroDataset(HydroData):
         'basin_id' column. Delegates to access_fs so that csv/nc and
         local/minio are all handled uniformly."""
         attr_file = self.data_source_description["ATTR_FILE"]
-        obj = access_fs.spec_path(attr_file, head=self.head)
+        obj = access_fs.spec_path(
+            attr_file, head=self.head, dtype={"basin_id": str}
+        )
         if isinstance(obj, xr.Dataset):
             df = obj.to_dataframe().reset_index()
             if "basin_id" not in df.columns and "basin" in df.columns:
@@ -891,6 +906,9 @@ class LongTermDataset(SelfMadeHydroDataset):
         the_dict = super().set_data_source_describe()
         the_dict["ATTR_FILE"] = os.path.join(
             self.data_source_dir, "attributes", "hydroatlas_attributes.csv"
+        )
+        the_dict["GLOBAL_DIR"] = os.path.join(
+            self.data_source_dir, "attributes"
         )
         the_dict["TELECONNECTIONS_DIR"] = self._where_ts_dir(
             os.path.join(self.data_source_dir, "teleconnections")

@@ -16,7 +16,6 @@ import matplotlib.pyplot as plt
 from shapely.geometry import Point
 from geopandas.tools import sjoin
 from tqdm import tqdm
-from hydroutils.hydro_log import hydro_logger
 from hydrodatasource.processor.basin_mean_rainfall import (
     calculate_thiesen_polygons,
     calculate_weighted_rainfall,
@@ -24,8 +23,9 @@ from hydrodatasource.processor.basin_mean_rainfall import (
 from hydrodatasource.cleaner.cleaner import Cleaner
 
 
-@hydro_logger
 class RainfallCleaner(Cleaner):
+    logger = logging.getLogger(__name__)
+
     def __init__(self, data_folder, output_folder):
         """All files to be cleaned are in the data_dir
 
@@ -548,8 +548,9 @@ class RainfallCleaner(Cleaner):
         )
 
 
-@hydro_logger
 class RainfallAnalyzer:
+    logger = logging.getLogger(__name__)
+
     def __init__(
         self,
         data_folder=None,
