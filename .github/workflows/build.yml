@@ -39,4 +39,4 @@ jobs:
 
             - name: Run tests
               run: |
-                  uv run pytest -m "not internal_data"
+                  uv run --no-sources pytest -m "not internal_data"
