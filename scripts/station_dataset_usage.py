@@ -23,9 +23,8 @@ def main():
 
     # Create StationHydroDataset instance
     dataset = StationHydroDataset(
-        data_path=data_path,
+        uri=data_path,
         time_unit=["1D", "3h"],  # Support both daily and 3-hourly data
-        dataset_name="songliao_station_dataset",
         offset_to_utc=False,  # Convert Beijing time to UTC
     )
 
@@ -163,9 +162,8 @@ def demonstrate_basin_analysis():
     data_path = "/mnt/data/ClassC/songliaorrevent"
 
     dataset = StationHydroDataset(
-        data_path=data_path,
+        uri=data_path,
         time_unit=["1D"],
-        dataset_name="basin_analysis",
         version="v1.0",
     )
 

@@ -171,3 +171,9 @@ CLAUDE.md
 .claude/
 hydrodatasource/_version.py
 GEMINI.md
+
+# Cursor code graph
+.codegraph/
+
+# Specify / Speckit local tooling
+.specify/

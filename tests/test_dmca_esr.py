@@ -15,15 +15,21 @@ import os
 import numpy as np
 from pint import UnitRegistry
 
-from hydrodataset import CamelsUs
+try:
+    from hydrodataset import CamelsUs
+except ImportError:
+    pytest.skip("CamelsUs not available in installed hydrodataset", allow_module_level=True)
 
-from hydrodatasource.configs.config import SETTING
+from hydrodatasource.configs.config import get_local_root
 from hydrodatasource.processor.dmca_esr import *
 from hydroutils import hydro_units
 
 
 def test_rainfall_runoff_event_identify():
-    camels = CamelsUs(os.path.join(SETTING["local_data_path"]["datasets-origin"]))
+    root = get_local_root()
+    if root is None:
+        pytest.skip("local root not configured")
+    camels = CamelsUs(str(root / "datasets-origin"))
     gage_ids = camels.read_object_ids()
     ureg = UnitRegistry()
 

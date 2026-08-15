@@ -16,7 +16,6 @@ import matplotlib.pyplot as plt
 from shapely.geometry import Point
 from geopandas.tools import sjoin
 from tqdm import tqdm
-from hydroutils.hydro_log import hydro_logger
 from hydrodatasource.processor.basin_mean_rainfall import (
     calculate_thiesen_polygons,
     calculate_weighted_rainfall,
@@ -24,8 +23,9 @@ from hydrodatasource.processor.basin_mean_rainfall import (
 from hydrodatasource.cleaner.cleaner import Cleaner
 
 
-@hydro_logger
 class RainfallCleaner(Cleaner):
+    logger = logging.getLogger(__name__)
+
     def __init__(self, data_folder, output_folder):
         """All files to be cleaned are in the data_dir
 
@@ -280,7 +280,6 @@ class RainfallCleaner(Cleaner):
         df_station = pd.merge(
             df_station, df_attr[["STCD", "LGTD", "LTTD"]], on="STCD", how="left"
         )
-        # self.logger.debug(df_station)
         return df_station
 
     def data_check_hourly_extreme(
@@ -411,7 +410,6 @@ class RainfallCleaner(Cleaner):
                     ],
                 }
             )
-        # self.logger.debug(df_anomalies)
         if modify == True:
             # 遍历文件夹，清除对应行
             folder_path = os.path.join(self.data_folder, basin_id)
@@ -548,24 +546,22 @@ class RainfallCleaner(Cleaner):
         )
 
 
-@hydro_logger
 class RainfallAnalyzer:
+    logger = logging.getLogger(__name__)
+
     def __init__(
         self,
         data_folder=None,
         output_folder=None,
         lower_bound=0,
         upper_bound=3000,
-        logger_level=logging.INFO,
     ):
         self.data_folder = data_folder
         self.output_folder = output_folder
-        self.logger_level = logger_level
         self.lower_bound = lower_bound
         self.upper_bound = upper_bound
         self.data_source_description = self.set_data_source_describe()
         self._check_file_format()
-        # self.station_info = self.read_site_info()
 
     def set_data_source_describe(self):
         data_source_dir = self.data_folder
@@ -788,7 +784,6 @@ class RainfallAnalyzer:
             valid_stations = self.process_stations(stations_df, basin)
             self.logger.debug(valid_stations["ID"])
             valid_stations = valid_stations[valid_stations["ID"].isin(yearly_stations)]
-            self.logger.debug("11111111111111111111111111")
             self.logger.debug(valid_stations.head())
 
             if valid_stations.empty:

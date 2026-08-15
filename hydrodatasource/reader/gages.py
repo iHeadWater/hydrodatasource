@@ -20,13 +20,17 @@ from typing import Tuple, Dict, Union
 import pytz
 from pandas.core.dtypes.common import is_string_dtype, is_numeric_dtype
 from tqdm import tqdm
-from hydroutils import hydro_logger, hydro_file, hydro_stat
+from hydroutils import hydro_file, hydro_stat
+import hydrodatasource.configs.config as conf
+from hydrodatasource.configs.config import CACHE_DIR
 from hydrodatasource.reader.data_source import HydroData
+
+logger = logging.getLogger(__name__)
 
 
 class Gages(HydroData):
-    def __init__(self, data_path, dataset_name):
-        super().__init__(data_path, dataset_name)
+    def __init__(self, uri):
+        super().__init__(uri)
         self.data_source_description = self.set_data_source_describe()
         self.gages_sites = self.read_site_info()
 
@@ -588,7 +592,7 @@ class Gages(HydroData):
         return pd.DataFrame(out)
 
     def prepare_usgs_data(self):
-        hydro_logger.info(
+        logger.info(
             "NOT all data_source could be downloaded from website directly!"
         )
         data_source_description = self.data_source_description
@@ -649,8 +653,6 @@ class Gages(HydroData):
         -------
         None
         """
-        # NOTICE: although it seems that we don't use pint_xarray, we have to import this package
-        import pint_xarray  # noqa: F401
         from hydrodatasource.configs import config as conf
 
         # 1. Get all site IDs

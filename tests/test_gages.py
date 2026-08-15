@@ -12,18 +12,18 @@ import os
 import pytest
 import pandas as pd
 from hydrodatasource.reader.gages import Gages
-from hydrodatasource.configs.config import CACHE_DIR, SETTING
+from hydrodatasource.configs.config import CACHE_DIR
 
 pytestmark = pytest.mark.internal_data
+
+_GAGES_DATA = os.environ.get("HDS_GAGES_DATA")
 
 
 @pytest.fixture
 def gages_dataset():
-    # local
-    gages_path = os.path.join(SETTING["local_data_path"]["datasets-interim"])
-    # minio
-    # gages_path = "s3://basins-interim"
-    return Gages(data_path=gages_path, dataset_name="hydrodl-reservoir-jh-paper")
+    if not _GAGES_DATA:
+        pytest.skip("Set HDS_GAGES_DATA env var")
+    return Gages(_GAGES_DATA)
 
 
 def test_gages_read_site_info(gages_dataset):

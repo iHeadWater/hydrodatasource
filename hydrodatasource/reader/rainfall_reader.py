@@ -14,8 +14,6 @@ import pandas as pd
 from tqdm import tqdm
 import xarray as xr
 
-from hydroutils.hydro_log import hydro_logger
-
 from hydrodatasource.reader.data_source import HydroData
 
 
@@ -79,18 +77,16 @@ def filter_out_rows(df1, df2, key_columns):
     return filtered_df
 
 
-@hydro_logger
 class RainfallReader(HydroData):
-    def __init__(self, data_folder):
-        """A reader for basin rainfall data
-        Even for station data, we still use basin as the index
+    def __init__(self, uri):
+        """A reader for basin rainfall data.
 
         Parameters
         ----------
-        data_folder : _type_
-            _description_
+        uri : str
+            Absolute path pointing to the rainfall data directory.
         """
-        self.data_source_dir = data_folder
+        super().__init__(uri)
         self.data_source_description = self.set_data_source_describe()
         self.station_info = self.read_station_info()
 

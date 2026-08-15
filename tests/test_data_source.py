@@ -16,57 +16,41 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
-from hydrodatasource.configs.config import CACHE_DIR, SETTING
+from hydrodatasource.configs.config import CACHE_DIR
 from hydrodatasource.reader.data_source import (
     SelfMadeForecastDataset,
     SelfMadeHydroDataset,
 )
 
+_SELFMADE_DATA = os.environ.get("HDS_SELFMADE_DATA")
+
 
 @pytest.fixture
 def one_hour_dataset():
-    # local
-    selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
-    # minio
-    # selfmadehydrodataset_path = "s3://basins-interim"
-    return SelfMadeHydroDataset(
-        data_path=selfmadehydrodataset_path, dataset_name="FDSources", time_unit=["1h"]
-    )
+    if not _SELFMADE_DATA:
+        pytest.skip("Set HDS_SELFMADE_DATA env var")
+    return SelfMadeHydroDataset(uri=_SELFMADE_DATA, time_unit=["1h"])
 
 
 @pytest.fixture
 def three_hour_dataset():
-    # local
-    selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
-    # minio
-    # selfmadehydrodataset_path = "s3://basins-interim"
-    return SelfMadeHydroDataset(
-        data_path=selfmadehydrodataset_path, dataset_name="FDSources", time_unit=["3h"]
-    )
+    if not _SELFMADE_DATA:
+        pytest.skip("Set HDS_SELFMADE_DATA env var")
+    return SelfMadeHydroDataset(uri=_SELFMADE_DATA, time_unit=["3h"])
 
 
 @pytest.fixture
 def one_day_dataset():
-    # local
-    selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
-    # minio
-    # selfmadehydrodataset_path = "s3://basins-interim"
-    return SelfMadeHydroDataset(
-        data_path=selfmadehydrodataset_path, dataset_name="FDSources"
-    )
+    if not _SELFMADE_DATA:
+        pytest.skip("Set HDS_SELFMADE_DATA env var")
+    return SelfMadeHydroDataset(uri=_SELFMADE_DATA, time_unit=["1D"])
 
 
 @pytest.fixture
 def eight_day_dataset():
-    # local
-    selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
-    # minio
-    # selfmadehydrodataset_path = "s3://basins-interim"
-    return SelfMadeHydroDataset(
-        data_path=selfmadehydrodataset_path,
-        dataset_name="FDSources",
-        time_unit=["8D"],
-    )
+    if not _SELFMADE_DATA:
+        pytest.skip("Set HDS_SELFMADE_DATA env var")
+    return SelfMadeHydroDataset(uri=_SELFMADE_DATA, time_unit=["8D"])
 
 
 def test_selfmadehydrodataset_get_name(one_day_dataset):
@@ -322,13 +306,7 @@ def one_day_forecast_dataset(tmpdir, mocker):
     attr_file = attr_dir.join("attributes.csv")
     attr_file.write("basin_id,area\nbasin_1,100\nbasin_2,200\n")
 
-    # local
-    selfmadehydrodataset_path = str(tmpdir)
-    # minio
-    # selfmadehydrodataset_path = "s3://basins-interim"
-    return SelfMadeForecastDataset(
-        data_path=selfmadehydrodataset_path, dataset_name="FDSources"
-    )
+    return SelfMadeForecastDataset(uri=str(fdsources_dir))
 
 
 def test_read_forecast_multiple_basins_all_exist(mocker, one_day_forecast_dataset):
@@ -358,23 +336,19 @@ def test_read_forecast_multiple_basins_all_exist(mocker, one_day_forecast_datase
 
 def test_start_hour_in_a_day_validation():
     """Test that start_hour_in_a_day validation works correctly for time interval format."""
-    selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
+    data_path = os.environ.get("HDS_SELFMADE_DATA")
+    if not data_path:
+        pytest.skip("Set HDS_SELFMADE_DATA env var")
 
     # Test: Non-standard time_unit like 6h should be rejected at init level
     # (SelfMadeHydroDataset only supports '1h', '3h', '1D', '8D')
     with pytest.raises(ValueError) as excinfo:
-        dataset_6h = SelfMadeHydroDataset(
-            data_path=selfmadehydrodataset_path,
-            dataset_name="FDSources",
-            time_unit=["6h"],
-        )
+        dataset_6h = SelfMadeHydroDataset(uri=data_path, time_unit=["6h"])
     assert "time_unit must be one of" in str(excinfo.value)
 
     # Test that the cache_timeseries_xrdataset validation catches unsupported intervals
     # when they are passed directly to the function
-    dataset = SelfMadeHydroDataset(
-        data_path=selfmadehydrodataset_path, dataset_name="FDSources", time_unit=["3h"]
-    )
+    dataset = SelfMadeHydroDataset(uri=data_path, time_unit=["3h"])
     dataset.trange4cache = None
     dataset.offset_to_utc = False
 
@@ -403,11 +377,11 @@ def test_start_hour_in_a_day_validation():
 
 def test_start_hour_in_a_day_time_range():
     """Test that start_hour_in_a_day correctly sets the time range."""
-    selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
+    data_path = os.environ.get("HDS_SELFMADE_DATA")
+    if not data_path:
+        pytest.skip("Set HDS_SELFMADE_DATA env var")
 
-    dataset = SelfMadeHydroDataset(
-        data_path=selfmadehydrodataset_path, dataset_name="FDSources", time_unit=["3h"]
-    )
+    dataset = SelfMadeHydroDataset(uri=data_path, time_unit=["3h"])
     dataset.trange4cache = None
     dataset.offset_to_utc = False
 
@@ -429,11 +403,11 @@ def test_start_hour_in_a_day_time_range():
 
 def test_start_hour_in_a_day_data_alignment(mocker):
     """Test that data alignment validation works correctly."""
-    selfmadehydrodataset_path = SETTING["local_data_path"]["datasets-interim"]
+    data_path = os.environ.get("HDS_SELFMADE_DATA")
+    if not data_path:
+        pytest.skip("Set HDS_SELFMADE_DATA env var")
 
-    dataset = SelfMadeHydroDataset(
-        data_path=selfmadehydrodataset_path, dataset_name="FDSources", time_unit=["3h"]
-    )
+    dataset = SelfMadeHydroDataset(uri=data_path, time_unit=["3h"])
     dataset.offset_to_utc = False
 
     # Mock data with hours starting at 00:00 (0, 3, 6, 9, 12, 15, 18, 21)

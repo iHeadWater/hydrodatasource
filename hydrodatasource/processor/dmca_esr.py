@@ -746,8 +746,6 @@ def rainfall_runoff_event_identify(
         flow_threshold,
         multiple=multiple,
     )
-    print(beginning_rain, end_rain, beginning_flow, end_flow)
-    print(len(beginning_rain), len(end_rain), len(beginning_flow), len(end_flow))
     return pd.DataFrame(
         {
             "BEGINNING_RAIN": beginning_rain,
@@ -815,7 +813,6 @@ def get_rr_events(rain, flow, basin_area, max_window=100, max_flow_min=None):
         multiple = num * 24
     else:
         raise ValueError(f"Unsupported unit: {unit}")
-    print(f"flow.units = { flow.units}, multiple = {multiple}")
     rr_events = {}
     for i, basin in enumerate(basin_area.basin.values):
         rr_event = rainfall_runoff_event_identify(

@@ -7,3 +7,12 @@ except ImportError:
     # Fallback version if _version.py doesn't exist yet
     __version__ = "0.0.0+unknown"
     __version_tuple__ = (0, 0, 0, "unknown")
+
+# Re-export config APIs for convenience
+from .configs.data_resolver import (
+    READER_ALIASES,
+    ResolverContext,
+    resolve_data_path,
+    open_dataset,
+    DatasetResolutionError,
+)

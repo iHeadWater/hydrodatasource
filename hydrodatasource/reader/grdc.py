@@ -21,15 +21,15 @@ import xarray as xr
 import geopandas as gpd
 from dateutil.parser import parse
 
-from hydrodatasource.configs.config import CACHE_DIR, SETTING
+from hydrodatasource.configs.config import CACHE_DIR
 from hydrodatasource.reader.data_source import HydroData
 
 
 class Grdc(HydroData):
     """Reading GRDC streamflow data."""
 
-    def __init__(self, data_path):
-        self.data_source_dir = data_path
+    def __init__(self, uri):
+        super().__init__(uri)
         self.data_source_description = self.set_data_source_describe()
         self.grdc_site_info = self.read_site_info()
 
@@ -85,7 +85,9 @@ class Grdc(HydroData):
         gdf["grdc_no"] = gdf["grdc_no"].apply(
             lambda x: str(int(x)) if isinstance(x, float) else str(x)
         )
-        assert all(x < y for x, y in zip(gdf["grdc_no"], gdf["grdc_no"][1:]))
+        grdc_ids = gdf["grdc_no"].astype(int)
+        if not all(x < y for x, y in zip(grdc_ids, grdc_ids[1:])):
+            raise ValueError("grdc_no column must be sorted in ascending order")
         return gdf[["grdc_no", "area"]]
 
     def map_station_to_continent(self, station_id: str):
@@ -606,11 +608,3 @@ def _convert_to_serializable(obj):
     elif isinstance(obj, list):
         return [_convert_to_serializable(i) for i in obj]
     return obj
-
-
-if __name__ == "__main__":
-    data_dir = os.path.join(SETTING["local_data_path"]["datasets-origin"], "GRDC")
-    grdc = Grdc(data_dir)
-    # grdc.cache_grdc_daily(["1107700", "4101200"], ["1990-10-01", "2000-10-01"])
-    grdc.cache_grdc_daily()
-    grdc.read_streamflow_xrdataset(["1107700", "4101200"], ["1990-10-01", "2000-10-01"])

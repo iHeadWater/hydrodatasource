@@ -13,7 +13,7 @@ Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 # and modify the paths as your own paths in definitions_private.py
 import os
 
-from hydrodataset import SETTING
+from hydrodataset.configs.settings import get_local_root
 
 try:
     import const4scripts_private
@@ -27,4 +27,5 @@ except ImportError:
     # where to put results
     RESULT_DIR = r"C:\Users\wenyu\code\hydrodatasource\results"
     # where are the data sources
-    DATASET_DIR = SETTING["local_data_path"]["basins-origin"]
+    root = get_local_root()
+    DATASET_DIR = os.path.join(str(root), "basins-origin") if root else os.path.join(os.getcwd(), "data")
