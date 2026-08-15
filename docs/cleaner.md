@@ -2,6 +2,17 @@
 
 The `cleaner` module provides a suite of tools for cleaning and preprocessing raw hydrological time series data. Raw data from gauging stations often contains errors, gaps, and noise. This module helps to identify and correct these issues to prepare the data for analysis and modeling.
 
+## Base `Cleaner`
+
+All cleaners inherit from `Cleaner`, which loads the raw CSV (`data_folder`) into `origin_df` on construction and exposes a `processed_df` for results. Concrete cleaners such as `StreamflowCleaner` and `WaterlevelCleaner` operate on `self.origin_df` and write their cleaned result to `self.processed_df`.
+
+```python
+from hydrodatasource.cleaner.streamflow_cleaner import StreamflowCleaner
+
+cleaner = StreamflowCleaner(data_folder="path/to/raw_flow.csv")
+cleaner.anomaly_process(["moving_average"])   # writes a smoothed column into processed_df
+```
+
 ## Rainfall Cleaner
 
 **File:** `rainfall_cleaner.py`
@@ -29,10 +40,10 @@ The `cleaner` module provides a suite of tools for cleaning and preprocessing ra
 
 `StreamflowCleaner` focuses on smoothing noisy streamflow data. This is often necessary to reduce measurement noise without distorting the underlying hydrological signal.
 
-It offers several smoothing algorithms, including:
+It offers several smoothing algorithms, selected by the strings passed to `anomaly_process`:
 - Simple Moving Average (`moving_average`)
-- Kalman Filter (`kalman_filter`)
-- Low-pass Butterworth Filter (`lowpass_filter`)
+- Kalman Filter (`kalman`)
+- Low-pass Butterworth Filter (`lowpass`)
 - Fast Fourier Transform (`FFT`) and Wavelet (`wavelet`) filtering
 
 All methods are designed to be volume-preserving, meaning the total volume of streamflow is not changed by the smoothing process.
