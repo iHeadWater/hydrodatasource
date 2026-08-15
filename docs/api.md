@@ -16,15 +16,9 @@ This page provides an auto-generated API reference for the key components of the
       show_root_heading: true
       show_source: false
 
-::: hydrodatasource.configs.data_resolver.ResolverContext
-    handler: python
-    options:
-      show_root_heading: true
-      show_source: false
-
 `READER_ALIASES` maps every reader alias to its module/class, and `HDS_DATASETS` is the in-code
-registry of hydrodatasource datasets (e.g. `songliao_event`). `DatasetResolutionError` is
-re-exported from hydrodataset.
+registry of hydrodatasource datasets (e.g. `songliao_event`). `ResolverContext` and
+`DatasetResolutionError` are re-exported from [hydrodataset](https://github.com/OuyangWenyu/hydrodataset).
 
 ## Reader
 
