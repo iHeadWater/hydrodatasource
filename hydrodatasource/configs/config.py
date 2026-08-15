@@ -14,6 +14,9 @@ Database access is decoupled to a separate real-time service.
 
 Critical globals (SETTING, CACHE_DIR, FS, LOCAL_ROOT, MINIO_PARAM) are
 lazy-loaded via module __getattr__ to avoid import-time side effects.
+Note: a module-level ``from .config import CACHE_DIR`` still triggers this lazy
+init at import time; prefer attribute access (e.g. ``conf.CACHE_DIR``) at call
+sites for true deferral.
 
 FilePath: \\hydrodatasource\\hydrodatasource\\configs\\config.py
 Copyright (c) 2023-2026 Wenyu Ouyang. All rights reserved.
@@ -87,6 +90,7 @@ def _init_settings() -> None:
             f"falling back to default data root: {default_root}",
             stacklevel=2,
         )
+        setting["storage"] = {"local": {"root": default_root}}
 
     root = setting.get("storage", {}).get("local", {}).get("root", default_root)
 

@@ -103,7 +103,7 @@ class SelfMadeHydroDataset(HydroData):
             raise ValueError(
                 "time_unit must be one of ['1h', '3h', '1D', '8D','1M']. We only support these time units now."
             )
-        # Determine filesystem head from URI or data_path
+        # Determine filesystem head from URI
         effective_path = str(uri) if uri is not None else ""
         self.head = "minio" if "s3://" in effective_path else "local"
         super().__init__(uri=uri)
@@ -171,7 +171,10 @@ class SelfMadeHydroDataset(HydroData):
         compatibility, otherwise fall back to a NetCDF file in the dir."""
         attr_csv = os.path.join(attr_dir, "attributes.csv")
         if "s3://" in attr_dir:
-            return attr_csv
+            if conf.FS is None or conf.FS.exists(attr_csv):
+                return attr_csv
+            nc_files = sorted(conf.FS.glob(os.path.join(attr_dir, "*.nc")))
+            return nc_files[0] if nc_files else attr_csv
         if os.path.exists(attr_csv):
             return attr_csv
         nc_files = sorted(glob.glob(os.path.join(attr_dir, "*.nc")))
@@ -896,7 +899,7 @@ class SelfMadeHydroDataset(HydroData):
 
 
 class LongTermDataset(SelfMadeHydroDataset):
-    def __init__(self, uri=None, download=False, time_unit=None, **kwargs):
+    def __init__(self, uri=None, time_unit=None, **kwargs):
         if time_unit is None:
             time_unit = ["1M"]
         super().__init__(

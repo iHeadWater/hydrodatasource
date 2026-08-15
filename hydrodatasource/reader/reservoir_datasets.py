@@ -10,7 +10,6 @@ Copyright (c) 2023-2024 Wenyu Ouyang. All rights reserved.
 
 import os
 import collections
-from pathlib import Path
 import geopandas as gpd
 from hydrodatasource.reader.data_source import HydroData
 

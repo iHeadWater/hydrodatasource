@@ -134,6 +134,9 @@ def is_minio_folder(minio_url):
         True if the folder exists, False otherwise
 
     """
+    if FS is None:
+        # S3 not configured in this environment; nothing can be a MinIO folder
+        return False
     if not FS.exists(minio_url):
         raise FileNotFoundError(f"No file or folder found in {minio_url}")
     if minio_url.endswith("/"):

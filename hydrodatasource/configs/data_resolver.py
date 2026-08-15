@@ -5,6 +5,12 @@ Defines READER_ALIASES for all hydrodatasource reader classes and provides
 resolve_data_path() and open_dataset() following the same contract as
 hydromodel's ADR 0001.
 
+Note: resolution requires a storage root. Provide a ~/hydro_setting.yml with
+``storage.local.root`` (or ``storage.s3`` for cloud), or pass a
+``ResolverContext(storage={...})``. With no config, resolution raises
+``DatasetResolutionError`` (unlike ``configs.config`` which falls back to a
+default home data root).
+
 This module is a thin wrapper around hydrodataset.configs.data_resolver.
 It only uses the PUBLIC API of hydrodataset (resolve_data_path, open_dataset,
 READER_ALIASES, DatasetResolutionError). The hydrodatasource-specific parts are
@@ -250,7 +256,7 @@ def open_dataset(
     --------
     >>> ds = open_dataset("songliao_event")
     >>> ds = open_dataset("camels_us", source="cloud")
-    >>> ds = open_dataset("selfmade_basin", time_unit=["1D"])
+    >>> ds = open_dataset("songliao_event", time_unit=["1D"])
     """
     return _hd_open_dataset(
         dataset_id, source=source, ctx=_with_hds_extras(ctx), **reader_kwargs

@@ -74,8 +74,8 @@ class TestPackageExports:
 
         # 并集恒等式：每个别名恰好属于一个类别
         assert len(READER_ALIASES) == len(hds) + len(hd)
-        # 防倒退下限：别名总数不得少于上一版本
-        assert len(READER_ALIASES) >= 37
+        # hydrodataset 的别名数量由 hydrodataset 自己维护；本仓库只保证自己的 11 个别名
+        # （见 test_hydrodatasource_aliases_total_count）与并集恒等式成立。
 
     def test_resolver_context_importable_from_package(self):
         """ResolverContext is importable from hydrodatasource."""

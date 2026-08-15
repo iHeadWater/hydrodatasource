@@ -944,7 +944,7 @@ class FloodEventDatasource(SelfMadeHydroDataset):
                     # 如果切片后的数据集为空，返回警告
                     if len(ds.time) == 0:
                         print(
-                            f"Warning: The specified time range {t_range [0]} to {t_range [1]} does not overlap with the dataset time range {ds_start_time} to {ds_end_time}"
+                            f"Warning: The specified time range {t_range[0]} to {t_range[1]} does not overlap with the dataset time range {ds_start_time} to {ds_end_time}"
                         )
 
                 # 应用变量过滤
